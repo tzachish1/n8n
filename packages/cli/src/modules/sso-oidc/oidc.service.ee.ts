@@ -588,7 +588,6 @@ export class OidcService {
 		const proxyAgent = new EnvHttpProxyAgent();
 
 		// Return a fetch function that uses the proxy agent
-		// openid-client passes CustomFetchOptions which is compatible with RequestInit
 		return async (url: string, options: unknown) => {
 			return await fetch(url, {
 				...(options as RequestInit),
@@ -609,11 +608,8 @@ export class OidcService {
 	): Promise<openidClientTypes.Configuration> {
 		await this.loadOpenIdClient();
 
-		// Create proxy-aware fetch BEFORE discovery so the metadata request uses the proxy
 		const proxyFetch = this.createProxyAwareFetch();
 
-		// Pass customFetch to discovery so the initial metadata fetch also uses the proxy
-		// This fixes the issue where discovery requests failed behind corporate proxies
 		const discoveryOptions: Record<symbol, unknown> = {};
 		if (proxyFetch) {
 			discoveryOptions[this.openidClient.customFetch] = proxyFetch;

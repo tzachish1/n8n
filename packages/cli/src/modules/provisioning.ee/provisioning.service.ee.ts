@@ -73,15 +73,12 @@ export class ProvisioningService {
 			);
 
 			if (globalRoles.length === 0) {
-				// No global roles found - user has been removed from all roles in IdP
-				// Downgrade to member role
 				this.logger.debug('No global roles found in roles array, downgrading user to member role', {
 					userId: user.id,
 					roleSlugInput,
 				});
 				roleSlug = globalMemberRoleSlug;
 			} else {
-				// Prioritize: global:owner > global:admin > global:member > others
 				const rolePriority = ['global:owner', 'global:admin', 'global:member'];
 				roleSlug = rolePriority.find((r) => globalRoles.includes(r)) ?? globalRoles[0];
 
@@ -92,8 +89,6 @@ export class ProvisioningService {
 				});
 			}
 		} else if (roleSlugInput === undefined || roleSlugInput === null) {
-			// No role claim provided - user has been removed from all roles in IdP
-			// Downgrade to member role
 			this.logger.debug('No instance role claim provided, downgrading user to member role', {
 				userId: user.id,
 			});

@@ -563,7 +563,6 @@ describe('ProvisioningService', () => {
 			];
 			// First call: get currently accessible projects (for removal tracking)
 			projectRepository.find.mockResolvedValueOnce([]);
-			// Second call: find existing projects matching the requested IDs
 			projectRepository.find.mockResolvedValueOnce([
 				mock<Project>({ id: 'project-1' }),
 				mock<Project>({ id: 'project-2' }),
