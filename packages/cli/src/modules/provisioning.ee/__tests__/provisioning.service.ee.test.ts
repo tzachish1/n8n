@@ -220,8 +220,8 @@ describe('ProvisioningService', () => {
 			expect(userService.changeUserRole).toHaveBeenCalledWith(user, {
 				newRoleName: 'global:admin',
 			});
-			expect(logger.debug).toHaveBeenCalledWith(
-				'Extracted global role from array',
+			expect(logger.info).toHaveBeenCalledWith(
+				'SSO instance role claim received as array, selected highest role',
 				expect.objectContaining({
 					userId: user.id,
 					selectedRole: 'global:admin',
@@ -260,11 +260,11 @@ describe('ProvisioningService', () => {
 			expect(userService.changeUserRole).toHaveBeenCalledWith(user, {
 				newRoleName: 'global:member',
 			});
-			expect(logger.debug).toHaveBeenCalledWith(
-				'No global roles found in roles array, downgrading user to member role',
+			expect(logger.warn).toHaveBeenCalledWith(
+				expect.stringContaining('no "global:*" entries found in roles array'),
 				expect.objectContaining({
 					userId: user.id,
-					roleSlugInput: roleSlug,
+					receivedRoles: roleSlug,
 				}),
 			);
 		});
@@ -580,7 +580,6 @@ describe('ProvisioningService', () => {
 			];
 			// First call: get currently accessible projects (for removal tracking)
 			projectRepository.find.mockResolvedValueOnce([]);
-			// Second call: find existing projects matching the requested IDs
 			projectRepository.find.mockResolvedValueOnce([
 				mock<Project>({ id: 'project-1' }),
 				mock<Project>({ id: 'project-2' }),
