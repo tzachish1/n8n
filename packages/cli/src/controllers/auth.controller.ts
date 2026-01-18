@@ -81,7 +81,7 @@ export class AuthController {
 		}
 
 		const preliminaryUser = await emailHandler.handleLogin(emailOrLdapLoginId, password);
-		this.validateSsoRestrictions(preliminaryUser);
+		this.validateSsoRestrictions(preliminaryUser, emailOrLdapLoginId);
 
 		const { user, usedAuthenticationMethod } = await this.authenticateWithPassword(
 			currentAuthenticationMethod,
@@ -112,13 +112,21 @@ export class AuthController {
 		}
 	}
 
-	private validateSsoRestrictions(preliminaryUser: User | undefined): void {
+	private validateSsoRestrictions(
+		preliminaryUser: User | undefined,
+		emailOrLdapLoginId: string,
+	): void {
 		const shouldBlockSsoUser =
 			(isSamlCurrentAuthenticationMethod() || isOidcCurrentAuthenticationMethod()) &&
 			preliminaryUser?.role.slug !== GLOBAL_OWNER_ROLE.slug &&
 			!preliminaryUser?.settings?.allowSSOManualLogin;
 
 		if (shouldBlockSsoUser) {
+			this.eventService.emit('user-login-failed', {
+				authenticationMethod: 'email',
+				userEmail: emailOrLdapLoginId,
+				reason: 'SSO is enabled',
+			});
 			throw new AuthError('SSO is enabled, please log in with SSO');
 		}
 	}
