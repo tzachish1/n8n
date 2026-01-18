@@ -76,37 +76,68 @@ export class ProvisioningService {
 
 		if (typeof roleSlugInput === 'string') {
 			roleSlug = roleSlugInput;
+			this.logger.info('SSO instance role claim received as string', {
+				userId: user.id,
+				userEmail: user.email,
+				roleSlug,
+			});
 		} else if (Array.isArray(roleSlugInput)) {
-			// Filter for global roles only (e.g., global:admin, global:member)
-			const globalRoles = roleSlugInput.filter(
-				(r): r is string => typeof r === 'string' && r.startsWith('global:'),
-			);
+			// Extract n8n-compatible global role slugs from the claim array.
+			// Accept either full slugs ("global:admin") or bare aliases commonly
+			// configured in IdP app roles ("admin", "member", "owner", etc.).
+			const aliasMap: Record<string, string> = {
+				owner: 'global:owner',
+				admin: 'global:admin',
+				administrator: 'global:admin',
+				member: 'global:member',
+				user: 'global:member',
+			};
+			const globalRoles = roleSlugInput.reduce<string[]>((acc, r) => {
+				if (typeof r !== 'string') return acc;
+				if (r.startsWith('global:')) {
+					acc.push(r);
+				} else {
+					const mapped = aliasMap[r.toLowerCase()];
+					if (mapped) acc.push(mapped);
+				}
+				return acc;
+			}, []);
 
 			if (globalRoles.length === 0) {
-				// No global roles found - user has been removed from all roles in IdP
-				// Downgrade to member role
-				this.logger.debug('No global roles found in roles array, downgrading user to member role', {
-					userId: user.id,
-					roleSlugInput,
-				});
+				this.logger.warn(
+					'SSO instance role provisioning: no "global:*" entries found in roles array. ' +
+						'Configure your IdP to emit slugs like "global:admin" / "global:member", ' +
+						'or change N8N_SSO_SCOPES_INSTANCE_ROLE_CLAIM_NAME to match the claim you send. ' +
+						'Falling back to member role.',
+					{
+						userId: user.id,
+						userEmail: user.email,
+						receivedRoles: roleSlugInput,
+					},
+				);
 				roleSlug = globalMemberRoleSlug;
 			} else {
-				// Prioritize: global:owner > global:admin > global:member > others
 				const rolePriority = ['global:owner', 'global:admin', 'global:member'];
 				roleSlug = rolePriority.find((r) => globalRoles.includes(r)) ?? globalRoles[0];
 
-				this.logger.debug('Extracted global role from array', {
+				this.logger.info('SSO instance role claim received as array, selected highest role', {
 					userId: user.id,
+					userEmail: user.email,
 					selectedRole: roleSlug,
 					availableGlobalRoles: globalRoles,
 				});
 			}
 		} else if (roleSlugInput === undefined || roleSlugInput === null) {
-			// No role claim provided - user has been removed from all roles in IdP
-			// Downgrade to member role
-			this.logger.debug('No instance role claim provided, downgrading user to member role', {
-				userId: user.id,
-			});
+			this.logger.warn(
+				'SSO instance role provisioning: configured claim is missing from ID token. ' +
+					'Verify that N8N_SSO_SCOPES_INSTANCE_ROLE_CLAIM_NAME matches the claim your IdP emits ' +
+					'(and that the IdP includes it in the ID token / configured scope). ' +
+					'Falling back to member role.',
+				{
+					userId: user.id,
+					userEmail: user.email,
+				},
+			);
 			roleSlug = globalMemberRoleSlug;
 		} else {
 			this.logger.warn(
@@ -169,8 +200,21 @@ export class ProvisioningService {
 		if (user.role.slug !== dbRole.slug) {
 			await this.userService.changeUserRole(user, { newRoleName: dbRole.slug });
 
+			this.logger.info('SSO instance role provisioning: user role updated from IdP claim', {
+				userId: user.id,
+				userEmail: user.email,
+				previousRole: user.role.slug,
+				newRole: dbRole.slug,
+			});
+
 			this.eventService.emit('sso-user-instance-role-updated', {
 				userId: user.id,
+				role: dbRole.slug,
+			});
+		} else {
+			this.logger.debug('SSO instance role provisioning: role unchanged', {
+				userId: user.id,
+				userEmail: user.email,
 				role: dbRole.slug,
 			});
 		}
@@ -450,20 +494,26 @@ export class ProvisioningService {
 	async loadConfigurationFromDatabase(): Promise<ProvisioningConfigDto | undefined> {
 		const configFromDB = await this.settingsRepository.findByKey(PROVISIONING_PREFERENCES_DB_KEY);
 
-		if (configFromDB) {
-			try {
-				const configValue = jsonParse<ProvisioningConfigDto>(configFromDB.value);
+		if (!configFromDB) return undefined;
 
-				return ProvisioningConfigDto.parse(configValue);
-			} catch (error) {
-				this.logger.warn(
-					'Failed to load Provisioning configuration from database, falling back to default configuration.',
+		try {
+			const configValue = jsonParse<Record<string, unknown>>(configFromDB.value);
 
-					{ error },
-				);
-			}
+			// Rows written by older n8n versions may be missing fields that later
+			// releases mark as required (e.g. scopesUseExpressionMapping was added
+			// in 2.17). Merge env defaults underneath so legacy rows remain
+			// forward-compatible instead of being silently discarded.
+			const envDefaults = this.globalConfig.sso.provisioning;
+			const merged = { ...envDefaults, ...configValue };
+
+			return ProvisioningConfigDto.parse(merged);
+		} catch (error) {
+			this.logger.warn(
+				'Failed to load Provisioning configuration from database, falling back to default configuration.',
+				{ error },
+			);
+			return undefined;
 		}
-		return undefined;
 	}
 
 	async loadConfig(): Promise<ProvisioningConfigDto> {
