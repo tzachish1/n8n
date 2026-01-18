@@ -111,8 +111,21 @@ export class ProvisioningService {
 		if (user.role.slug !== dbRole.slug) {
 			await this.userService.changeUserRole(user, { newRoleName: dbRole.slug });
 
+			this.logger.info('SSO instance role provisioning: user role updated from IdP claim', {
+				userId: user.id,
+				userEmail: user.email,
+				previousRole: user.role.slug,
+				newRole: dbRole.slug,
+			});
+
 			this.eventService.emit('sso-user-instance-role-updated', {
 				userId: user.id,
+				role: dbRole.slug,
+			});
+		} else {
+			this.logger.debug('SSO instance role provisioning: role unchanged', {
+				userId: user.id,
+				userEmail: user.email,
 				role: dbRole.slug,
 			});
 		}
@@ -422,20 +435,26 @@ export class ProvisioningService {
 	async loadConfigurationFromDatabase(): Promise<ProvisioningConfigDto | undefined> {
 		const configFromDB = await this.settingsRepository.findByKey(PROVISIONING_PREFERENCES_DB_KEY);
 
-		if (configFromDB) {
-			try {
-				const configValue = jsonParse<ProvisioningConfigDto>(configFromDB.value);
+		if (!configFromDB) return undefined;
 
-				return ProvisioningConfigDto.parse(configValue);
-			} catch (error) {
-				this.logger.warn(
-					'Failed to load Provisioning configuration from database, falling back to default configuration.',
+		try {
+			const configValue = jsonParse<Record<string, unknown>>(configFromDB.value);
 
-					{ error },
-				);
-			}
+			// Rows written by older n8n versions may be missing fields that later
+			// releases mark as required (e.g. scopesUseExpressionMapping was added
+			// in 2.17). Merge env defaults underneath so legacy rows remain
+			// forward-compatible instead of being silently discarded.
+			const envDefaults = this.globalConfig.sso.provisioning;
+			const merged = { ...envDefaults, ...configValue };
+
+			return ProvisioningConfigDto.parse(merged);
+		} catch (error) {
+			this.logger.warn(
+				'Failed to load Provisioning configuration from database, falling back to default configuration.',
+				{ error },
+			);
+			return undefined;
 		}
-		return undefined;
 	}
 
 	async loadConfig(): Promise<ProvisioningConfigDto> {
