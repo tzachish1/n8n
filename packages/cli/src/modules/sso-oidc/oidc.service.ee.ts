@@ -499,7 +499,27 @@ export class OidcService {
 
 		const provisioningConfig = await this.provisioningService.getConfig();
 		const projectRoleMapping = claims[provisioningConfig.scopesProjectsRolesClaimName];
-		const instanceRole = claims[provisioningConfig.scopesInstanceRoleClaimName];
+		const instanceRole = this.resolveInstanceRoleClaim(
+			claims,
+			provisioningConfig.scopesInstanceRoleClaimName,
+			user.id,
+		);
+
+		// Emit a single diagnostic log per login so operators can verify that the
+		// claim names configured in n8n actually match what the IdP is sending.
+		// Only keys are logged - never claim values - to avoid leaking PII.
+		this.logger.info('OIDC provisioning lookup', {
+			userId: user.id,
+			userEmail: user.email,
+			provisionInstanceRole: provisioningConfig.scopesProvisionInstanceRole,
+			provisionProjectRoles: provisioningConfig.scopesProvisionProjectRoles,
+			instanceRoleClaimName: provisioningConfig.scopesInstanceRoleClaimName,
+			projectsRolesClaimName: provisioningConfig.scopesProjectsRolesClaimName,
+			instanceRoleClaimPresent: instanceRole !== undefined && instanceRole !== null,
+			projectsRolesClaimPresent: projectRoleMapping !== undefined && projectRoleMapping !== null,
+			availableClaimKeys: Object.keys(claims),
+			availableUserInfoKeys: Object.keys(userInfo),
+		});
 
 		// Always call provisioning methods, even with empty/undefined claims
 		// This allows the provisioning service to handle role removal when roles are revoked in the IdP
@@ -513,6 +533,50 @@ export class OidcService {
 				projectRoleMapping ?? [],
 			);
 		}
+	}
+
+	/**
+	 * Resolve the instance role claim from an IdP response.
+	 *
+	 * Tries the operator-configured claim name first. If that yields nothing,
+	 * walks a small fallback list of IdP-standard claim names so a misconfigured
+	 * claim name doesn't silently demote every login to member. When a fallback
+	 * matches, emits a warn log so operators can fix the configuration.
+	 *
+	 * Values are never logged — only which key was used — to avoid leaking PII.
+	 */
+	private resolveInstanceRoleClaim(
+		claims: Record<string, unknown>,
+		configuredClaimName: string,
+		userId: string,
+	): unknown {
+		const configured = claims[configuredClaimName];
+		if (configured !== undefined && configured !== null) {
+			return configured;
+		}
+
+		// Azure AD App Roles -> 'roles', Okta / Auth0 groups -> 'groups',
+		// some Okta setups -> 'appRoles' / 'app_roles'. Order is by rough prevalence.
+		const FALLBACK_CLAIM_NAMES = ['roles', 'appRoles', 'app_roles', 'groups'];
+
+		for (const fallbackName of FALLBACK_CLAIM_NAMES) {
+			if (fallbackName === configuredClaimName) continue;
+			const value = claims[fallbackName];
+			if (value === undefined || value === null) continue;
+
+			this.logger.warn(
+				'OIDC provisioning: configured instance role claim was missing; using IdP-standard fallback. ' +
+					'Set N8N_SSO_SCOPES_INSTANCE_ROLE_CLAIM_NAME (or update the DB row) to the fallback name to silence this warning.',
+				{
+					userId,
+					configuredClaimName,
+					fallbackUsed: fallbackName,
+				},
+			);
+			return value;
+		}
+
+		return undefined;
 	}
 
 	private async broadcastReloadOIDCConfigurationCommand(): Promise<void> {
@@ -712,7 +776,6 @@ export class OidcService {
 		const proxyAgent = new EnvHttpProxyAgent();
 
 		// Return a fetch function that uses the proxy agent
-		// openid-client passes CustomFetchOptions which is compatible with RequestInit
 		return async (url: string, options: unknown) => {
 			return await fetch(url, {
 				...(options as RequestInit),
@@ -733,11 +796,8 @@ export class OidcService {
 	): Promise<openidClientTypes.Configuration> {
 		await this.loadOpenIdClient();
 
-		// Create proxy-aware fetch BEFORE discovery so the metadata request uses the proxy
 		const proxyFetch = this.createProxyAwareFetch();
 
-		// Pass customFetch to discovery so the initial metadata fetch also uses the proxy
-		// This fixes the issue where discovery requests failed behind corporate proxies
 		const discoveryOptions: Record<symbol, unknown> = {};
 		if (proxyFetch) {
 			discoveryOptions[this.openidClient.customFetch] = proxyFetch;
