@@ -477,7 +477,7 @@ describe('GlobalConfig', () => {
 				scopesProvisionInstanceRole: false,
 				scopesProvisionProjectRoles: false,
 				scopesName: 'n8n',
-				scopesInstanceRoleClaimName: 'n8n_instance_role',
+				scopesInstanceRoleClaimName: 'roles',
 				scopesProjectsRolesClaimName: 'n8n_projects',
 				scopesUseExpressionMapping: false,
 			},

@@ -507,6 +507,7 @@ describe('OidcService', () => {
 					email_verified: true,
 					email: 'john.doe@test.com',
 				},
+				'valid-access-token',
 			);
 		});
 
@@ -544,6 +545,7 @@ describe('OidcService', () => {
 					email_verified: true,
 					email: 'john.doe@test.com',
 				},
+				'valid-access-token',
 			);
 		});
 
@@ -635,6 +637,136 @@ describe('OidcService', () => {
 				'global:member',
 			);
 			expect(provisioningService.provisionExpressionMappedRolesForUser).not.toHaveBeenCalled();
+		});
+
+		describe('access token fallback (Azure Entra v1 token edge case)', () => {
+			const buildJwt = (payload: object): string => {
+				const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString(
+					'base64url',
+				);
+				const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+				return `${header}.${body}.signature-not-checked`;
+			};
+
+			beforeEach(() => {
+				provisioningService.isExpressionMappingEnabled = jest.fn().mockResolvedValue(false);
+				provisioningService.getConfig = jest.fn().mockResolvedValue({
+					scopesInstanceRoleClaimName: 'roles',
+					scopesProjectsRolesClaimName: 'n8n_projects',
+					scopesProvisionInstanceRole: true,
+					scopesProvisionProjectRoles: false,
+				});
+				provisioningService.provisionInstanceRoleForUser = jest.fn().mockResolvedValue(undefined);
+				authIdentityRepository.findOne = jest.fn().mockResolvedValue({ user });
+			});
+
+			it('uses access-token claims when ID token has no roles claim', async () => {
+				const idTokenClaimsNoRoles = { sub: 'user-123' };
+				const accessTokenJwt = buildJwt({ sub: 'user-123', roles: ['global:admin'] });
+				jest.spyOn(client, 'authorizationCodeGrant').mockResolvedValue({
+					access_token: accessTokenJwt,
+					token_type: 'bearer',
+					claims: () => idTokenClaimsNoRoles,
+				} as unknown as client.TokenEndpointResponse & client.TokenEndpointResponseHelpers);
+
+				const callbackUrl = new URL('https://example.com/callback');
+				const storedState = oidcService.generateState().signed;
+				const storedNonce = oidcService.generateNonce().signed;
+				await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+				expect(provisioningService.provisionInstanceRoleForUser).toHaveBeenCalledWith(user, [
+					'global:admin',
+				]);
+			});
+
+			it('does not consult access-token claims when ID token already provides roles', async () => {
+				const idTokenWithRoles = { sub: 'user-123', roles: ['global:admin'] };
+				const accessTokenJwt = buildJwt({ sub: 'user-123', roles: ['global:owner'] });
+				jest.spyOn(client, 'authorizationCodeGrant').mockResolvedValue({
+					access_token: accessTokenJwt,
+					token_type: 'bearer',
+					claims: () => idTokenWithRoles,
+				} as unknown as client.TokenEndpointResponse & client.TokenEndpointResponseHelpers);
+
+				const callbackUrl = new URL('https://example.com/callback');
+				const storedState = oidcService.generateState().signed;
+				const storedNonce = oidcService.generateNonce().signed;
+				await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+				// Must take the ID token's value, not the access token's
+				expect(provisioningService.provisionInstanceRoleForUser).toHaveBeenCalledWith(user, [
+					'global:admin',
+				]);
+			});
+
+			it('passes undefined through when neither ID token nor access token has roles', async () => {
+				const idTokenClaimsNoRoles = { sub: 'user-123' };
+				const accessTokenJwt = buildJwt({ sub: 'user-123' });
+				jest.spyOn(client, 'authorizationCodeGrant').mockResolvedValue({
+					access_token: accessTokenJwt,
+					token_type: 'bearer',
+					claims: () => idTokenClaimsNoRoles,
+				} as unknown as client.TokenEndpointResponse & client.TokenEndpointResponseHelpers);
+
+				const callbackUrl = new URL('https://example.com/callback');
+				const storedState = oidcService.generateState().signed;
+				const storedNonce = oidcService.generateNonce().signed;
+				await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+				expect(provisioningService.provisionInstanceRoleForUser).toHaveBeenCalledWith(
+					user,
+					undefined,
+				);
+			});
+
+			it('handles non-JWT (opaque) access tokens by skipping the fallback', async () => {
+				const idTokenClaimsNoRoles = { sub: 'user-123' };
+				jest.spyOn(client, 'authorizationCodeGrant').mockResolvedValue({
+					access_token: 'opaque-not-a-jwt',
+					token_type: 'bearer',
+					claims: () => idTokenClaimsNoRoles,
+				} as unknown as client.TokenEndpointResponse & client.TokenEndpointResponseHelpers);
+
+				const callbackUrl = new URL('https://example.com/callback');
+				const storedState = oidcService.generateState().signed;
+				const storedNonce = oidcService.generateNonce().signed;
+				await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+				expect(provisioningService.provisionInstanceRoleForUser).toHaveBeenCalledWith(
+					user,
+					undefined,
+				);
+			});
+
+			it('uses access-token claims for project role mapping when ID token has none', async () => {
+				provisioningService.getConfig = jest.fn().mockResolvedValue({
+					scopesInstanceRoleClaimName: 'roles',
+					scopesProjectsRolesClaimName: 'n8n_projects',
+					scopesProvisionInstanceRole: false,
+					scopesProvisionProjectRoles: true,
+				});
+				provisioningService.provisionProjectRolesForUser = jest.fn().mockResolvedValue(undefined);
+
+				const idTokenClaimsNoProjects = { sub: 'user-123' };
+				const accessTokenJwt = buildJwt({
+					sub: 'user-123',
+					n8n_projects: ['proj-1:editor'],
+				});
+				jest.spyOn(client, 'authorizationCodeGrant').mockResolvedValue({
+					access_token: accessTokenJwt,
+					token_type: 'bearer',
+					claims: () => idTokenClaimsNoProjects,
+				} as unknown as client.TokenEndpointResponse & client.TokenEndpointResponseHelpers);
+
+				const callbackUrl = new URL('https://example.com/callback');
+				const storedState = oidcService.generateState().signed;
+				const storedNonce = oidcService.generateNonce().signed;
+				await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+				expect(provisioningService.provisionProjectRolesForUser).toHaveBeenCalledWith(user.id, [
+					'proj-1:editor',
+				]);
+			});
 		});
 	});
 

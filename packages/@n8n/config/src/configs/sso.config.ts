@@ -43,9 +43,13 @@ class ProvisioningConfig {
 	@Env('N8N_SSO_SCOPES_NAME')
 	scopesName: string = 'n8n';
 
-	/** Name of the SSO claim that contains the user's instance role (for provisioning). */
+	/**
+	 * Name of the SSO claim that contains the user's instance role (for provisioning).
+	 * Defaults to 'roles' to match Azure AD App Roles, Okta, and Auth0 out of the box.
+	 * Override via env or in the DB row if your IdP uses a different claim name.
+	 */
 	@Env('N8N_SSO_SCOPES_INSTANCE_ROLE_CLAIM_NAME')
-	scopesInstanceRoleClaimName: string = 'n8n_instance_role';
+	scopesInstanceRoleClaimName: string = 'roles';
 
 	/** Name of the SSO claim that contains project–role mappings (for provisioning). */
 	@Env('N8N_SSO_SCOPES_PROJECTS_ROLES_CLAIM_NAME')

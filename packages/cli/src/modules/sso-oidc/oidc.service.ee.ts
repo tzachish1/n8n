@@ -267,6 +267,30 @@ export class OidcService {
 			throw new ForbiddenError('No claims found in the OIDC token');
 		}
 
+		// Per-login diagnostic of the raw ID-token shape, before any provisioning
+		// logic runs. Only claim KEYS are logged - never values - so no PII leaks.
+		// Used to reconcile reports of inconsistent role-claim presence across
+		// logins (e.g. Azure Entra v1 tokens where `roles` is sometimes omitted
+		// from the ID token but present in the access token).
+		this.logger.debug('OIDC token claims fingerprint (loginUser)', {
+			availableClaimKeys: Object.keys(claims),
+			rolesClaimType:
+				claims.roles === undefined
+					? 'undefined'
+					: Array.isArray(claims.roles)
+						? `array[${claims.roles.length}]`
+						: typeof claims.roles,
+			groupsClaimType:
+				claims.groups === undefined
+					? 'undefined'
+					: Array.isArray(claims.groups)
+						? `array[${claims.groups.length}]`
+						: typeof claims.groups,
+			hasAccessToken: typeof tokens.access_token === 'string',
+			accessTokenIsJwt:
+				typeof tokens.access_token === 'string' && tokens.access_token.split('.').length === 3,
+		});
+
 		let userInfo;
 		try {
 			userInfo = await this.openidClient.fetchUserInfo(
@@ -322,6 +346,7 @@ export class OidcService {
 				openidUser.user,
 				claims as Record<string, unknown>,
 				userInfo as Record<string, unknown>,
+				tokens.access_token,
 			);
 
 			return openidUser.user;
@@ -348,6 +373,7 @@ export class OidcService {
 				foundUser,
 				claims as Record<string, unknown>,
 				userInfo as Record<string, unknown>,
+				tokens.access_token,
 			);
 
 			return foundUser;
@@ -381,6 +407,7 @@ export class OidcService {
 			user,
 			claims as Record<string, unknown>,
 			userInfo as Record<string, unknown>,
+			tokens.access_token,
 		);
 
 		return user;
@@ -496,6 +523,7 @@ export class OidcService {
 		user: User,
 		claims: Record<string, unknown>,
 		userInfo: Record<string, unknown>,
+		accessToken?: string,
 	) {
 		if (await this.provisioningService.isExpressionMappingEnabled()) {
 			const context = buildOidcClaimsContext(claims, userInfo);
@@ -504,8 +532,74 @@ export class OidcService {
 		}
 
 		const provisioningConfig = await this.provisioningService.getConfig();
-		const projectRoleMapping = claims[provisioningConfig.scopesProjectsRolesClaimName];
-		const instanceRole = claims[provisioningConfig.scopesInstanceRoleClaimName];
+		let projectRoleMapping = claims[provisioningConfig.scopesProjectsRolesClaimName];
+		let instanceRole = this.resolveInstanceRoleClaim(
+			claims,
+			provisioningConfig.scopesInstanceRoleClaimName,
+			user.id,
+		);
+
+		// Azure Entra v1-token edge case: when the App Registration uses a custom
+		// API scope and `requestedAccessTokenVersion: null/1`, the `roles` claim is
+		// emitted in the access token (resource-scoped JWT) but is intermittently
+		// omitted from the ID token. If the ID token didn't yield a role claim,
+		// peek at the access token's payload as a third-tier fallback. We do not
+		// crypto-verify the access token here - openid-client already validated
+		// the token bundle during the authorization code grant; we are only
+		// re-reading a payload we already trust.
+		const accessTokenClaims =
+			(instanceRole === undefined || projectRoleMapping === undefined) && accessToken
+				? this.decodeJwtPayloadUnsafe(accessToken)
+				: undefined;
+
+		if (accessTokenClaims) {
+			if (instanceRole === undefined) {
+				const fromAccessToken = this.resolveInstanceRoleClaim(
+					accessTokenClaims,
+					provisioningConfig.scopesInstanceRoleClaimName,
+					user.id,
+				);
+				if (fromAccessToken !== undefined) {
+					this.logger.warn(
+						'OIDC provisioning: instance role claim was missing from ID token; ' +
+							'falling back to access token claims. ' +
+							'This usually means the App Registration is on Azure Entra v1 tokens ' +
+							'(`requestedAccessTokenVersion: null`); set it to 2 or add `roles` ' +
+							'as an Optional Claim for ID tokens to silence this fallback.',
+						{ userId: user.id },
+					);
+					instanceRole = fromAccessToken;
+				}
+			}
+			if (projectRoleMapping === undefined || projectRoleMapping === null) {
+				const fromAccessToken = accessTokenClaims[provisioningConfig.scopesProjectsRolesClaimName];
+				if (fromAccessToken !== undefined && fromAccessToken !== null) {
+					this.logger.warn(
+						'OIDC provisioning: project role claim was missing from ID token; ' +
+							'falling back to access token claims.',
+						{ userId: user.id },
+					);
+					projectRoleMapping = fromAccessToken;
+				}
+			}
+		}
+
+		// Emit a single diagnostic log per login so operators can verify that the
+		// claim names configured in n8n actually match what the IdP is sending.
+		// Only keys are logged - never claim values - to avoid leaking PII.
+		this.logger.info('OIDC provisioning lookup', {
+			userId: user.id,
+			userEmail: user.email,
+			provisionInstanceRole: provisioningConfig.scopesProvisionInstanceRole,
+			provisionProjectRoles: provisioningConfig.scopesProvisionProjectRoles,
+			instanceRoleClaimName: provisioningConfig.scopesInstanceRoleClaimName,
+			projectsRolesClaimName: provisioningConfig.scopesProjectsRolesClaimName,
+			instanceRoleClaimPresent: instanceRole !== undefined && instanceRole !== null,
+			projectsRolesClaimPresent: projectRoleMapping !== undefined && projectRoleMapping !== null,
+			availableClaimKeys: Object.keys(claims),
+			availableUserInfoKeys: Object.keys(userInfo),
+			accessTokenClaimsConsulted: accessTokenClaims !== undefined,
+		});
 
 		// Always call provisioning methods, even with empty/undefined claims
 		// This allows the provisioning service to handle role removal when roles are revoked in the IdP
@@ -518,6 +612,75 @@ export class OidcService {
 				user.id,
 				projectRoleMapping ?? [],
 			);
+		}
+	}
+
+	/**
+	 * Resolve the instance role claim from an IdP response.
+	 *
+	 * Tries the operator-configured claim name first. If that yields nothing,
+	 * walks a small fallback list of IdP-standard claim names so a misconfigured
+	 * claim name doesn't silently demote every login to member. When a fallback
+	 * matches, emits a warn log so operators can fix the configuration.
+	 *
+	 * Values are never logged — only which key was used — to avoid leaking PII.
+	 */
+	private resolveInstanceRoleClaim(
+		claims: Record<string, unknown>,
+		configuredClaimName: string,
+		userId: string,
+	): unknown {
+		const configured = claims[configuredClaimName];
+		if (configured !== undefined && configured !== null) {
+			return configured;
+		}
+
+		// Azure AD App Roles -> 'roles', Okta / Auth0 groups -> 'groups',
+		// some Okta setups -> 'appRoles' / 'app_roles'. Order is by rough prevalence.
+		const FALLBACK_CLAIM_NAMES = ['roles', 'appRoles', 'app_roles', 'groups'];
+
+		for (const fallbackName of FALLBACK_CLAIM_NAMES) {
+			if (fallbackName === configuredClaimName) continue;
+			const value = claims[fallbackName];
+			if (value === undefined || value === null) continue;
+
+			this.logger.warn(
+				'OIDC provisioning: configured instance role claim was missing; using IdP-standard fallback. ' +
+					'Set N8N_SSO_SCOPES_INSTANCE_ROLE_CLAIM_NAME (or update the DB row) to the fallback name to silence this warning.',
+				{
+					userId,
+					configuredClaimName,
+					fallbackUsed: fallbackName,
+				},
+			);
+			return value;
+		}
+
+		return undefined;
+	}
+
+	/**
+	 * Decode the payload of a compact-JWS token without verifying its signature.
+	 * Used only as a defensive fallback for reading role claims out of an access
+	 * token whose validity is already guaranteed by openid-client's
+	 * `authorizationCodeGrant` validation. Returns `undefined` for non-JWT tokens
+	 * (e.g. opaque tokens) and for malformed payloads.
+	 */
+	private decodeJwtPayloadUnsafe(token: string): Record<string, unknown> | undefined {
+		const parts = token.split('.');
+		if (parts.length !== 3) return undefined;
+		try {
+			const payload = Buffer.from(parts[1], 'base64url').toString('utf8');
+			const parsed: unknown = JSON.parse(payload);
+			if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+				return parsed as Record<string, unknown>;
+			}
+			return undefined;
+		} catch (error) {
+			this.logger.debug('OIDC: failed to decode access token payload', {
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return undefined;
 		}
 	}
 
@@ -718,7 +881,6 @@ export class OidcService {
 		const proxyAgent = new EnvHttpProxyAgent();
 
 		// Return a fetch function that uses the proxy agent
-		// openid-client passes CustomFetchOptions which is compatible with RequestInit
 		return async (url: string, options: unknown) => {
 			return await fetch(url, {
 				...(options as RequestInit),
@@ -739,11 +901,8 @@ export class OidcService {
 	): Promise<openidClientTypes.Configuration> {
 		await this.loadOpenIdClient();
 
-		// Create proxy-aware fetch BEFORE discovery so the metadata request uses the proxy
 		const proxyFetch = this.createProxyAwareFetch();
 
-		// Pass customFetch to discovery so the initial metadata fetch also uses the proxy
-		// This fixes the issue where discovery requests failed behind corporate proxies
 		const discoveryOptions: Record<symbol, unknown> = {};
 		if (proxyFetch) {
 			discoveryOptions[this.openidClient.customFetch] = proxyFetch;
