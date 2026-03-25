@@ -55,6 +55,8 @@ describe('PrometheusMetricsService', () => {
 					includeQueueMetrics: false,
 					includeWorkflowExecutionDuration: false,
 					includeWorkflowNameLabel: false,
+					includeExecutionModeLabel: false,
+					includeProjectIdLabel: false,
 					includeWorkflowStatistics: false,
 					activeWorkflowCountInterval: 30,
 					workflowStatisticsInterval: 30,

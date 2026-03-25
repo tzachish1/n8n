@@ -272,12 +272,27 @@ async function checkPrerequisites() {
 	}
 }
 
+/**
+ * Collect proxy-related env vars to forward into the container build as --build-arg flags.
+ * @returns {string[]} Array of ['--build-arg', 'KEY=value', ...] pairs
+ */
+function getProxyBuildArgs() {
+	const args = [];
+	for (const key of ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy']) {
+		if (process.env[key]) {
+			args.push('--build-arg', `${key}=${process.env[key]}`);
+		}
+	}
+	return args;
+}
+
 async function buildDockerImage({ name, dockerfilePath, fullImageName, buildArgs = [] }) {
 	const startTime = Date.now();
 	const containerEngine = await getContainerEngine();
 	// Push directly if image name contains a registry (e.g., ghcr.io/...)
 	// This avoids the slow --load step (export/import tarball) when pushing to a registry
 	const shouldPush = fullImageName.includes('/') && fullImageName.split('/').length > 2;
+	const proxyArgs = getProxyBuildArgs();
 
 	const extraFlags = [
 		...buildArgs.flatMap((arg) => ['--build-arg', arg]),
@@ -287,6 +302,9 @@ async function buildDockerImage({ name, dockerfilePath, fullImageName, buildArgs
 	echo(chalk.yellow(`INFO: Building ${name} Docker image using ${containerEngine}...`));
 	if (shouldPush) {
 		echo(chalk.yellow(`INFO: Registry detected - pushing directly to ${fullImageName}`));
+	}
+	if (proxyArgs.length > 0) {
+		echo(chalk.yellow(`INFO: Forwarding proxy settings into build`));
 	}
 
 	const buildxDriver = containerEngine === 'docker' ? await getBuildxDriver() : null;
@@ -298,6 +316,7 @@ async function buildDockerImage({ name, dockerfilePath, fullImageName, buildArgs
 				--platform ${platform} \
 				--build-arg TARGETPLATFORM=${platform} \
 				${extraFlags} \
+				${proxyArgs} \
 				-t ${fullImageName} \
 				-f ${dockerfilePath} \
 				${config.buildContext}`;
@@ -318,15 +337,19 @@ async function buildDockerImage({ name, dockerfilePath, fullImageName, buildArgs
 			// The setup-docker-builder action creates a buildx builder with sticky disk cache.
 			// In CI, push directly to registry to avoid slow --load (export/import tarball).
 			// Locally, use --load to make image available in local daemon.
-			const outputFlag = shouldPush ? '--push' : '--load';
+			const outputArgs = shouldPush
+				? ['--output', 'type=image,push=true,oci-mediatypes=false']
+				: ['--load'];
 			const { stdout } = await $`docker buildx build \
 				--platform ${platform} \
 				--build-arg TARGETPLATFORM=${platform} \
 				${extraFlags} \
+				${proxyArgs} \
 				-t ${fullImageName} \
 				-f ${dockerfilePath} \
 				--provenance=false \
-				${outputFlag} \
+				--sbom=false \
+				${outputArgs} \
 				${config.buildContext}`;
 			echo(stdout);
 		}

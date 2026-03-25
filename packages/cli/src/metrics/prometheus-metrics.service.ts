@@ -41,6 +41,18 @@ export class PrometheusMetricsService {
 
 	private readonly histograms: Record<string, Histogram<string>> = {};
 
+	/**
+	 * In-memory map of workflowId → projectId, populated opportunistically from
+	 * any inbound event that carries a non-empty projectId. Used as a sync
+	 * fallback so that label scrapes never produce project_id="unknown" for a
+	 * workflow whose owning project we have already seen this process lifetime.
+	 *
+	 * This compensates for upstream code paths that construct
+	 * IWorkflowExecutionDataProcess without populating projectId (e.g. the
+	 * execution-retry path in execution.service.ts).
+	 */
+	private readonly workflowProjectCache = new Map<string, string>();
+
 	private readonly prefix = this.globalConfig.endpoints.metrics.prefix;
 
 	private readonly includes: Includes = {
@@ -62,6 +74,8 @@ export class PrometheusMetricsService {
 			apiMethod: this.globalConfig.endpoints.metrics.includeApiMethodLabel,
 			apiStatusCode: this.globalConfig.endpoints.metrics.includeApiStatusCodeLabel,
 			workflowName: this.globalConfig.endpoints.metrics.includeWorkflowNameLabel,
+			executionMode: this.globalConfig.endpoints.metrics.includeExecutionModeLabel,
+			projectId: this.globalConfig.endpoints.metrics.includeProjectIdLabel,
 		},
 	};
 
@@ -464,12 +478,28 @@ export class PrometheusMetricsService {
 	}
 
 	private buildWorkflowLabels(payload: any): Record<string, string> {
+		const workflowId: string | undefined = payload.workflowId
+			? String(payload.workflowId)
+			: undefined;
+
+		if (workflowId && payload.projectId) {
+			this.workflowProjectCache.set(workflowId, String(payload.projectId));
+		}
+
 		const labels: Record<string, string> = {};
 		if (this.includes.labels.workflowId) {
-			labels.workflow_id = String(payload.workflowId ?? 'unknown');
+			labels.workflow_id = workflowId ?? 'unknown';
 		}
 		if (this.includes.labels.workflowName) {
 			labels.workflow_name = String(payload.workflowName ?? 'unknown');
+		}
+		if (this.includes.labels.executionMode) {
+			labels.execution_mode = String(payload.mode ?? 'unknown');
+		}
+		if (this.includes.labels.projectId) {
+			const projectId =
+				payload.projectId ?? (workflowId ? this.workflowProjectCache.get(workflowId) : undefined);
+			labels.project_id = String(projectId ?? 'unknown');
 		}
 		return labels;
 	}

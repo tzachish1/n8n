@@ -44,15 +44,16 @@ FROM python:${PYTHON_VERSION}-alpine AS python-runner-builder
 ARG TARGETPLATFORM
 ARG UV_VERSION=0.8.14
 
-RUN set -e; \
+RUN apk add --no-cache curl && \
+  set -e; \
   case "$TARGETPLATFORM" in \
     "linux/amd64") UV_ARCH="x86_64-unknown-linux-musl" ;; \
     "linux/arm64") UV_ARCH="aarch64-unknown-linux-musl" ;; \
     *) echo "Unsupported platform: $TARGETPLATFORM" >&2; exit 1 ;; \
   esac; \
   mkdir -p /tmp/uv && cd /tmp/uv; \
-  wget -q "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}.tar.gz"; \
-  wget -q "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}.tar.gz.sha256"; \
+  curl -fsSL -o "uv-${UV_ARCH}.tar.gz" "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}.tar.gz"; \
+  curl -fsSL -o "uv-${UV_ARCH}.tar.gz.sha256" "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${UV_ARCH}.tar.gz.sha256"; \
   sha256sum -c "uv-${UV_ARCH}.tar.gz.sha256"; \
 	tar -xzf "uv-${UV_ARCH}.tar.gz"; \
   install -m 0755 "uv-${UV_ARCH}/uv" /usr/local/bin/uv; \
@@ -90,15 +91,16 @@ FROM alpine:3.22 AS launcher-downloader
 ARG TARGETPLATFORM
 ARG LAUNCHER_VERSION=1.4.5
 
-RUN set -e; \
+RUN apk add --no-cache curl && \
+    set -e; \
     case "$TARGETPLATFORM" in \
         "linux/amd64") ARCH_NAME="amd64" ;; \
         "linux/arm64") ARCH_NAME="arm64" ;; \
         *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
     esac; \
     mkdir /launcher-temp && cd /launcher-temp; \
-    wget -q "https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz"; \
-    wget -q "https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz.sha256"; \
+    curl -fsSL -o "task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz" "https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz"; \
+    curl -fsSL -o "task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz.sha256" "https://github.com/n8n-io/task-runner-launcher/releases/download/${LAUNCHER_VERSION}/task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz.sha256"; \
     echo "$(cat task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz.sha256) task-runner-launcher-${LAUNCHER_VERSION}-linux-${ARCH_NAME}.tar.gz" > checksum.sha256; \
     sha256sum -c checksum.sha256; \
     mkdir -p /launcher-bin; \

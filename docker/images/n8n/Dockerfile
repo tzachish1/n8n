@@ -6,9 +6,14 @@ FROM node:${NODE_VERSION}-alpine3.22 AS builder
 COPY ./compiled /usr/local/lib/node_modules/n8n
 RUN apk add --no-cache python3 make g++ && \
     cd /usr/local/lib/node_modules/n8n && \
-    npm rebuild sqlite3
+    npm rebuild sqlite3 && \
+    JOBS=1 npm rebuild isolated-vm
 
-FROM n8nio/base:${NODE_VERSION}
+# Flatten base image into a single layer to ensure uniform manifest format
+# across registries (avoids OCI/Docker v2 layer mismatch with Nexus)
+FROM n8nio/base:${NODE_VERSION} AS base
+FROM scratch
+COPY --from=base / /
 
 ARG N8N_VERSION
 ARG N8N_RELEASE_TYPE=dev
