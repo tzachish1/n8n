@@ -130,11 +130,15 @@ type HooksSetupParameters = {
 	parentExecution?: RelatedExecution;
 };
 
-function hookFunctionsWorkflowEvents(hooks: ExecutionLifecycleHooks, userId?: string) {
+function hookFunctionsWorkflowEvents(
+	hooks: ExecutionLifecycleHooks,
+	userId?: string,
+	projectId?: string,
+) {
 	const eventService = Container.get(EventService);
 	hooks.addHandler('workflowExecuteBefore', function () {
 		const { executionId, workflowData, mode } = this;
-		eventService.emit('workflow-pre-execute', { executionId, data: workflowData, mode });
+		eventService.emit('workflow-pre-execute', { executionId, data: workflowData, mode, projectId });
 	});
 	hooks.addHandler('workflowExecuteAfter', function (runData) {
 		if (runData.status === 'waiting') return;
@@ -149,11 +153,17 @@ function hookFunctionsWorkflowEvents(hooks: ExecutionLifecycleHooks, userId?: st
 			}
 		}
 
-		eventService.emit('workflow-post-execute', { executionId, runData, workflow, userId });
+		eventService.emit('workflow-post-execute', {
+			executionId,
+			runData,
+			workflow,
+			userId,
+			projectId,
+		});
 	});
 }
 
-function hookFunctionsNodeEvents(hooks: ExecutionLifecycleHooks) {
+function hookFunctionsNodeEvents(hooks: ExecutionLifecycleHooks, projectId?: string) {
 	const eventService = Container.get(EventService);
 	hooks.addHandler('nodeExecuteBefore', function (nodeName) {
 		const { executionId, workflowData: workflow } = this;
@@ -165,6 +175,7 @@ function hookFunctionsNodeEvents(hooks: ExecutionLifecycleHooks) {
 			nodeId: node?.id,
 			nodeName,
 			nodeType: node?.type,
+			projectId,
 		});
 	});
 	hooks.addHandler('nodeExecuteAfter', function (nodeName) {
@@ -177,6 +188,7 @@ function hookFunctionsNodeEvents(hooks: ExecutionLifecycleHooks) {
 			nodeId: node?.id,
 			nodeName,
 			nodeType: node?.type,
+			projectId,
 		});
 	});
 }
@@ -550,11 +562,12 @@ export function getLifecycleHooksForSubExecutions(
 	workflowData: IWorkflowBase,
 	userId?: string,
 	parentExecution?: RelatedExecution,
+	projectId?: string,
 ): ExecutionLifecycleHooks {
 	const hooks = new ExecutionLifecycleHooks(mode, executionId, workflowData);
 	const saveSettings = toSaveSettings(workflowData.settings);
-	hookFunctionsWorkflowEvents(hooks, userId);
-	hookFunctionsNodeEvents(hooks);
+	hookFunctionsWorkflowEvents(hooks, userId, projectId);
+	hookFunctionsNodeEvents(hooks, projectId);
 	hookFunctionsFinalizeExecutionStatus(hooks);
 	hookFunctionsSave(hooks, { saveSettings, parentExecution });
 	hookFunctionsSaveProgress(hooks, { saveSettings });
@@ -570,11 +583,11 @@ export function getLifecycleHooksForScalingWorker(
 	data: IWorkflowExecutionDataProcess,
 	executionId: string,
 ): ExecutionLifecycleHooks {
-	const { pushRef, retryOf, executionMode, workflowData } = data;
+	const { pushRef, retryOf, executionMode, workflowData, projectId } = data;
 	const hooks = new ExecutionLifecycleHooks(executionMode, executionId, workflowData);
 	const saveSettings = toSaveSettings(workflowData.settings);
 	const optionalParameters = { pushRef, retryOf: retryOf ?? undefined, saveSettings };
-	hookFunctionsNodeEvents(hooks);
+	hookFunctionsNodeEvents(hooks, projectId);
 	hookFunctionsFinalizeExecutionStatus(hooks);
 	hookFunctionsSaveWorker(hooks, optionalParameters);
 	hookFunctionsSaveProgress(hooks, optionalParameters);
@@ -597,14 +610,14 @@ export function getLifecycleHooksForScalingMain(
 	data: IWorkflowExecutionDataProcess,
 	executionId: string,
 ): ExecutionLifecycleHooks {
-	const { pushRef, retryOf, executionMode, workflowData, userId } = data;
+	const { pushRef, retryOf, executionMode, workflowData, userId, projectId } = data;
 	const hooks = new ExecutionLifecycleHooks(executionMode, executionId, workflowData);
 	const saveSettings = toSaveSettings(workflowData.settings);
 	const optionalParameters = { pushRef, retryOf: retryOf ?? undefined, saveSettings };
 	const executionRepository = Container.get(ExecutionRepository);
 	const executionPersistence = Container.get(ExecutionPersistence);
 
-	hookFunctionsWorkflowEvents(hooks, userId);
+	hookFunctionsWorkflowEvents(hooks, userId, projectId);
 	hookFunctionsSaveProgress(hooks, optionalParameters);
 	hookFunctionsExternalHooks(hooks);
 	hookFunctionsFinalizeExecutionStatus(hooks);
@@ -667,12 +680,12 @@ export function getLifecycleHooksForRegularMain(
 	data: IWorkflowExecutionDataProcess,
 	executionId: string,
 ): ExecutionLifecycleHooks {
-	const { pushRef, retryOf, executionMode, workflowData, userId } = data;
+	const { pushRef, retryOf, executionMode, workflowData, userId, projectId } = data;
 	const hooks = new ExecutionLifecycleHooks(executionMode, executionId, workflowData);
 	const saveSettings = toSaveSettings(workflowData.settings);
 	const optionalParameters = { pushRef, retryOf: retryOf ?? undefined, saveSettings };
-	hookFunctionsWorkflowEvents(hooks, userId);
-	hookFunctionsNodeEvents(hooks);
+	hookFunctionsWorkflowEvents(hooks, userId, projectId);
+	hookFunctionsNodeEvents(hooks, projectId);
 	hookFunctionsFinalizeExecutionStatus(hooks);
 	hookFunctionsSave(hooks, optionalParameters);
 	hookFunctionsPush(hooks, optionalParameters);

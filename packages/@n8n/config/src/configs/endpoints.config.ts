@@ -76,6 +76,10 @@ class PrometheusMetricsConfig {
 	@Env('N8N_METRICS_INCLUDE_EXECUTION_MODE_LABEL')
 	includeExecutionModeLabel: boolean = false;
 
+	/** Whether to include a label for project ID on workflow metrics. */
+	@Env('N8N_METRICS_INCLUDE_PROJECT_ID_LABEL')
+	includeProjectIdLabel: boolean = false;
+
 	/** Whether to include workflow execution statistics as metrics. */
 	@Env('N8N_METRICS_INCLUDE_WORKFLOW_STATISTICS')
 	includeWorkflowStatistics: boolean = false;
