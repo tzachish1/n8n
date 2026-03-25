@@ -110,6 +110,9 @@ export class WorkflowExecutionService {
 		// Check whether this workflow is active.
 		const workflowIsActive = await this.workflowRepository.isActive(workflowData.id);
 
+		const ownerProject = await this.ownershipService.getWorkflowProjectCached(workflowData.id);
+		const projectId = ownerProject?.id;
+
 		// For manual testing always set to not active
 		workflowData.active = false;
 		workflowData.activeVersionId = null;
@@ -132,6 +135,7 @@ export class WorkflowExecutionService {
 					pushRef,
 					workflowData,
 					userId: user.id,
+					projectId,
 					dirtyNodeNames: payload.dirtyNodeNames,
 					agentRequest: payload.agentRequest,
 				};
@@ -168,6 +172,7 @@ export class WorkflowExecutionService {
 				pushRef,
 				workflowData,
 				userId: user.id,
+				projectId,
 				triggerToStartFrom: payload.triggerToStartFrom,
 				agentRequest: payload.agentRequest,
 				destinationNode: payload.destinationNode,
@@ -205,6 +210,7 @@ export class WorkflowExecutionService {
 				pushRef,
 				workflowData,
 				userId: user.id,
+				projectId,
 				agentRequest: payload.agentRequest,
 				destinationNode: payload.destinationNode,
 				triggerToStartFrom: pinnedTrigger ? { name: pinnedTrigger.name } : undefined,
