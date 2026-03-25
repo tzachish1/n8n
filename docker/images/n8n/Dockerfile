@@ -23,13 +23,17 @@ RUN apk add --no-cache python3 make g++ && \
     cd node_modules/isolated-vm && \
     node /usr/local/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild --release -j max
 
+# Flatten base image into a single layer to ensure uniform manifest format
+# across registries (avoids OCI/Docker v2 layer mismatch with Nexus).
 # Pinned to multi-arch index digest (linux/amd64 + linux/arm64) for reproducible builds.
 # n8nio/base is republished by a separate workflow (docker/images/n8n-base) on every
 # base change, so a base rebuild does not reach this image until the digest is
 # manually re-pinned here. Bump the digest together with the tag whenever the base
 # image is intentionally updated.
 # Digest pins to n8nio/base:24.18.1 (Node 24.18.1, Alpine 3.24).
-FROM n8nio/base:24.18.1@sha256:f7a23e449f093b8b203467919e969ca35d12ba959442aadc1f69bb174b160ad2
+FROM n8nio/base:24.18.1@sha256:f7a23e449f093b8b203467919e969ca35d12ba959442aadc1f69bb174b160ad2 AS base
+FROM scratch
+COPY --from=base / /
 
 ARG N8N_VERSION
 ARG N8N_RELEASE_TYPE=dev

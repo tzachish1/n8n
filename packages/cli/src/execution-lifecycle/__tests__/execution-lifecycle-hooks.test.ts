@@ -420,6 +420,8 @@ describe('Execution Lifecycle Hooks', () => {
 					nodeName,
 					nodeType,
 					nodeId,
+					mode: lifecycleHooks.mode,
+					projectId: undefined,
 				});
 			});
 		});
@@ -434,6 +436,8 @@ describe('Execution Lifecycle Hooks', () => {
 					nodeName,
 					nodeType,
 					nodeId,
+					mode: lifecycleHooks.mode,
+					projectId: undefined,
 				});
 			});
 		});
