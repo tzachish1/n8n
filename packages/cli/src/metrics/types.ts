@@ -13,6 +13,7 @@ export type MetricLabel =
 	| 'workflowId'
 	| 'workflowName'
 	| 'executionMode'
+	| 'projectId'
 	| 'apiPath'
 	| 'apiMethod'
 	| 'apiStatusCode';
