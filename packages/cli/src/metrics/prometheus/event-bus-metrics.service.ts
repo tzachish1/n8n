@@ -8,6 +8,14 @@ import { MessageEventBus } from '@/eventbus/message-event-bus/message-event-bus'
 
 import type { PrometheusMetricsCollector } from './base';
 
+type WorkflowMetricPayload = {
+	workflowId?: unknown;
+	workflowName?: unknown;
+	mode?: unknown;
+	projectId?: unknown;
+	nodeType?: unknown;
+};
+
 /**
  * Creates per-event Prometheus counters driven by MessageEventBus events.
  * Counter names and labels are derived from event name and type (workflow, node, audit).
@@ -15,6 +23,14 @@ import type { PrometheusMetricsCollector } from './base';
 @Service()
 export class PrometheusEventBusMetricsService implements PrometheusMetricsCollector {
 	private readonly countersByEventName = new Map<string, Counter<string>>();
+
+	/**
+	 * In-memory map of workflowId → projectId, populated opportunistically from
+	 * any inbound event that carries a non-empty projectId. Used as a sync
+	 * fallback so that label scrapes never produce project_id="unknown" for a
+	 * workflow whose owning project we have already seen this process lifetime.
+	 */
+	private readonly workflowProjectCache = new Map<string, string>();
 
 	constructor(
 		private readonly eventBus: MessageEventBus,
@@ -80,8 +96,11 @@ export class PrometheusEventBusMetricsService implements PrometheusMetricsCollec
 						: {};
 				}
 
-				if (eventName.startsWith('n8n.audit.workflow')) {
+				if (eventName === 'n8n.audit.workflow.executed') {
 					return this.buildWorkflowLabels(payload);
+				}
+				if (eventName.startsWith('n8n.audit.workflow')) {
+					return this.buildBaseWorkflowLabels(payload);
 				}
 				break;
 
@@ -104,13 +123,39 @@ export class PrometheusEventBusMetricsService implements PrometheusMetricsCollec
 		return {};
 	}
 
-	private buildWorkflowLabels(payload: { workflowId?: unknown; workflowName?: unknown }): Record<
-		string,
-		string
-	> {
+	private buildWorkflowLabels(payload: WorkflowMetricPayload): Record<string, string> {
+		const workflowId: string | undefined = payload.workflowId
+			? String(payload.workflowId)
+			: undefined;
+
+		if (workflowId && payload.projectId) {
+			this.workflowProjectCache.set(workflowId, String(payload.projectId));
+		}
+
 		const labels: Record<string, string> = {};
 		if (this.config.includeWorkflowIdLabel) {
-			labels.workflow_id = typeof payload.workflowId === 'string' ? payload.workflowId : 'unknown';
+			labels.workflow_id = workflowId ?? 'unknown';
+		}
+		if (this.config.includeWorkflowNameLabel) {
+			labels.workflow_name =
+				typeof payload.workflowName === 'string' ? payload.workflowName : 'unknown';
+		}
+		if (this.config.includeExecutionModeLabel) {
+			labels.execution_mode = String(payload.mode ?? 'unknown');
+		}
+		if (this.config.includeProjectIdLabel) {
+			const projectId =
+				payload.projectId ?? (workflowId ? this.workflowProjectCache.get(workflowId) : undefined);
+			labels.project_id = String(projectId ?? 'unknown');
+		}
+		return labels;
+	}
+
+	private buildBaseWorkflowLabels(payload: WorkflowMetricPayload): Record<string, string> {
+		const labels: Record<string, string> = {};
+		if (this.config.includeWorkflowIdLabel) {
+			labels.workflow_id =
+				typeof payload.workflowId === 'string' ? payload.workflowId : 'unknown';
 		}
 		if (this.config.includeWorkflowNameLabel) {
 			labels.workflow_name =

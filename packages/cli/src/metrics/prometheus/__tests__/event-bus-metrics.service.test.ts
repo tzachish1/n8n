@@ -37,6 +37,8 @@ describe('PrometheusEventBusMetricsService', () => {
 			includeWorkflowIdLabel: false,
 			includeWorkflowNameLabel: false,
 			includeNodeTypeLabel: false,
+			includeExecutionModeLabel: false,
+			includeProjectIdLabel: false,
 		});
 		service = new PrometheusEventBusMetricsService(eventBus, config);
 		mockCounterInc = vi.fn();
@@ -365,6 +367,102 @@ describe('PrometheusEventBusMetricsService', () => {
 			expect(promClient.Counter).toHaveBeenCalledWith(
 				expect.objectContaining({ name: 'custom_workflow_execution_finished_total' }),
 			);
+		});
+
+		it('should include execution_mode label for workflow events when includeExecutionModeLabel is true', () => {
+			config.includeExecutionModeLabel = true;
+			service.init();
+
+			const handler = getEventBusHandler();
+			handler({
+				__type: EventMessageTypeNames.workflow,
+				eventName: 'n8n.workflow.success',
+				payload: { mode: 'manual' },
+			});
+
+			expect(mockCounterInc).toHaveBeenCalledWith({ execution_mode: 'manual' }, 1);
+		});
+
+		it('should include project_id label for workflow events when includeProjectIdLabel is true', () => {
+			config.includeProjectIdLabel = true;
+			service.init();
+
+			const handler = getEventBusHandler();
+			handler({
+				__type: EventMessageTypeNames.workflow,
+				eventName: 'n8n.workflow.success',
+				payload: { workflowId: 'wf_123', projectId: 'proj-abc' },
+			});
+
+			expect(mockCounterInc).toHaveBeenCalledWith({ project_id: 'proj-abc' }, 1);
+		});
+
+		it('should fall back to remembered project_id when payload omits it', () => {
+			config.includeWorkflowIdLabel = true;
+			config.includeProjectIdLabel = true;
+			service.init();
+
+			const handler = getEventBusHandler();
+			handler({
+				__type: EventMessageTypeNames.workflow,
+				eventName: 'n8n.workflow.success',
+				payload: { workflowId: '1234', projectId: 'proj-abc' },
+			});
+			handler({
+				__type: EventMessageTypeNames.workflow,
+				eventName: 'n8n.workflow.success',
+				payload: { workflowId: '1234' },
+			});
+
+			expect(mockCounterInc).toHaveBeenNthCalledWith(
+				1,
+				{ workflow_id: '1234', project_id: 'proj-abc' },
+				1,
+			);
+			expect(mockCounterInc).toHaveBeenNthCalledWith(
+				2,
+				{ workflow_id: '1234', project_id: 'proj-abc' },
+				1,
+			);
+		});
+
+		it('should use full workflow labels for n8n.audit.workflow.executed', () => {
+			config.includeWorkflowIdLabel = true;
+			config.includeExecutionModeLabel = true;
+			config.includeProjectIdLabel = true;
+			service.init();
+
+			const handler = getEventBusHandler();
+			handler({
+				__type: EventMessageTypeNames.audit,
+				eventName: 'n8n.audit.workflow.executed',
+				payload: { workflowId: 'wf_1', mode: 'webhook', projectId: 'proj-1' },
+			});
+
+			expect(mockCounterInc).toHaveBeenCalledWith(
+				{
+					workflow_id: 'wf_1',
+					execution_mode: 'webhook',
+					project_id: 'proj-1',
+				},
+				1,
+			);
+		});
+
+		it('should use base workflow labels for other n8n.audit.workflow events', () => {
+			config.includeWorkflowIdLabel = true;
+			config.includeExecutionModeLabel = true;
+			config.includeProjectIdLabel = true;
+			service.init();
+
+			const handler = getEventBusHandler();
+			handler({
+				__type: EventMessageTypeNames.audit,
+				eventName: 'n8n.audit.workflow.updated',
+				payload: { workflowId: 'wf_1', mode: 'manual', projectId: 'proj-1' },
+			});
+
+			expect(mockCounterInc).toHaveBeenCalledWith({ workflow_id: 'wf_1' }, 1);
 		});
 	});
 });
