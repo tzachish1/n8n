@@ -126,6 +126,7 @@ export type RelayEventMap = {
 		executionId: string;
 		data: IWorkflowExecutionDataProcess /* main process */ | IWorkflowBase /* worker */;
 		mode: WorkflowExecuteMode;
+		projectId?: string;
 	};
 
 	'workflow-post-execute': {
@@ -133,6 +134,7 @@ export type RelayEventMap = {
 		userId?: string;
 		workflow: IWorkflowBase;
 		runData?: IRun;
+		projectId?: string;
 	};
 
 	'workflow-sharing-updated': {
@@ -177,6 +179,7 @@ export type RelayEventMap = {
 		nodeId?: string;
 		nodeName: string;
 		nodeType?: string;
+		projectId?: string;
 	};
 
 	'node-post-execute': {
@@ -185,6 +188,7 @@ export type RelayEventMap = {
 		nodeId?: string;
 		nodeName: string;
 		nodeType?: string;
+		projectId?: string;
 	};
 
 	// #endregion
@@ -747,6 +751,99 @@ export type RelayEventMap = {
 		windowEndIso: string;
 		compactionStartTime: Date;
 	};
+	// #endregion
+
+	// #region Node Governance
+
+	'node-governance-policy-created': {
+		user: UserLike;
+		policyId: string;
+		policyType: string;
+		scope: string;
+		targetType: string;
+		targetValue: string;
+		projectIds?: string[];
+	};
+
+	'node-governance-policy-updated': {
+		user: UserLike;
+		policyId: string;
+		policyType?: string;
+		scope?: string;
+		targetType?: string;
+		targetValue?: string;
+		projectIds?: string[];
+	};
+
+	'node-governance-policy-deleted': {
+		user: UserLike;
+		policyId: string;
+	};
+
+	'node-governance-category-created': {
+		user: UserLike;
+		categoryId: string;
+		categorySlug: string;
+		categoryDisplayName: string;
+	};
+
+	'node-governance-category-updated': {
+		user: UserLike;
+		categoryId: string;
+		categorySlug?: string;
+		categoryDisplayName?: string;
+	};
+
+	'node-governance-category-deleted': {
+		user: UserLike;
+		categoryId: string;
+	};
+
+	'node-governance-category-node-assigned': {
+		user: UserLike;
+		categoryId: string;
+		nodeType: string;
+	};
+
+	'node-governance-category-node-removed': {
+		user: UserLike;
+		categoryId: string;
+		nodeType: string;
+	};
+
+	'node-governance-categories-imported': {
+		user: UserLike;
+		importCreated: number;
+		importUpdated: number;
+		importUnchanged: number;
+	};
+
+	'node-governance-request-created': {
+		user: UserLike;
+		requestId: string;
+		nodeType: string;
+		projectId: string;
+	};
+
+	'node-governance-request-approved': {
+		user: UserLike;
+		requestId: string;
+		nodeType: string;
+		projectId: string;
+		requestedById: string;
+		reviewComment?: string;
+		policyId?: string;
+	};
+
+	'node-governance-request-rejected': {
+		user: UserLike;
+		requestId: string;
+		nodeType: string;
+		projectId: string;
+		requestedById: string;
+		reviewComment?: string;
+	};
+
 	// #endregion
 
 	// #region Instance Policies
