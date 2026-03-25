@@ -25,15 +25,28 @@ import {
 
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 import { NotFoundError } from '@/errors/response-errors/not-found.error';
+import { EventService } from '@/events/event.service';
+import type { UserLike } from '@/events/maps/relay.event-map';
 import { NodeGovernanceService } from '@/services/node-governance.service';
+
+function toUserLike(user: AuthenticatedRequest['user']): UserLike {
+	return {
+		id: user.id,
+		email: user.email,
+		firstName: user.firstName,
+		lastName: user.lastName,
+	};
+}
 
 @RestController('/node-governance')
 export class NodeGovernanceController {
-	constructor(private readonly nodeGovernanceService: NodeGovernanceService) {}
+	constructor(
+		private readonly nodeGovernanceService: NodeGovernanceService,
+		private readonly eventService: EventService,
+	) {}
 
 	// === Node Governance Status ===
 
-	// POST endpoint (preferred - no URL length limits)
 	@Post('/status')
 	async getNodeGovernanceStatusPost(
 		req: AuthenticatedRequest,
@@ -60,7 +73,6 @@ export class NodeGovernanceController {
 		return { governance };
 	}
 
-	// GET endpoint (legacy - may hit URL length limits with many nodes)
 	@Get('/status')
 	async getNodeGovernanceStatus(
 		req: AuthenticatedRequest,
@@ -121,13 +133,26 @@ export class NodeGovernanceController {
 		}
 
 		const policy = await this.nodeGovernanceService.createPolicy(payload, req.user);
+
+		if (policy) {
+			this.eventService.emit('node-governance-policy-created', {
+				user: toUserLike(req.user),
+				policyId: policy.id,
+				policyType: policy.policyType,
+				scope: policy.scope,
+				targetType: policy.targetType,
+				targetValue: policy.targetValue,
+				projectIds: payload.projectIds,
+			});
+		}
+
 		return { policy };
 	}
 
 	@Patch('/policies/:id')
 	@GlobalScope('nodeGovernance:manage')
 	async updatePolicy(
-		_req: AuthenticatedRequest,
+		req: AuthenticatedRequest,
 		_res: Response,
 		@Param('id') id: string,
 		@Body payload: UpdatePolicyDto,
@@ -136,13 +161,30 @@ export class NodeGovernanceController {
 		if (!policy) {
 			throw new NotFoundError(`Policy with ID ${id} not found`);
 		}
+
+		this.eventService.emit('node-governance-policy-updated', {
+			user: toUserLike(req.user),
+			policyId: id,
+			policyType: payload.policyType,
+			scope: payload.scope,
+			targetType: payload.targetType,
+			targetValue: payload.targetValue,
+			projectIds: payload.projectIds,
+		});
+
 		return { policy };
 	}
 
 	@Delete('/policies/:id')
 	@GlobalScope('nodeGovernance:manage')
-	async deletePolicy(_req: AuthenticatedRequest, _res: Response, @Param('id') id: string) {
+	async deletePolicy(req: AuthenticatedRequest, _res: Response, @Param('id') id: string) {
 		await this.nodeGovernanceService.deletePolicy(id);
+
+		this.eventService.emit('node-governance-policy-deleted', {
+			user: toUserLike(req.user),
+			policyId: id,
+		});
+
 		return { success: true };
 	}
 
@@ -162,13 +204,21 @@ export class NodeGovernanceController {
 		@Body payload: CreateCategoryDto,
 	) {
 		const category = await this.nodeGovernanceService.createCategory(payload, req.user);
+
+		this.eventService.emit('node-governance-category-created', {
+			user: toUserLike(req.user),
+			categoryId: category.id,
+			categorySlug: category.slug,
+			categoryDisplayName: category.displayName,
+		});
+
 		return { category };
 	}
 
 	@Patch('/categories/:id')
 	@GlobalScope('nodeGovernance:manage')
 	async updateCategory(
-		_req: AuthenticatedRequest,
+		req: AuthenticatedRequest,
 		_res: Response,
 		@Param('id') id: string,
 		@Body payload: UpdateCategoryDto,
@@ -177,13 +227,27 @@ export class NodeGovernanceController {
 		if (!category) {
 			throw new NotFoundError(`Category with ID ${id} not found`);
 		}
+
+		this.eventService.emit('node-governance-category-updated', {
+			user: toUserLike(req.user),
+			categoryId: id,
+			categorySlug: payload.slug,
+			categoryDisplayName: payload.displayName,
+		});
+
 		return { category };
 	}
 
 	@Delete('/categories/:id')
 	@GlobalScope('nodeGovernance:manage')
-	async deleteCategory(_req: AuthenticatedRequest, _res: Response, @Param('id') id: string) {
+	async deleteCategory(req: AuthenticatedRequest, _res: Response, @Param('id') id: string) {
 		await this.nodeGovernanceService.deleteCategory(id);
+
+		this.eventService.emit('node-governance-category-deleted', {
+			user: toUserLike(req.user),
+			categoryId: id,
+		});
+
 		return { success: true };
 	}
 
@@ -200,21 +264,33 @@ export class NodeGovernanceController {
 			payload.nodeType,
 			req.user,
 		);
+
+		this.eventService.emit('node-governance-category-node-assigned', {
+			user: toUserLike(req.user),
+			categoryId,
+			nodeType: payload.nodeType,
+		});
+
 		return { assignment };
 	}
 
 	@Delete('/categories/:id/nodes/:nodeType')
 	@GlobalScope('nodeGovernance:manage')
 	async removeNodeFromCategory(
-		_req: AuthenticatedRequest,
+		req: AuthenticatedRequest,
 		_res: Response,
 		@Param('id') categoryId: string,
 		@Param('nodeType') nodeType: string,
 	) {
-		await this.nodeGovernanceService.removeNodeFromCategory(
+		const decodedNodeType = decodeURIComponent(nodeType);
+		await this.nodeGovernanceService.removeNodeFromCategory(categoryId, decodedNodeType);
+
+		this.eventService.emit('node-governance-category-node-removed', {
+			user: toUserLike(req.user),
 			categoryId,
-			decodeURIComponent(nodeType),
-		);
+			nodeType: decodedNodeType,
+		});
+
 		return { success: true };
 	}
 
@@ -235,6 +311,14 @@ export class NodeGovernanceController {
 		@Body payload: ImportCategoriesDto,
 	) {
 		const result = await this.nodeGovernanceService.importCategories(payload, req.user);
+
+		this.eventService.emit('node-governance-categories-imported', {
+			user: toUserLike(req.user),
+			importCreated: result.created,
+			importUpdated: result.updated,
+			importUnchanged: result.unchanged,
+		});
+
 		return result;
 	}
 
@@ -261,6 +345,15 @@ export class NodeGovernanceController {
 	) {
 		const result = await this.nodeGovernanceService.createAccessRequest(payload, req.user);
 
+		if (!result.alreadyExists) {
+			this.eventService.emit('node-governance-request-created', {
+				user: toUserLike(req.user),
+				requestId: result.request.id,
+				nodeType: payload.nodeType,
+				projectId: payload.projectId,
+			});
+		}
+
 		if (result.alreadyExists) {
 			return {
 				alreadyExists: true,
@@ -283,9 +376,6 @@ export class NodeGovernanceController {
 		let request;
 
 		if (payload.action === 'approve') {
-			// Use policyId if provided, otherwise undefined (which will create a new policy)
-			// For backward compatibility: if createPolicy is explicitly false, don't create policy (policyId stays undefined)
-			// Otherwise, create a new policy (policyId is undefined, which triggers policy creation)
 			const policyId = payload.policyId;
 			request = await this.nodeGovernanceService.approveRequest(
 				id,
@@ -293,8 +383,31 @@ export class NodeGovernanceController {
 				payload.comment,
 				policyId,
 			);
+
+			if (request) {
+				this.eventService.emit('node-governance-request-approved', {
+					user: toUserLike(req.user),
+					requestId: id,
+					nodeType: request.nodeType,
+					projectId: request.projectId,
+					requestedById: request.requestedById,
+					reviewComment: payload.comment,
+					policyId,
+				});
+			}
 		} else {
 			request = await this.nodeGovernanceService.rejectRequest(id, req.user, payload.comment);
+
+			if (request) {
+				this.eventService.emit('node-governance-request-rejected', {
+					user: toUserLike(req.user),
+					requestId: id,
+					nodeType: request.nodeType,
+					projectId: request.projectId,
+					requestedById: request.requestedById,
+					reviewComment: payload.comment,
+				});
+			}
 		}
 
 		if (!request) {
