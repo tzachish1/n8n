@@ -31,6 +31,7 @@ import { FailedRunFactory } from '@/executions/failed-run-factory';
 import { SubworkflowPolicyChecker } from '@/executions/pre-execution-checks';
 import type { IWorkflowErrorData } from '@/interfaces';
 import { NodeTypes } from '@/node-types';
+import { OwnershipService } from '@/services/ownership.service';
 import { TestWebhooks } from '@/webhooks/test-webhooks';
 import * as WorkflowExecuteAdditionalData from '@/workflow-execute-additional-data';
 import { WorkflowRunner } from '@/workflow-runner';
@@ -50,6 +51,7 @@ export class WorkflowExecutionService {
 		private readonly subworkflowPolicyChecker: SubworkflowPolicyChecker,
 		private readonly failedRunFactory: FailedRunFactory,
 		private readonly eventService: EventService,
+		private readonly ownershipService: OwnershipService,
 	) {}
 
 	async runWorkflow(
@@ -108,6 +110,9 @@ export class WorkflowExecutionService {
 		// Check whether this workflow is active.
 		const workflowIsActive = await this.workflowRepository.isActive(workflowData.id);
 
+		const ownerProject = await this.ownershipService.getWorkflowProjectCached(workflowData.id);
+		const projectId = ownerProject?.id;
+
 		// For manual testing always set to not active
 		workflowData.active = false;
 		workflowData.activeVersionId = null;
@@ -122,17 +127,18 @@ export class WorkflowExecutionService {
 		// Case 1: Partial execution to a destination node, and we have enough runData to start the execution.
 		if (isPartialExecution(payload)) {
 			if (this.partialExecutionFulfilsPreconditions(workflowData, payload)) {
-				data = {
-					destinationNode: payload.destinationNode,
-					executionMode: 'manual',
-					runData: payload.runData,
-					pinData: workflowData.pinData,
-					pushRef,
-					workflowData,
-					userId: user.id,
-					dirtyNodeNames: payload.dirtyNodeNames,
-					agentRequest: payload.agentRequest,
-				};
+			data = {
+				destinationNode: payload.destinationNode,
+				executionMode: 'manual',
+				runData: payload.runData,
+				pinData: workflowData.pinData,
+				pushRef,
+				workflowData,
+				userId: user.id,
+				projectId,
+				dirtyNodeNames: payload.dirtyNodeNames,
+				agentRequest: payload.agentRequest,
+			};
 			} else {
 				payload = upgradeToFullManualExecutionFromUnknownTrigger(payload);
 			}
@@ -166,6 +172,7 @@ export class WorkflowExecutionService {
 				pushRef,
 				workflowData,
 				userId: user.id,
+				projectId,
 				triggerToStartFrom: payload.triggerToStartFrom,
 				agentRequest: payload.agentRequest,
 				destinationNode: payload.destinationNode,
@@ -203,6 +210,7 @@ export class WorkflowExecutionService {
 				pushRef,
 				workflowData,
 				userId: user.id,
+				projectId,
 				agentRequest: payload.agentRequest,
 				destinationNode: payload.destinationNode,
 				triggerToStartFrom: pinnedTrigger ? { name: pinnedTrigger.name } : undefined,
@@ -262,6 +270,8 @@ export class WorkflowExecutionService {
 		executionMode: WorkflowExecuteMode = 'chat',
 		pushRef?: string,
 	) {
+		const ownerProject = await this.ownershipService.getWorkflowProjectCached(workflowData.id);
+
 		const data: IWorkflowExecutionDataProcess = {
 			userId: user.id,
 			executionMode,
@@ -270,6 +280,7 @@ export class WorkflowExecutionService {
 			streamingEnabled,
 			httpResponse,
 			pushRef,
+			projectId: ownerProject?.id,
 		};
 
 		const executionId = await this.workflowRunner.run(data, undefined, true);
