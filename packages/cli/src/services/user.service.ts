@@ -53,7 +53,6 @@ export class UserService {
 		private readonly globalConfig: GlobalConfig,
 		private readonly jwtService: JwtService,
 		private readonly postHog: PostHogClient,
-		private readonly ownershipService: OwnershipService,
 	) {}
 
 	async update(userId: string, data: Partial<User>) {

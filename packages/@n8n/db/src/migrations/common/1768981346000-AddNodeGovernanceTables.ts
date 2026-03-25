@@ -23,9 +23,9 @@ export class AddNodeGovernanceTables1768981346000 implements ReversibleMigration
 		await createTable('node_governance_policy')
 			.withColumns(
 				column('id').varchar(36).primary.notNull,
-				column('policyType').varchar(10).notNull,
-				column('scope').varchar(10).notNull.default("'global'"),
-				column('targetType').varchar(20).notNull,
+				column('policyType').varchar(10).notNull.withEnumCheck(['allow', 'block']),
+				column('scope').varchar(10).notNull.default("'global'").withEnumCheck(['global', 'projects']),
+				column('targetType').varchar(20).notNull.withEnumCheck(['node', 'category']),
 				column('targetValue').varchar(255).notNull,
 				column('createdById').uuid,
 			)
@@ -34,10 +34,7 @@ export class AddNodeGovernanceTables1768981346000 implements ReversibleMigration
 				columnName: 'id',
 				onDelete: 'SET NULL',
 			})
-			.withIndexOn(['scope', 'targetType', 'targetValue'])
-			.withEnumCheck('policyType', ['allow', 'block'])
-			.withEnumCheck('scope', ['global', 'projects'])
-			.withEnumCheck('targetType', ['node', 'category']);
+			.withIndexOn(['scope', 'targetType', 'targetValue']);
 
 		// Create policy_project_assignment junction table (depends on node_governance_policy, project)
 		await createTable('policy_project_assignment')
@@ -89,7 +86,7 @@ export class AddNodeGovernanceTables1768981346000 implements ReversibleMigration
 				column('nodeType').varchar(255).notNull,
 				column('justification').text.notNull,
 				column('workflowName').varchar(255),
-				column('status').varchar(10).notNull.default("'pending'"),
+				column('status').varchar(10).notNull.default("'pending'").withEnumCheck(['pending', 'approved', 'rejected']),
 				column('reviewedById').uuid,
 				column('reviewComment').text,
 				column('reviewedAt').timestampTimezone(),
@@ -110,8 +107,7 @@ export class AddNodeGovernanceTables1768981346000 implements ReversibleMigration
 				onDelete: 'SET NULL',
 			})
 			.withIndexOn(['projectId', 'status'])
-			.withIndexOn(['requestedById', 'status'])
-			.withEnumCheck('status', ['pending', 'approved', 'rejected']);
+			.withIndexOn(['requestedById', 'status']);
 	}
 
 	async down({ schemaBuilder: { dropTable } }: MigrationContext) {
