@@ -217,3 +217,20 @@ export {
 
 export { VersionSinceDateQueryDto } from './instance-version-history/version-since-date-query.dto';
 export { VersionQueryDto } from './instance-version-history/version-query.dto';
+
+// Node Governance
+export {
+	CreatePolicyDto,
+	UpdatePolicyDto,
+	CreateCategoryDto,
+	UpdateCategoryDto,
+	CategoryAssignmentDto,
+	BulkCategoryAssignmentDto,
+	CreateAccessRequestDto,
+	ReviewAccessRequestDto,
+	GetNodeGovernanceQueryDto,
+	GetNodeGovernanceBodyDto,
+	ImportCategoriesDto,
+	UpdateGovernanceSettingsDto,
+	UpdateProjectGovernanceSettingsDto,
+} from './node-governance';
