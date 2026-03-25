@@ -53,6 +53,7 @@ export class UserService {
 		private readonly globalConfig: GlobalConfig,
 		private readonly jwtService: JwtService,
 		private readonly postHog: PostHogClient,
+		private readonly ownershipService: OwnershipService,
 	) {}
 
 	async update(userId: string, data: Partial<User>) {
@@ -430,7 +431,6 @@ export class UserService {
 			}
 		});
 
-		// Invalidate ownership cache for the user to ensure their new permissions are reflected in subsequent requests
 		await this.ownershipService.invalidateProjectOwnerCacheByUserId(user.id);
 	}
 

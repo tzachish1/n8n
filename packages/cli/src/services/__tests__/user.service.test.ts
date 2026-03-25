@@ -26,6 +26,7 @@ import type { PublicApiKeyService } from '../public-api-key.service';
 import type { RoleService } from '../role.service';
 import { JwtService } from '../jwt.service';
 import { PostHogClient } from '@/posthog';
+import type { OwnershipService } from '../ownership.service';
 
 describe('UserService', () => {
 	const globalConfig = mockInstance(GlobalConfig, {
@@ -54,6 +55,7 @@ describe('UserService', () => {
 	const postHog = mockInstance(PostHogClient, {
 		getFeatureFlags: jest.fn().mockResolvedValue({}),
 	});
+	const ownershipService = mock<OwnershipService>();
 	const userService = new UserService(
 		mock(),
 		userRepository,
@@ -67,6 +69,7 @@ describe('UserService', () => {
 		globalConfig,
 		jwtService,
 		postHog,
+		ownershipService,
 	);
 
 	const commonMockUser = Object.assign(new User(), {
