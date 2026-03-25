@@ -17,7 +17,11 @@ RUN apk add --no-cache python3 make g++ && \
     cd node_modules/isolated-vm && \
     npx --yes node-gyp rebuild --release -j max
 
-FROM n8nio/base:${NODE_VERSION}
+# Flatten base image into a single layer to ensure uniform manifest format
+# across registries (avoids OCI/Docker v2 layer mismatch with Nexus)
+FROM n8nio/base:${NODE_VERSION} AS base
+FROM scratch
+COPY --from=base / /
 
 ARG N8N_VERSION
 ARG N8N_RELEASE_TYPE=dev
@@ -27,11 +31,13 @@ ENV SHELL=/bin/sh
 
 WORKDIR /home/node
 
-COPY --from=builder /usr/local/lib/node_modules/n8n /usr/local/lib/node_modules/n8n
+# DHI alpine 3.23 base (flattened via scratch above) installs under /usr/lib, not /usr/local.
+COPY --from=builder /usr/local/lib/node_modules/n8n /usr/lib/node_modules/n8n
 COPY docker/images/n8n/docker-entrypoint.sh /
 
-RUN ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
-    mkdir -p /home/node/.n8n && \
+RUN ln -s /usr/lib/node_modules/n8n/bin/n8n /usr/bin/n8n && \
+    mkdir -p /usr/local/bin /home/node/.n8n && \
+    ln -s /usr/bin/n8n /usr/local/bin/n8n && \
     chown -R node:node /home/node && \
     rm -rf /root/.npm /tmp/*
 
