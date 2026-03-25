@@ -15,8 +15,10 @@ import { useUIStore } from '@/app/stores/ui.store';
 import { DRAG_EVENT_DATA_KEY } from '@/app/constants';
 import { useChatPanelStore } from '@/features/ai/assistant/chatPanel.store';
 import { useSettingsStore } from '@/app/stores/settings.store';
-import type { NodeTypeSelectedPayload } from '@/Interface';
+import type { NodeTypeSelectedPayload, SimplifiedNodeType } from '@/Interface';
 import { onClickOutside } from '@vueuse/core';
+import { useNodeGovernanceStore } from '@/features/settings/nodeGovernance/nodeGovernance.store';
+import { useProjectsStore } from '@/features/collaboration/projects/projects.store';
 
 import { N8nIconButton } from '@n8n/design-system';
 // elements that should not trigger onClickOutside
@@ -44,6 +46,8 @@ const settingsStore = useSettingsStore();
 
 const { setActions, setMergeNodes } = useNodeCreatorStore();
 const { generateMergedNodesAndActions } = useActionsGenerator();
+const nodeGovernanceStore = useNodeGovernanceStore();
+const projectsStore = useProjectsStore();
 
 const state = reactive({
 	nodeCreator: null as HTMLElement | null,
@@ -115,9 +119,17 @@ function onDrop(event: DragEvent) {
 
 watch(
 	() => props.active,
-	(isActive) => {
+	async (isActive) => {
 		if (!isActive) {
 			resetViewStacks();
+		} else {
+			// Fetch governance data when node creator opens
+			const projectId = projectsStore.currentProjectId ?? projectsStore.personalProject?.id ?? null;
+			if (projectId) {
+				// Clear previous status and fetch fresh governance data
+				nodeGovernanceStore.clearGovernanceData();
+				await nodeGovernanceStore.fetchGovernanceData(projectId);
+			}
 		}
 	},
 );
@@ -134,16 +146,39 @@ registerKeyHook('NodeCreatorCloseEscape', {
 	handler: () => emit('closeNodeCreator'),
 });
 
+// Helper to augment nodes with governance status using local resolution
+function augmentNodesWithGovernance(nodes: SimplifiedNodeType[]): SimplifiedNodeType[] {
+	return nodes.map((node) => {
+		// Use local resolution which handles caching internally
+		const governanceStatus = nodeGovernanceStore.resolveGovernanceForNode(node.name);
+		return {
+			...node,
+			governance: governanceStatus,
+		};
+	});
+}
+
 watch(
 	() => ({
 		httpOnlyCredentials: useCredentialsStore().httpOnlyCredentialTypes,
 		nodeTypes: useNodeTypesStore().visibleNodeTypes,
+		governanceDataLoaded: nodeGovernanceStore.governanceDataLoaded,
 	}),
-	({ nodeTypes, httpOnlyCredentials }) => {
+	async ({ nodeTypes, httpOnlyCredentials }) => {
 		const { actions, mergedNodes } = generateMergedNodesAndActions(nodeTypes, httpOnlyCredentials);
 
+		// Fetch governance data if not already loaded
+		// Use currentProjectId or fallback to personal project
+		const projectId = projectsStore.currentProjectId ?? projectsStore.personalProject?.id ?? null;
+		if (projectId && !nodeGovernanceStore.governanceDataLoaded) {
+			await nodeGovernanceStore.fetchGovernanceData(projectId);
+		}
+
+		// Augment nodes with governance status using local resolution
+		const nodesWithGovernance = augmentNodesWithGovernance(mergedNodes);
+
 		setActions(actions);
-		setMergeNodes(mergedNodes);
+		setMergeNodes(nodesWithGovernance);
 	},
 	{ immediate: true },
 );

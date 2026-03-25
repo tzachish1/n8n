@@ -1,0 +1,714 @@
+===== Docker Build for n8n & Runners =====
+INFO: n8n Image: n8nio/n8n:local-2.10.4
+INFO: Runners Image: n8nio/runners:local-2.10.4
+INFO: Platform: linux/amd64
+-----------------------------------------------
+(node:52301) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+INFO: Building n8n Docker image using docker...
+INFO: Forwarding proxy settings into build
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 988B 0.0s done
+#1 DONE 0.1s
+
+#2 [internal] load metadata for docker.io/n8nio/base:24.13.1
+#2 ...
+
+#3 [auth] n8nio/base:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/n8nio/base:24.13.1
+#2 DONE 2.5s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 1.05kB done
+#4 DONE 0.0s
+
+#5 [1/5] FROM docker.io/n8nio/base:24.13.1@sha256:cb1d285bb0cb651b2024f0efc8b1cd8705a56744980ab47b2c7866118ed77ee3
+#5 resolve docker.io/n8nio/base:24.13.1@sha256:cb1d285bb0cb651b2024f0efc8b1cd8705a56744980ab47b2c7866118ed77ee3 done
+#5 DONE 0.1s
+
+#6 [internal] load build context
+#6 transferring context: 7.63MB 5.0s
+#6 ...
+
+#5 [1/5] FROM docker.io/n8nio/base:24.13.1@sha256:cb1d285bb0cb651b2024f0efc8b1cd8705a56744980ab47b2c7866118ed77ee3
+#5 sha256:bc619b6a0ef88b11e237ac2d9bbfa611edaf46835c73427d979e829fe28eca8b 20.30MB / 20.30MB 4.9s done
+#5 sha256:81d49b7a1dbbd8d1f00e0d57179b6c8a7a4d369ed32443fef2e01c3f3e6052f0 6.08kB / 6.08kB 0.8s done
+#5 sha256:ea2debf3e1acb14483f60559fcce6815c379fde9ef24d2b71ee4da2ad75773f6 77B / 77B 0.8s done
+#5 sha256:d1520cba0de0cbb68322179eae231685198beddaeca9b37fc68f2f9c0f374130 18.87MB / 42.11MB 7.6s
+#5 sha256:59ef0fb7d7f58d27a2822b6ee56dad470f536816489bb53699a6dd5616786065 376B / 376B 0.3s done
+#5 sha256:22b37da5853a24b299827489e955a93c66cb1554ed5c7bde43f43bef67882ee7 1.88kB / 1.88kB 0.3s done
+#5 extracting sha256:22b37da5853a24b299827489e955a93c66cb1554ed5c7bde43f43bef67882ee7 0.0s done
+#5 sha256:cb0e99e1c6279c9f179f7976d024fda1c3b849fa46ff76e13847c80c817eb348 9.54MB / 9.54MB 4.9s done
+#5 extracting sha256:cb0e99e1c6279c9f179f7976d024fda1c3b849fa46ff76e13847c80c817eb348 0.2s done
+#5 extracting sha256:59ef0fb7d7f58d27a2822b6ee56dad470f536816489bb53699a6dd5616786065 0.0s done
+#5 ...
+
+#6 [internal] load build context
+#6 transferring context: 17.96MB 10.1s
+#6 ...
+
+#5 [1/5] FROM docker.io/n8nio/base:24.13.1@sha256:cb1d285bb0cb651b2024f0efc8b1cd8705a56744980ab47b2c7866118ed77ee3
+#5 sha256:d1520cba0de0cbb68322179eae231685198beddaeca9b37fc68f2f9c0f374130 42.11MB / 42.11MB 11.1s done
+#5 extracting sha256:d1520cba0de0cbb68322179eae231685198beddaeca9b37fc68f2f9c0f374130 0.9s done
+#5 DONE 12.0s
+
+#6 [internal] load build context
+#6 ...
+
+#5 [1/5] FROM docker.io/n8nio/base:24.13.1@sha256:cb1d285bb0cb651b2024f0efc8b1cd8705a56744980ab47b2c7866118ed77ee3
+#5 extracting sha256:ea2debf3e1acb14483f60559fcce6815c379fde9ef24d2b71ee4da2ad75773f6 done
+#5 extracting sha256:81d49b7a1dbbd8d1f00e0d57179b6c8a7a4d369ed32443fef2e01c3f3e6052f0 done
+#5 extracting sha256:bc619b6a0ef88b11e237ac2d9bbfa611edaf46835c73427d979e829fe28eca8b 0.6s done
+#5 extracting sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 0.0s done
+#5 DONE 12.7s
+
+#6 [internal] load build context
+#6 ...
+
+#7 [2/5] WORKDIR /home/node
+#7 DONE 0.7s
+
+#6 [internal] load build context
+#6 transferring context: 26.73MB 15.1s
+#6 transferring context: 37.62MB 20.2s
+#6 transferring context: 54.06MB 25.2s
+#6 transferring context: 69.19MB 30.2s
+#6 transferring context: 81.21MB 35.3s
+#6 transferring context: 100.00MB 40.4s
+#6 transferring context: 133.71MB 45.4s
+#6 transferring context: 150.61MB 50.5s
+#6 transferring context: 158.99MB 55.5s
+#6 transferring context: 170.49MB 60.6s
+#6 transferring context: 184.04MB 65.6s
+#6 transferring context: 199.72MB 70.7s
+#6 transferring context: 217.76MB 75.7s
+#6 transferring context: 220.17MB 80.8s
+#6 transferring context: 225.88MB 85.9s
+#6 transferring context: 244.32MB 90.9s
+#6 transferring context: 252.56MB 95.9s
+#6 transferring context: 265.15MB 100.9s
+#6 transferring context: 276.74MB 105.9s
+#6 transferring context: 286.27MB 110.9s
+#6 transferring context: 318.84MB 116.1s
+#6 transferring context: 327.97MB 121.2s
+#6 transferring context: 341.65MB 126.3s
+#6 transferring context: 347.50MB 131.3s
+#6 transferring context: 359.07MB 136.3s
+#6 transferring context: 381.85MB 141.3s
+#6 transferring context: 403.83MB 146.4s
+#6 transferring context: 408.46MB 151.5s
+#6 transferring context: 414.01MB 156.6s
+#6 transferring context: 419.00MB 161.7s
+#6 transferring context: 427.06MB 166.8s
+#6 transferring context: 442.17MB 171.9s
+#6 transferring context: 455.93MB 177.0s
+#6 transferring context: 481.27MB 182.1s
+#6 transferring context: 489.51MB 187.2s
+#6 transferring context: 516.39MB 192.2s
+#6 transferring context: 561.81MB 197.3s
+#6 transferring context: 576.90MB 202.3s
+#6 transferring context: 581.52MB 207.4s
+#6 transferring context: 587.29MB 212.4s
+#6 transferring context: 591.89MB 217.5s
+#6 transferring context: 600.27MB 222.5s
+#6 transferring context: 612.80MB 227.6s
+#6 transferring context: 622.43MB 232.7s
+#6 transferring context: 632.98MB 237.7s
+#6 transferring context: 655.57MB 242.8s
+#6 transferring context: 674.53MB 247.9s
+#6 transferring context: 755.87MB 253.0s
+#6 transferring context: 771.63MB 258.0s
+#6 transferring context: 805.29MB 263.1s
+#6 transferring context: 836.54MB 268.1s
+#6 transferring context: 867.08MB 273.2s
+#6 transferring context: 869.03MB 274.9s done
+#6 DONE 275.8s
+
+#8 [3/5] COPY ./compiled /usr/local/lib/node_modules/n8n
+#8 DONE 20.1s
+
+#9 [4/5] COPY docker/images/n8n/docker-entrypoint.sh /
+#9 DONE 1.6s
+
+#10 [5/5] RUN cd /usr/local/lib/node_modules/n8n &&     npm rebuild sqlite3 &&     ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n &&     mkdir -p /home/node/.n8n &&     chown -R node:node /home/node &&     rm -rf /root/.npm /tmp/*
+#10 17.71 rebuilt dependencies successfully
+#10 DONE 17.9s
+
+#11 exporting to image
+#11 exporting layers
+#11 exporting layers 30.5s done
+#11 exporting manifest sha256:e0b6f7d634e9d007ce5532f13a6faa72e21142ddb8ae7b0d4a91ec89556f100b done
+#11 exporting config sha256:815c3cb1bce19ce2ef0fb13bd191a08450c44284963e3142fc0c88b178f080b3 done
+#11 naming to docker.io/n8nio/n8n:local-2.10.4 done
+#11 DONE 30.5s
+
+INFO: Building runners Docker image using docker...
+INFO: Forwarding proxy settings into build
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 7.03kB done
+#1 DONE 0.0s
+
+#2 [auth] library/alpine:pull token for registry-1.docker.io
+#2 DONE 0.0s
+
+#3 [auth] library/python:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#4 [auth] library/node:pull token for registry-1.docker.io
+#4 DONE 0.0s
+
+#5 [internal] load metadata for docker.io/library/alpine:3.22
+#5 ...
+
+#6 [internal] load metadata for docker.io/library/python:3.13-alpine
+#6 DONE 1.7s
+
+#7 [internal] load metadata for docker.io/library/node:24.13.1-alpine
+#7 DONE 1.7s
+
+#5 [internal] load metadata for docker.io/library/alpine:3.22
+#5 DONE 1.7s
+
+#8 [internal] load .dockerignore
+#8 transferring context: 1.05kB done
+#8 DONE 0.0s
+
+#9 [python-runner-builder 1/9] FROM docker.io/library/python:3.13-alpine@sha256:bb1f2fdb1065c85468775c9d680dcd344f6442a2d1181ef7916b60a623f11d40
+#9 resolve docker.io/library/python:3.13-alpine@sha256:bb1f2fdb1065c85468775c9d680dcd344f6442a2d1181ef7916b60a623f11d40 0.0s done
+#9 DONE 0.1s
+
+#10 [launcher-downloader 1/2] FROM docker.io/library/alpine:3.22@sha256:55ae5d250caebc548793f321534bc6a8ef1d116f334f18f4ada1b2daad3251b2
+#10 resolve docker.io/library/alpine:3.22@sha256:55ae5d250caebc548793f321534bc6a8ef1d116f334f18f4ada1b2daad3251b2 0.0s done
+#10 sha256:d49a2dee86fb12766dd648402d010ca105846a41bd58738454e53780d4bb8e97 0B / 3.80MB 0.2s
+#10 sha256:d49a2dee86fb12766dd648402d010ca105846a41bd58738454e53780d4bb8e97 1.05MB / 3.80MB 0.9s
+#10 sha256:d49a2dee86fb12766dd648402d010ca105846a41bd58738454e53780d4bb8e97 2.10MB / 3.80MB 1.2s
+#10 sha256:d49a2dee86fb12766dd648402d010ca105846a41bd58738454e53780d4bb8e97 3.80MB / 3.80MB 1.4s done
+#10 extracting sha256:d49a2dee86fb12766dd648402d010ca105846a41bd58738454e53780d4bb8e97
+#10 extracting sha256:d49a2dee86fb12766dd648402d010ca105846a41bd58738454e53780d4bb8e97 0.1s done
+#10 DONE 1.5s
+
+#9 [python-runner-builder 1/9] FROM docker.io/library/python:3.13-alpine@sha256:bb1f2fdb1065c85468775c9d680dcd344f6442a2d1181ef7916b60a623f11d40
+#9 sha256:79a000d511eb3d8ba3007557b8d855c0e649b79a652c3f64b20045b5d595498f 248B / 248B 0.4s done
+#9 sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527 3.15MB / 12.51MB 1.5s
+#9 sha256:98914020a3beeda22b5feedb62785c0369da8445f1e38817540570e4351534a2 460.94kB / 460.94kB 1.0s done
+#9 extracting sha256:98914020a3beeda22b5feedb62785c0369da8445f1e38817540570e4351534a2 0.1s done
+#9 sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527 4.19MB / 12.51MB 1.8s
+#9 sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527 5.24MB / 12.51MB 2.0s
+#9 sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527 6.29MB / 12.51MB 2.1s
+#9 sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527 7.34MB / 12.51MB 2.3s
+#9 sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527 8.39MB / 12.51MB 2.6s
+#9 sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527 9.44MB / 12.51MB 3.0s
+#9 sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527 10.49MB / 12.51MB 3.2s
+#9 sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527 11.53MB / 12.51MB 3.5s
+#9 sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527 12.51MB / 12.51MB 3.5s done
+#9 extracting sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527
+#9 extracting sha256:be2fee0bf4ecbf895cbe636c5c9a13b8b63ac8dc00db76105cfa5e2a4bcaf527 0.3s done
+#9 extracting sha256:79a000d511eb3d8ba3007557b8d855c0e649b79a652c3f64b20045b5d595498f done
+#9 DONE 3.9s
+
+#11 [javascript-runner-builder 1/6] FROM docker.io/library/node:24.13.1-alpine@sha256:4f696fbf39f383c1e486030ba6b289a5d9af541642fc78ab197e584a113b9c03
+#11 resolve docker.io/library/node:24.13.1-alpine@sha256:4f696fbf39f383c1e486030ba6b289a5d9af541642fc78ab197e584a113b9c03 0.0s done
+#11 sha256:cf98c2603c481adea278ab1e707481132385274464b434be7dc87f3ca249c74b 445B / 445B 0.4s done
+#11 sha256:2906ccb85a84d0354480fdd85480d69a98940935ea465513deb8afb42a396923 1.26MB / 1.26MB 0.9s done
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 1.05MB / 51.06MB 2.7s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 4.19MB / 51.06MB 3.5s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 7.34MB / 51.06MB 4.1s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 10.49MB / 51.06MB 4.7s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 13.63MB / 51.06MB 5.1s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 16.78MB / 51.06MB 5.9s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 19.92MB / 51.06MB 6.5s
+#11 ...
+
+#12 [internal] load build context
+#12 transferring context: 15.06MB 8.2s
+#12 ...
+
+#11 [javascript-runner-builder 1/6] FROM docker.io/library/node:24.13.1-alpine@sha256:4f696fbf39f383c1e486030ba6b289a5d9af541642fc78ab197e584a113b9c03
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 23.07MB / 51.06MB 7.4s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 26.21MB / 51.06MB 7.8s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 29.36MB / 51.06MB 8.4s
+#11 ...
+
+#13 [launcher-downloader 2/2] RUN apk add --no-cache curl &&     set -e;     case "linux/amd64" in         "linux/amd64") ARCH_NAME="amd64" ;;         "linux/arm64") ARCH_NAME="arm64" ;;         *) echo "Unsupported platform: linux/amd64" && exit 1 ;;     esac;     mkdir /launcher-temp && cd /launcher-temp;     curl -fsSL -o "task-runner-launcher-1.4.3-linux-${ARCH_NAME}.tar.gz" "https://github.com/n8n-io/task-runner-launcher/releases/download/1.4.3/task-runner-launcher-1.4.3-linux-${ARCH_NAME}.tar.gz";     curl -fsSL -o "task-runner-launcher-1.4.3-linux-${ARCH_NAME}.tar.gz.sha256" "https://github.com/n8n-io/task-runner-launcher/releases/download/1.4.3/task-runner-launcher-1.4.3-linux-${ARCH_NAME}.tar.gz.sha256";     echo "$(cat task-runner-launcher-1.4.3-linux-${ARCH_NAME}.tar.gz.sha256) task-runner-launcher-1.4.3-linux-${ARCH_NAME}.tar.gz" > checksum.sha256;     sha256sum -c checksum.sha256;     mkdir -p /launcher-bin;     tar xzf task-runner-launcher-1.4.3-linux-${ARCH_NAME}.tar.gz -C /launcher-bin;     cd / && rm -rf /launcher-temp
+#13 0.308 fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/APKINDEX.tar.gz
+#13 0.936 fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/community/x86_64/APKINDEX.tar.gz
+#13 2.053 (1/9) Installing brotli-libs (1.1.0-r2)
+#13 2.215 (2/9) Installing c-ares (1.34.6-r0)
+#13 2.312 (3/9) Installing libunistring (1.3-r0)
+#13 2.543 (4/9) Installing libidn2 (2.3.7-r0)
+#13 2.614 (5/9) Installing nghttp2-libs (1.65.0-r0)
+#13 2.684 (6/9) Installing libpsl (0.21.5-r3)
+#13 2.749 (7/9) Installing zstd-libs (1.5.7-r0)
+#13 3.095 (8/9) Installing libcurl (8.14.1-r2)
+#13 3.411 (9/9) Installing curl (8.14.1-r2)
+#13 3.496 Executing busybox-1.37.0-r20.trigger
+#13 3.521 OK: 12 MiB in 25 packages
+#13 8.064 task-runner-launcher-1.4.3-linux-amd64.tar.gz: OK
+#13 DONE 8.5s
+
+#11 [javascript-runner-builder 1/6] FROM docker.io/library/node:24.13.1-alpine@sha256:4f696fbf39f383c1e486030ba6b289a5d9af541642fc78ab197e584a113b9c03
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 32.51MB / 51.06MB 8.9s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 35.65MB / 51.06MB 9.3s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 38.80MB / 51.06MB 9.8s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 41.94MB / 51.06MB 10.2s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 45.09MB / 51.06MB 11.3s
+#11 ...
+
+#14 [python-runner-builder 2/9] RUN apk add --no-cache curl &&   set -e;   case "linux/amd64" in     "linux/amd64") UV_ARCH="x86_64-unknown-linux-musl" ;;     "linux/arm64") UV_ARCH="aarch64-unknown-linux-musl" ;;     *) echo "Unsupported platform: linux/amd64" >&2; exit 1 ;;   esac;   mkdir -p /tmp/uv && cd /tmp/uv;   curl -fsSL -o "uv-${UV_ARCH}.tar.gz" "https://github.com/astral-sh/uv/releases/download/0.8.14/uv-${UV_ARCH}.tar.gz";   curl -fsSL -o "uv-${UV_ARCH}.tar.gz.sha256" "https://github.com/astral-sh/uv/releases/download/0.8.14/uv-${UV_ARCH}.tar.gz.sha256";   sha256sum -c "uv-${UV_ARCH}.tar.gz.sha256"; 	tar -xzf "uv-${UV_ARCH}.tar.gz";   install -m 0755 "uv-${UV_ARCH}/uv" /usr/local/bin/uv;   cd / && rm -rf /tmp/uv
+#14 1.847 ( 1/10) Installing brotli-libs (1.2.0-r0)
+#14 2.297 ( 2/10) Installing c-ares (1.34.6-r0)
+#14 2.397 ( 3/10) Installing libunistring (1.4.1-r0)
+#14 2.621 ( 4/10) Installing libidn2 (2.3.8-r0)
+#14 2.698 ( 5/10) Installing nghttp2-libs (1.68.0-r0)
+#14 2.766 ( 6/10) Installing nghttp3 (1.13.1-r0)
+#14 2.832 ( 7/10) Installing libpsl (0.21.5-r3)
+#14 2.901 ( 8/10) Installing zstd-libs (1.5.7-r2)
+#14 3.561 ( 9/10) Installing libcurl (8.17.0-r1)
+#14 4.977 (10/10) Installing curl (8.17.0-r1)
+#14 5.137 Executing busybox-1.37.0-r30.trigger
+#14 5.167 OK: 16.6 MiB in 39 packages
+#14 ...
+
+#11 [javascript-runner-builder 1/6] FROM docker.io/library/node:24.13.1-alpine@sha256:4f696fbf39f383c1e486030ba6b289a5d9af541642fc78ab197e584a113b9c03
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 48.23MB / 51.06MB 13.5s
+#11 sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 51.06MB / 51.06MB 14.2s done
+#11 extracting sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355
+#11 extracting sha256:8ba8341791ce72c3cdec81ab7f3abf29803e34a45ed9a8389accf9dbc4fa8355 0.8s done
+#11 extracting sha256:2906ccb85a84d0354480fdd85480d69a98940935ea465513deb8afb42a396923 0.0s done
+#11 extracting sha256:cf98c2603c481adea278ab1e707481132385274464b434be7dc87f3ca249c74b done
+#11 DONE 16.2s
+
+#12 [internal] load build context
+#12 transferring context: 29.91MB 16.3s
+#12 ...
+
+#14 [python-runner-builder 2/9] RUN apk add --no-cache curl &&   set -e;   case "linux/amd64" in     "linux/amd64") UV_ARCH="x86_64-unknown-linux-musl" ;;     "linux/arm64") UV_ARCH="aarch64-unknown-linux-musl" ;;     *) echo "Unsupported platform: linux/amd64" >&2; exit 1 ;;   esac;   mkdir -p /tmp/uv && cd /tmp/uv;   curl -fsSL -o "uv-${UV_ARCH}.tar.gz" "https://github.com/astral-sh/uv/releases/download/0.8.14/uv-${UV_ARCH}.tar.gz";   curl -fsSL -o "uv-${UV_ARCH}.tar.gz.sha256" "https://github.com/astral-sh/uv/releases/download/0.8.14/uv-${UV_ARCH}.tar.gz.sha256";   sha256sum -c "uv-${UV_ARCH}.tar.gz.sha256"; 	tar -xzf "uv-${UV_ARCH}.tar.gz";   install -m 0755 "uv-${UV_ARCH}/uv" /usr/local/bin/uv;   cd / && rm -rf /tmp/uv
+#14 12.52 uv-x86_64-unknown-linux-musl.tar.gz: OK
+#14 DONE 13.2s
+
+#15 [python-runner-builder 3/9] WORKDIR /app/task-runner-python
+#15 DONE 0.0s
+
+#12 [internal] load build context
+#12 transferring context: 51.33MB 21.3s
+#12 transferring context: 64.70MB 26.4s
+#12 transferring context: 79.78MB 31.4s
+#12 transferring context: 104.23MB 36.5s
+#12 transferring context: 119.97MB 41.5s
+#12 transferring context: 121.10MB 42.3s done
+#12 DONE 42.4s
+
+#16 [javascript-runner-builder 2/6] COPY ./dist/task-runner-javascript /app/task-runner-javascript
+#16 ...
+
+#17 [python-runner-builder 4/9] COPY packages/@n8n/task-runner-python/pyproject.toml      packages/@n8n/task-runner-python/uv.lock**      packages/@n8n/task-runner-python/.python-version**      ./
+#17 DONE 0.2s
+
+#18 [python-runner-builder 5/9] RUN uv venv
+#18 1.003 Using CPython 3.13.12 interpreter at: /usr/local/bin/python3.13
+#18 1.005 Creating virtual environment at: .venv
+#18 DONE 1.1s
+
+#16 [javascript-runner-builder 2/6] COPY ./dist/task-runner-javascript /app/task-runner-javascript
+#16 DONE 3.2s
+
+#19 [javascript-runner-builder 3/6] WORKDIR /app/task-runner-javascript
+#19 DONE 0.2s
+
+#20 [python-runner-builder 6/9] RUN uv sync 			--frozen 			--no-editable 			--no-install-project 			--no-dev 			--all-extras
+#20 1.816 Prepared 4 packages in 857ms
+#20 1.931 Installed 4 packages in 112ms
+#20 1.934  + certifi==2025.8.3
+#20 1.934  + sentry-sdk==2.35.2
+#20 1.934  + urllib3==2.6.3
+#20 1.934  + websockets==15.0.1
+#20 DONE 2.0s
+
+#21 [python-runner-builder 7/9] COPY packages/@n8n/task-runner-python/ ./
+#21 DONE 0.1s
+
+#22 [python-runner-builder 8/9] RUN uv sync       --frozen 			--no-dev 			--all-extras       --no-editable
+#22 0.460    Building task-runner-python @ file:///app/task-runner-python
+#22 ...
+
+#23 [javascript-runner-builder 4/6] RUN corepack enable pnpm
+#23 DONE 0.9s
+
+#24 [javascript-runner-builder 5/6] RUN node -e "const pkg = require('./package.json');     Object.keys(pkg.dependencies || {}).forEach(k => {         const val = pkg.dependencies[k];         if (val === 'catalog:' || val.startsWith('catalog:') || val.startsWith('workspace:'))             delete pkg.dependencies[k];     });     Object.keys(pkg.devDependencies || {}).forEach(k => {         const val = pkg.devDependencies[k];         if (val === 'catalog:' || val.startsWith('catalog:') || val.startsWith('workspace:'))             delete pkg.devDependencies[k];     });     delete pkg.devDependencies;     require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));"
+#24 DONE 0.5s
+
+#22 [python-runner-builder 8/9] RUN uv sync       --frozen 			--no-dev 			--all-extras       --no-editable
+#22 4.081       Built task-runner-python @ file:///app/task-runner-python
+#22 4.095 Prepared 1 package in 3.64s
+#22 4.104 Installed 1 package in 8ms
+#22 4.105  + task-runner-python==0.1.0 (from file:///app/task-runner-python)
+#22 DONE 4.1s
+
+#25 [python-runner-builder 9/9] RUN uv pip install . && rm -rf /app/task-runner-python/src
+#25 1.387 Resolved 2 packages in 556ms
+#25 1.401    Building task-runner-python @ file:///app/task-runner-python
+#25 ...
+
+#26 [javascript-runner-builder 6/6] RUN rm -f node_modules/.modules.yaml &&     pnpm add moment@2.30.1 --prod --no-lockfile
+#26 1.626 ! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-10.32.1.tgz
+#26 5.383 Progress: resolved 1, reused 0, downloaded 0, added 0
+#26 5.462 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/ai-utilities@file:packages/@n8n/ai-utilities(934f1a48ec094b4e92b8f47134941442) in lockfile
+#26 5.463 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/classic@1.0.5(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(cheerio@1.0.0)(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)) in lockfile
+#26 5.463 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/community@1.1.14(f0dc06dfd1a8e63feaf3ec606fe4aa8b) in lockfile
+#26 5.463 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)) in lockfile
+#26 5.463 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/openai@1.1.3(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)) in lockfile
+#26 5.463 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/textsplitters@1.0.1(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))) in lockfile
+#26 5.464 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/typescript-config@file:packages/@n8n/typescript-config in lockfile
+#26 5.464 node_modules/.pnpm                       |  WARN  Cannot find resolution of langchain@1.2.3(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))(zod-to-json-schema@3.23.3(zod@3.25.67)) in lockfile
+#26 5.464 node_modules/.pnpm                       |  WARN  Cannot find resolution of tmp-promise@3.0.3 in lockfile
+#26 5.465 node_modules/.pnpm                       |  WARN  Cannot find resolution of undici@6.23.0 in lockfile
+#26 5.465 node_modules/.pnpm                       |  WARN  Cannot find resolution of zod-to-json-schema@3.23.3(zod@3.25.67) in lockfile
+#26 5.466 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/anthropic@1.1.3(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(zod@3.25.67) in lockfile
+#26 5.466 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/langgraph@1.0.2(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(react-dom@18.2.0(react@18.2.0))(react@18.2.0)(zod-to-json-schema@3.25.1(zod@3.25.67))(zod@3.25.67) in lockfile
+#26 5.466 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/api-types@file:packages/@n8n/api-types in lockfile
+#26 5.466 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/utils@file:packages/@n8n/utils in lockfile
+#26 5.466 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n_io/ai-assistant-sdk@1.20.0 in lockfile
+#26 5.466 node_modules/.pnpm                       |  WARN  Cannot find resolution of csv-parse@5.5.0 in lockfile
+#26 5.466 node_modules/.pnpm                       |  WARN  Cannot find resolution of langchain@1.2.3(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))(react-dom@18.2.0(react@18.2.0))(react@18.2.0)(zod-to-json-schema@3.25.1(zod@3.25.67)) in lockfile
+#26 5.467 node_modules/.pnpm                       |  WARN  Cannot find resolution of langsmith@0.4.12(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)) in lockfile
+#26 5.467 node_modules/.pnpm                       |  WARN  Cannot find resolution of xss@1.0.15 in lockfile
+#26 5.467 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/db@file:packages/@n8n/db(@sentry/node@10.36.0)(mysql2@3.17.0)(pg@8.17.0)(sqlite3@5.1.7) in lockfile
+#26 5.467 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/typeorm@0.3.20-16(@sentry/node@10.36.0)(mysql2@3.17.0)(pg@8.17.0)(sqlite3@5.1.7) in lockfile
+#26 5.467 node_modules/.pnpm                       |  WARN  Cannot find resolution of jest-mock-extended@3.0.4(jest@29.7.0(@types/node@20.19.21)(ts-node@10.9.2(@swc/core@1.15.8(@swc/helpers@0.5.17))(@types/node@20.19.21)(typescript@5.9.2)))(typescript@5.9.2) in lockfile
+#26 5.467 node_modules/.pnpm                       |  WARN  Cannot find resolution of @oclif/core@4.0.7 in lockfile
+#26 5.467 node_modules/.pnpm                       |  WARN  Cannot find resolution of dotenv@17.2.3 in lockfile
+#26 5.467 node_modules/.pnpm                       |  WARN  Cannot find resolution of zx@8.8.5 in lockfile
+#26 5.467 node_modules/.pnpm                       |  WARN  Cannot find resolution of @codemirror/language@6.12.1 in lockfile
+#26 5.467 node_modules/.pnpm                       |  WARN  Cannot find resolution of @lezer/highlight@1.2.3 in lockfile
+#26 5.467 node_modules/.pnpm                       |  WARN  Cannot find resolution of @lezer/lr@1.4.5 in lockfile
+#26 5.468 node_modules/.pnpm                       |  WARN  Cannot find resolution of @codemirror/autocomplete@6.20.0 in lockfile
+#26 5.468 node_modules/.pnpm                       |  WARN  Cannot find resolution of @codemirror/lang-css@6.3.1 in lockfile
+#26 5.469 node_modules/.pnpm                       |  WARN  Cannot find resolution of @codemirror/lang-javascript@6.2.4 in lockfile
+#26 5.469 node_modules/.pnpm                       |  WARN  Cannot find resolution of @codemirror/state@6.5.3 in lockfile
+#26 5.469 node_modules/.pnpm                       |  WARN  Cannot find resolution of @codemirror/view@6.39.8 in lockfile
+#26 5.470 node_modules/.pnpm                       |  WARN  Cannot find resolution of @lezer/common@1.2.1 in lockfile
+#26 5.470 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/codemirror-lang@file:packages/@n8n/codemirror-lang(@codemirror/language@6.12.1)(@lezer/highlight@1.2.3)(@lezer/lr@1.4.5) in lockfile
+#26 5.470 node_modules/.pnpm                       |  WARN  Cannot find resolution of y-protocols@1.0.7(yjs@13.6.29) in lockfile
+#26 5.470 node_modules/.pnpm                       |  WARN  Cannot find resolution of yjs@13.6.29 in lockfile
+#26 5.470 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/node-cli@file:packages/@n8n/node-cli(50be24ce13d75489fdf7db1b1bfd182a) in lockfile
+#26 5.470 node_modules/.pnpm                       |  WARN  Cannot find resolution of class-validator@0.14.0 in lockfile
+#26 5.470 node_modules/.pnpm                       |  WARN  Cannot find resolution of n8n-core@file:packages/core in lockfile
+#26 5.470 node_modules/.pnpm                       |  WARN  Cannot find resolution of p-lazy@3.1.0 in lockfile
+#26 5.471 node_modules/.pnpm                       |  WARN  Cannot find resolution of eslint@9.29.0(jiti@2.6.1) in lockfile
+#26 5.471 node_modules/.pnpm                       |  WARN  Cannot find resolution of @typescript-eslint/utils@8.35.0(eslint@9.29.0(jiti@2.6.1))(typescript@5.9.2) in lockfile
+#26 5.471 node_modules/.pnpm                       |  WARN  Cannot find resolution of fastest-levenshtein@1.0.16 in lockfile
+#26 5.471 node_modules/.pnpm                       |  WARN  Cannot find resolution of imap@0.8.19 in lockfile
+#26 5.471 node_modules/.pnpm                       |  WARN  Cannot find resolution of quoted-printable@1.0.1 in lockfile
+#26 5.472 node_modules/.pnpm                       |  WARN  Cannot find resolution of utf8@3.0.0 in lockfile
+#26 5.472 node_modules/.pnpm                       |  WARN  Cannot find resolution of uuencode@0.0.4 in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of @clack/prompts@0.11.0 in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/ai-node-sdk@file:packages/@n8n/ai-node-sdk(fb5f499bb4d61ba74d3bcae59a71bb58) in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/eslint-plugin-community-nodes@file:packages/@n8n/eslint-plugin-community-nodes(eslint@9.29.0(jiti@2.6.1))(typescript@5.9.2) in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of @oclif/core@4.5.2 in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of change-case@5.4.4 in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of eslint-import-resolver-typescript@4.4.3(eslint-plugin-import-x@4.15.2(@typescript-eslint/utils@8.35.0(eslint@9.29.0(jiti@2.6.1))(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint@9.29.0(jiti@2.6.1)))(eslint-plugin-import@2.32.0)(eslint@9.29.0(jiti@2.6.1)) in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of eslint-plugin-import-x@4.15.2(@typescript-eslint/utils@8.35.0(eslint@9.29.0(jiti@2.6.1))(typescript@5.9.2))(eslint-import-resolver-node@0.3.9)(eslint@9.29.0(jiti@2.6.1)) in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of eslint-plugin-n8n-nodes-base@1.16.5(eslint@9.29.0(jiti@2.6.1))(typescript@5.9.2) in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of handlebars@4.7.8 in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of prettier@3.6.2 in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of prompts@2.4.2 in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of rimraf@6.0.1 in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of ts-morph@27.0.2 in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of typescript-eslint@8.35.0(eslint@9.29.0(jiti@2.6.1))(typescript@5.9.2) in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of @aws-sdk/client-sso-oidc@3.808.0 in lockfile
+#26 5.473 node_modules/.pnpm                       |  WARN  Cannot find resolution of @azure/identity@4.13.0 in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @azure/search-documents@12.1.0 in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @getzep/zep-cloud@1.0.6(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(encoding@0.1.13)(langchain@1.2.3(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))(react-dom@18.2.0(react@18.2.0))(react@18.2.0)(zod-to-json-schema@3.23.3(zod@3.25.67))) in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @getzep/zep-js@0.9.0 in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @google-cloud/resource-manager@5.3.0(encoding@0.1.13) in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @google/genai@1.19.0(@modelcontextprotocol/sdk@1.26.0(zod@3.25.67))(bufferutil@4.0.9)(utf-8-validate@5.0.10) in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @google/generative-ai@0.24.0 in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @huggingface/inference@4.0.5 in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/anthropic@1.1.3(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(zod@3.25.67) in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/aws@1.0.3(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))) in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/classic@1.0.5(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(cheerio@1.0.0)(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)) in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/cohere@1.0.1(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(encoding@0.1.13) in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/community@1.1.14(fac25ca4352e653628d80481ddebc68b) in lockfile
+#26 5.474 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/google-genai@2.1.10(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/google-vertexai@2.1.10(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/groq@1.0.2(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(encoding@0.1.13) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/mistralai@1.0.1(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/mongodb@1.0.1(@aws-sdk/credential-providers@3.808.0)(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(gcp-metadata@5.3.0)(socks@2.8.3) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/ollama@1.0.2(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/openai@1.1.3(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10)) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/pinecone@1.0.1(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(@pinecone-database/pinecone@5.1.2) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/qdrant@1.0.1(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(typescript@5.9.2) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/redis@1.0.1(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/textsplitters@1.0.1(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @langchain/weaviate@1.0.1(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(encoding@0.1.13) in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @microsoft/agents-a365-notifications@0.1.0-preview.64 in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @microsoft/agents-a365-observability@0.1.0-preview.64 in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @microsoft/agents-a365-runtime@0.1.0-preview.64 in lockfile
+#26 5.475 node_modules/.pnpm                       |  WARN  Cannot find resolution of @microsoft/agents-a365-tooling@0.1.0-preview.64(zod@3.25.67) in lockfile
+#26 5.476 node_modules/.pnpm                       |  WARN  Cannot find resolution of @microsoft/agents-a365-tooling-extensions-langchain@0.1.0-preview.64(20a6a3036fb3eae368730af7ed3b8ad2) in lockfile
+#26 5.476 node_modules/.pnpm                       |  WARN  Cannot find resolution of @microsoft/agents-activity@1.2.3 in lockfile
+#26 5.476 node_modules/.pnpm                       |  WARN  Cannot find resolution of @microsoft/agents-hosting@1.2.3 in lockfile
+#26 5.476 node_modules/.pnpm                       |  WARN  Cannot find resolution of @modelcontextprotocol/sdk@1.26.0(zod@3.25.67) in lockfile
+#26 5.476 node_modules/.pnpm                       |  WARN  Cannot find resolution of @mozilla/readability@0.6.0 in lockfile
+#26 5.476 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/ai-utilities@file:packages/@n8n/ai-utilities(d74008ee326fc7b1d8f06f3c6d665189) in lockfile
+#26 5.476 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/json-schema-to-zod@file:packages/@n8n/json-schema-to-zod(zod@3.25.67) in lockfile
+#26 5.477 node_modules/.pnpm                       |  WARN  Cannot find resolution of @pinecone-database/pinecone@5.1.2 in lockfile
+#26 5.477 node_modules/.pnpm                       |  WARN  Cannot find resolution of @qdrant/js-client-rest@1.16.2(typescript@5.9.2) in lockfile
+#26 5.477 node_modules/.pnpm                       |  WARN  Cannot find resolution of @supabase/supabase-js@2.49.9(bufferutil@4.0.9)(utf-8-validate@5.0.10) in lockfile
+#26 5.477 node_modules/.pnpm                       |  WARN  Cannot find resolution of @xata.io/client@0.28.4(typescript@5.9.2) in lockfile
+#26 5.477 node_modules/.pnpm                       |  WARN  Cannot find resolution of @zilliz/milvus2-sdk-node@2.5.7 in lockfile
+#26 5.477 node_modules/.pnpm                       |  WARN  Cannot find resolution of basic-auth@2.0.1 in lockfile
+#26 5.478 node_modules/.pnpm                       |  WARN  Cannot find resolution of cheerio@1.0.0 in lockfile
+#26 5.479 node_modules/.pnpm                       |  WARN  Cannot find resolution of chromadb@3.2.0 in lockfile
+#26 5.479 node_modules/.pnpm                       |  WARN  Cannot find resolution of cohere-ai@7.14.0(encoding@0.1.13) in lockfile
+#26 5.479 node_modules/.pnpm                       |  WARN  Cannot find resolution of d3-dsv@2.0.0 in lockfile
+#26 5.483 node_modules/.pnpm                       |  WARN  Cannot find resolution of epub2@3.0.2(ts-toolbelt@9.6.0) in lockfile
+#26 5.484 node_modules/.pnpm                       |  WARN  Cannot find resolution of generate-schema@2.6.0 in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of html-to-text@9.0.5 in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of ignore@5.2.4 in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of jsdom@23.0.1(bufferutil@4.0.9)(utf-8-validate@5.0.10) in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of langchain@1.2.3(@langchain/core@1.1.8(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)))(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))(react-dom@18.2.0(react@18.2.0))(react@18.2.0)(zod-to-json-schema@3.23.3(zod@3.25.67)) in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of mammoth@1.11.0 in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of mongodb@6.21.0(@aws-sdk/credential-providers@3.808.0)(gcp-metadata@5.3.0)(socks@2.8.3) in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of n8n-nodes-base@file:packages/nodes-base(@aws-sdk/credential-providers@3.808.0)(asn1.js@5.4.1)(bufferutil@4.0.9)(date-fns@2.30.0)(encoding@0.1.13)(gcp-metadata@5.3.0)(promise-ftp-common@1.1.5)(socks@2.8.3)(utf-8-validate@5.0.10)(zod@3.25.67) in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of openai@6.9.1(ws@8.18.3(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67) in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of pdf-parse@1.1.1 in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of pg@8.17.0 in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of redis@4.6.14 in lockfile
+#26 5.491 node_modules/.pnpm                       |  WARN  Cannot find resolution of sanitize-html@2.12.1 in lockfile
+#26 5.493 node_modules/.pnpm                       |  WARN  Cannot find resolution of sqlite3@5.1.7 in lockfile
+#26 5.493 node_modules/.pnpm                       |  WARN  Cannot find resolution of temp@0.9.4 in lockfile
+#26 5.493 node_modules/.pnpm                       |  WARN  Cannot find resolution of vm2@3.10.5 in lockfile
+#26 5.496 node_modules/.pnpm                       |  WARN  Cannot find resolution of weaviate-client@3.9.0(encoding@0.1.13) in lockfile
+#26 5.496 node_modules/.pnpm                       |  WARN  Cannot find resolution of semver@7.7.2 in lockfile
+#26 5.496 node_modules/.pnpm                       |  WARN  Cannot find resolution of tmp@0.2.4 in lockfile
+#26 5.501 node_modules/.pnpm                       |  WARN  Cannot find resolution of postcss-html@1.8.0 in lockfile
+#26 5.501 node_modules/.pnpm                       |  WARN  Cannot find resolution of postcss-scss@4.0.9(postcss@8.5.6) in lockfile
+#26 5.502 node_modules/.pnpm                       |  WARN  Cannot find resolution of stylelint@16.23.0(typescript@5.9.2) in lockfile
+#26 5.502 node_modules/.pnpm                       |  WARN  Cannot find resolution of stylelint-config-standard-scss@15.0.1(postcss@8.5.6)(stylelint@16.23.0(typescript@5.9.2)) in lockfile
+#26 5.502 node_modules/.pnpm                       |  WARN  Cannot find resolution of stylelint-scss@6.12.1(stylelint@16.23.0(typescript@5.9.2)) in lockfile
+#26 5.506 node_modules/.pnpm                       |  WARN  Cannot find resolution of cpu-features@0.0.10 in lockfile
+#26 5.506 node_modules/.pnpm                       |  WARN  Cannot find resolution of nan@2.20.0 in lockfile
+#26 5.506 node_modules/.pnpm                       |  WARN  Cannot find resolution of bufferutil@4.0.9 in lockfile
+#26 5.506 node_modules/.pnpm                       |  WARN  Cannot find resolution of utf-8-validate@5.0.10 in lockfile
+#26 5.507 node_modules/.pnpm                       |  WARN  Cannot find resolution of unplugin-swc@1.5.9(@swc/core@1.15.8(@swc/helpers@0.5.17))(rollup@4.52.4) in lockfile
+#26 5.507 node_modules/.pnpm                       |  WARN  Cannot find resolution of @aws-sdk/client-secrets-manager@3.808.0 in lockfile
+#26 5.507 node_modules/.pnpm                       |  WARN  Cannot find resolution of @azure/keyvault-secrets@4.8.0 in lockfile
+#26 5.507 node_modules/.pnpm                       |  WARN  Cannot find resolution of @google-cloud/secret-manager@5.6.0(encoding@0.1.13) in lockfile
+#26 5.508 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/ai-utilities@file:packages/@n8n/ai-utilities(bc71bcbef759a1115a2058137cc02ab8) in lockfile
+#26 5.508 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/ai-workflow-builder@file:packages/@n8n/ai-workflow-builder.ee(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.17.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))(react-dom@18.2.0(react@18.2.0))(react@18.2.0)(ws@8.17.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod-to-json-schema@3.25.1(zod@3.25.67)) in lockfile
+#26 5.508 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/chat-hub@file:packages/@n8n/chat-hub in lockfile
+#26 5.508 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/db@file:packages/@n8n/db(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(@sentry/node@10.36.0)(mysql2@3.17.0)(openai@6.19.0(ws@8.17.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))(pg@8.17.0)(sqlite3@5.1.7) in lockfile
+#26 5.508 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/n8n-nodes-langchain@file:packages/@n8n/nodes-langchain(7d6be21abea5bb89a03ae9d6c81cb150) in lockfile
+#26 5.509 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/syslog-client@file:packages/@n8n/syslog-client in lockfile
+#26 5.509 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/task-runner@file:packages/@n8n/task-runner(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(bufferutil@4.0.9)(openai@6.19.0(ws@8.17.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67))(utf-8-validate@5.0.10) in lockfile
+#26 5.511 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n_io/license-sdk@2.25.0 in lockfile
+#26 5.511 node_modules/.pnpm                       |  WARN  Cannot find resolution of @parcel/watcher@2.5.1 in lockfile
+#26 5.511 node_modules/.pnpm                       |  WARN  Cannot find resolution of @rudderstack/rudder-sdk-node@3.0.0 in lockfile
+#26 5.511 node_modules/.pnpm                       |  WARN  Cannot find resolution of aws4@1.11.0 in lockfile
+#26 5.511 node_modules/.pnpm                       |  WARN  Cannot find resolution of bcryptjs@2.4.3 in lockfile
+#26 5.512 node_modules/.pnpm                       |  WARN  Cannot find resolution of bull@4.16.4(patch_hash=a4b6d56db16fe5870646929938466d6a5c668435fd1551bed6a93fffb597ba42) in lockfile
+#26 5.512 node_modules/.pnpm                       |  WARN  Cannot find resolution of cache-manager@5.2.3 in lockfile
+#26 5.512 node_modules/.pnpm                       |  WARN  Cannot find resolution of change-case@4.1.2 in lockfile
+#26 5.513 node_modules/.pnpm                       |  WARN  Cannot find resolution of class-transformer@0.5.1 in lockfile
+#26 5.513 node_modules/.pnpm                       |  WARN  Cannot find resolution of compression@1.8.1 in lockfile
+#26 5.513 node_modules/.pnpm                       |  WARN  Cannot find resolution of convict@6.2.4 in lockfile
+#26 5.513 node_modules/.pnpm                       |  WARN  Cannot find resolution of cookie-parser@1.4.7 in lockfile
+#26 5.513 node_modules/.pnpm                       |  WARN  Cannot find resolution of csrf@3.1.0 in lockfile
+#26 5.514 node_modules/.pnpm                       |  WARN  Cannot find resolution of express@5.1.0 in lockfile
+#26 5.514 node_modules/.pnpm                       |  WARN  Cannot find resolution of express-handlebars@8.0.1 in lockfile
+#26 5.515 node_modules/.pnpm                       |  WARN  Cannot find resolution of express-openapi-validator@5.5.3(express@5.1.0) in lockfile
+#26 5.515 node_modules/.pnpm                       |  WARN  Cannot find resolution of express-prom-bundle@8.0.0(prom-client@15.1.3) in lockfile
+#26 5.516 node_modules/.pnpm                       |  WARN  Cannot find resolution of express-rate-limit@7.5.0(express@5.1.0) in lockfile
+#26 5.516 node_modules/.pnpm                       |  WARN  Cannot find resolution of flat@5.0.2 in lockfile
+#26 5.518 node_modules/.pnpm                       |  WARN  Cannot find resolution of formidable@3.5.4 in lockfile
+#26 5.518 node_modules/.pnpm                       |  WARN  Cannot find resolution of helmet@8.1.0 in lockfile
+#26 5.518 node_modules/.pnpm                       |  WARN  Cannot find resolution of http-proxy-middleware@3.0.5 in lockfile
+#26 5.520 node_modules/.pnpm                       |  WARN  Cannot find resolution of infisical-node@1.3.0 in lockfile
+#26 5.520 node_modules/.pnpm                       |  WARN  Cannot find resolution of ioredis@5.3.2 in lockfile
+#26 5.521 node_modules/.pnpm                       |  WARN  Cannot find resolution of isbot@3.6.13 in lockfile
+#26 5.522 node_modules/.pnpm                       |  WARN  Cannot find resolution of json-diff@1.0.6 in lockfile
+#26 5.522 node_modules/.pnpm                       |  WARN  Cannot find resolution of jsonschema@1.4.1 in lockfile
+#26 5.523 node_modules/.pnpm                       |  WARN  Cannot find resolution of ldapts@4.2.6 in lockfile
+#26 5.524 node_modules/.pnpm                       |  WARN  Cannot find resolution of n8n-core@file:packages/core(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.204.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.5.0(@opentelemetry/api@1.9.0))(openai@6.19.0(ws@8.17.1(bufferutil@4.0.9)(utf-8-validate@5.0.10))(zod@3.25.67)) in lockfile
+#26 5.524 node_modules/.pnpm                       |  WARN  Cannot find resolution of n8n-editor-ui@file:packages/frontend/editor-ui in lockfile
+#26 5.524 node_modules/.pnpm                       |  WARN  Cannot find resolution of nodemailer@7.0.11 in lockfile
+#26 5.524 node_modules/.pnpm                       |  WARN  Cannot find resolution of open@7.4.2 in lockfile
+#26 5.524 node_modules/.pnpm                       |  WARN  Cannot find resolution of openid-client@6.5.0 in lockfile
+#26 5.525 node_modules/.pnpm                       |  WARN  Cannot find resolution of otpauth@9.1.1 in lockfile
+#26 5.526 node_modules/.pnpm                       |  WARN  Cannot find resolution of pkce-challenge@5.0.0(patch_hash=651e785d0b7bbf5be9210e1e895c39a16dc3ce8a5a3843b4819565fb6e175b90) in lockfile
+#26 5.526 node_modules/.pnpm                       |  WARN  Cannot find resolution of posthog-node@3.2.1 in lockfile
+#26 5.527 node_modules/.pnpm                       |  WARN  Cannot find resolution of prom-client@15.1.3 in lockfile
+#26 5.527 node_modules/.pnpm                       |  WARN  Cannot find resolution of psl@1.9.0 in lockfile
+#26 5.528 node_modules/.pnpm                       |  WARN  Cannot find resolution of raw-body@3.0.0 in lockfile
+#26 5.528 node_modules/.pnpm                       |  WARN  Cannot find resolution of replacestream@4.0.3 in lockfile
+#26 5.529 node_modules/.pnpm                       |  WARN  Cannot find resolution of samlify@2.10.0 in lockfile
+#26 5.529 node_modules/.pnpm                       |  WARN  Cannot find resolution of semver@7.6.0 in lockfile
+#26 5.530 node_modules/.pnpm                       |  WARN  Cannot find resolution of shelljs@0.8.5 in lockfile
+#26 5.530 node_modules/.pnpm                       |  WARN  Cannot find resolution of simple-git@3.28.0 in lockfile
+#26 5.530 node_modules/.pnpm                       |  WARN  Cannot find resolution of source-map-support@0.5.21 in lockfile
+#26 5.532 node_modules/.pnpm                       |  WARN  Cannot find resolution of sshpk@1.18.0 in lockfile
+#26 5.533 node_modules/.pnpm                       |  WARN  Cannot find resolution of swagger-ui-express@5.0.1(express@5.1.0) in lockfile
+#26 5.534 node_modules/.pnpm                       |  WARN  Cannot find resolution of undici@7.18.2 in lockfile
+#26 5.535 node_modules/.pnpm                       |  WARN  Cannot find resolution of validator@13.15.26 in lockfile
+#26 5.535 node_modules/.pnpm                       |  WARN  Cannot find resolution of xmllint-wasm@3.0.1 in lockfile
+#26 5.535 node_modules/.pnpm                       |  WARN  Cannot find resolution of yamljs@0.3.0 in lockfile
+#26 5.535 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/extension-sdk@file:packages/@n8n/extension-sdk(vue-router@4.5.0(vue@3.5.26(typescript@5.9.2)))(vue@3.5.26(typescript@5.9.2)) in lockfile
+#26 5.535 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/design-system@file:packages/frontend/@n8n/design-system in lockfile
+#26 5.535 node_modules/.pnpm                       |  WARN  Cannot find resolution of @vueuse/core@10.11.0(vue@3.5.26(typescript@5.9.2)) in lockfile
+#26 5.536 node_modules/.pnpm                       |  WARN  Cannot find resolution of highlight.js@11.8.0 in lockfile
+#26 5.536 node_modules/.pnpm                       |  WARN  Cannot find resolution of markdown-it-link-attributes@4.0.1 in lockfile
+#26 5.537 node_modules/.pnpm                       |  WARN  Cannot find resolution of vue@3.5.26(typescript@5.9.2) in lockfile
+#26 5.537 node_modules/.pnpm                       |  WARN  Cannot find resolution of vue-markdown-render@2.2.1(vue@3.5.26(typescript@5.9.2)) in lockfile
+#26 5.539 node_modules/.pnpm                       |  WARN  Cannot find resolution of vue-i18n@11.1.10(vue@3.5.26(typescript@5.9.2)) in lockfile
+#26 5.539 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/chat@file:packages/frontend/@n8n/chat(typescript@5.9.2) in lockfile
+#26 5.539 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/composables@file:packages/frontend/@n8n/composables(vue@3.5.26(typescript@5.9.2)) in lockfile
+#26 5.539 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/i18n@file:packages/frontend/@n8n/i18n(vue@3.5.26(typescript@5.9.2)) in lockfile
+#26 5.540 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/stores@file:packages/frontend/@n8n/stores(pinia@2.2.4(typescript@5.9.2)(vue@3.5.26(typescript@5.9.2)))(vue@3.5.26(typescript@5.9.2)) in lockfile
+#26 5.540 node_modules/.pnpm                       |  WARN  Cannot find resolution of pinia@2.2.4(typescript@5.9.2)(vue@3.5.26(typescript@5.9.2)) in lockfile
+#26 5.540 node_modules/.pnpm                       |  WARN  Cannot find resolution of vue-router@4.5.0(vue@3.5.26(typescript@5.9.2)) in lockfile
+#26 5.540 node_modules/.pnpm                       |  WARN  Cannot find resolution of vue-tsc@2.2.8(typescript@5.9.2) in lockfile
+#26 5.540 node_modules/.pnpm                       |  WARN  Cannot find resolution of inquirer@7.3.3 in lockfile
+#26 5.541 node_modules/.pnpm                       |  WARN  Cannot find resolution of replace-in-file@6.3.5 in lockfile
+#26 5.541 node_modules/.pnpm                       |  WARN  Cannot find resolution of @kafkajs/confluent-schema-registry@3.8.0 in lockfile
+#26 5.541 node_modules/.pnpm                       |  WARN  Cannot find resolution of @n8n/imap@file:packages/@n8n/imap in lockfile
+#26 5.541 node_modules/.pnpm                       |  WARN  Cannot find resolution of @thednp/dommatrix@2.0.12 in lockfile
+#26 5.541 node_modules/.pnpm                       |  WARN  Cannot find resolution of alasql@4.4.0(encoding@0.1.13) in lockfile
+#26 5.542 node_modules/.pnpm                       |  WARN  Cannot find resolution of amqplib@0.10.6 in lockfile
+#26 5.542 node_modules/.pnpm                       |  WARN  Cannot find resolution of cheerio@1.0.0-rc.6 in lockfile
+#26 5.542 node_modules/.pnpm                       |  WARN  Cannot find resolution of chokidar@4.0.3 in lockfile
+#26 5.543 node_modules/.pnpm                       |  WARN  Cannot find resolution of currency-codes@2.1.0 in lockfile
+#26 5.543 node_modules/.pnpm                       |  WARN  Cannot find resolution of eventsource@2.0.2 in lockfile
+#26 5.543 node_modules/.pnpm                       |  WARN  Cannot find resolution of fflate@0.7.4 in lockfile
+#26 5.543 node_modules/.pnpm                       |  WARN  Cannot find resolution of get-system-fonts@2.0.2 in lockfile
+#26 5.544 node_modules/.pnpm                       |  WARN  Cannot find resolution of gm@1.25.1 in lockfile
+#26 5.544 node_modules/.pnpm                       |  WARN  Cannot find resolution of ics@2.40.0 in lockfile
+#26 5.545 node_modules/.pnpm                       |  WARN  Cannot find resolution of iso-639-1@2.1.15 in lockfile
+#26 5.547 node_modules/.pnpm                       |  WARN  Cannot find resolution of js-nacl@1.4.0 in lockfile
+#26 5.547 node_modules/.pnpm                       |  WARN  Cannot find resolution of kafkajs@2.2.4 in lockfile
+#26 5.547 node_modules/.pnpm                       |  WARN  Cannot find resolution of lossless-json@1.0.5 in lockfile
+#26 5.548 node_modules/.pnpm                       |  WARN  Cannot find resolution of mailparser@3.6.7 in lockfile
+#26 5.548 node_modules/.pnpm                       |  WARN  Cannot find resolution of minifaker@1.34.1 in lockfile
+#26 5.548 node_modules/.pnpm                       |  WARN  Cannot find resolution of moment-timezone@0.5.48 in lockfile
+#26 5.548 node_modules/.pnpm                       |  WARN  Cannot find resolution of mongodb@6.11.0(@aws-sdk/credential-providers@3.808.0)(gcp-metadata@5.3.0)(socks@2.8.3) in lockfile
+#26 5.548 node_modules/.pnpm                       |  WARN  Cannot find resolution of mqtt@5.7.2(bufferutil@4.0.9)(utf-8-validate@5.0.10) in lockfile
+#26 5.548 node_modules/.pnpm                       |  WARN  Cannot find resolution of mssql@10.0.2 in lockfile
+#26 5.549 node_modules/.pnpm                       |  WARN  Cannot find resolution of mysql2@3.15.0 in lockfile
+#26 5.549 node_modules/.pnpm                       |  WARN  Cannot find resolution of node-html-markdown@1.2.0 in lockfile
+#26 5.549 node_modules/.pnpm                       |  WARN  Cannot find resolution of node-ssh@13.2.0 in lockfile
+#26 5.549 node_modules/.pnpm                       |  WARN  Cannot find resolution of oracledb@6.9.0 in lockfile
+#26 5.550 node_modules/.pnpm                       |  WARN  Cannot find resolution of pdfjs-dist@5.3.31(patch_hash=421253c8e411cdaef58ba96d2bb44ae0784e1b3e446f5caca50710daa1fa5dcd) in lockfile
+#26 5.550 node_modules/.pnpm                       |  WARN  Cannot find resolution of pg-promise@11.9.1 in lockfile
+#26 5.550 node_modules/.pnpm                       |  WARN  Cannot find resolution of promise-ftp@1.3.5(promise-ftp-common@1.1.5) in lockfile
+#26 5.551 node_modules/.pnpm                       |  WARN  Cannot find resolution of rfc2047@4.0.1 in lockfile
+#26 5.551 node_modules/.pnpm                       |  WARN  Cannot find resolution of rhea@3.0.4 in lockfile
+#26 5.551 node_modules/.pnpm                       |  WARN  Cannot find resolution of rrule@2.8.1 in lockfile
+#26 5.552 node_modules/.pnpm                       |  WARN  Cannot find resolution of rss-parser@3.13.0 in lockfile
+#26 5.554 node_modules/.pnpm                       |  WARN  Cannot find resolution of showdown@2.1.0 in lockfile
+#26 5.556 node_modules/.pnpm                       |  WARN  Cannot find resolution of snowflake-sdk@2.1.0(asn1.js@5.4.1)(encoding@0.1.13) in lockfile
+#26 5.556 node_modules/.pnpm                       |  WARN  Cannot find resolution of ssh2-sftp-client@12.0.1 in lockfile
+#26 5.556 node_modules/.pnpm                       |  WARN  Cannot find resolution of ts-ics@1.2.2(date-fns@2.30.0)(lodash@4.17.23)(zod@4.1.12) in lockfile
+#26 5.557 node_modules/.pnpm                       |  WARN  Cannot find resolution of xlsx@https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz in lockfile
+#26 5.557 node_modules/.pnpm                       |  WARN  Cannot find resolution of xmlhttprequest-ssl@3.1.0 in lockfile
+#26 5.557 node_modules/.pnpm                       |  WARN  Cannot find resolution of glob@10.5.0 in lockfile
+#26 5.648 Packages: +4
+#26 5.648 ++++
+#26 6.530 Progress: resolved 4, reused 0, downloaded 3, added 3
+#26 6.774 Progress: resolved 4, reused 0, downloaded 4, added 4, done
+#26 6.861 
+#26 6.861 dependencies:
+#26 6.861 + moment 2.30.1
+#26 6.861 + ws 8.19.0
+#26 6.861 
+#26 6.861 devDependencies: skipped
+#26 6.861 
+#26 6.891 Done in 2.9s using pnpm v10.32.1
+#26 DONE 7.0s
+
+#25 [python-runner-builder 9/9] RUN uv pip install . && rm -rf /app/task-runner-python/src
+#25 4.463       Built task-runner-python @ file:///app/task-runner-python
+#25 4.483 Prepared 1 package in 3.09s
+#25 4.496 Uninstalled 1 package in 12ms
+#25 4.499 Installed 1 package in 3ms
+#25 4.501  ~ task-runner-python==0.1.0 (from file:///app/task-runner-python)
+#25 DONE 4.6s
+
+#27 [runtime  2/12] COPY --from=python-runner-builder /usr/local/bin/uv /usr/local/bin/uv
+#27 DONE 0.1s
+
+#28 [runtime  3/12] COPY --from=node-alpine /usr/local/bin/node /usr/local/bin/node
+#28 DONE 0.3s
+
+#29 [runtime  4/12] RUN apk add --no-cache ca-certificates tini libstdc++ libc6-compat &&     apk del apk-tools
+#29 1.427 (1/6) Installing musl-obstack (1.2.3-r2)
+#29 1.494 (2/6) Installing libucontext (1.3.3-r0)
+#29 1.555 (3/6) Installing gcompat (1.1.0-r4)
+#29 1.620 (4/6) Installing libgcc (15.2.0-r2)
+#29 1.687 (5/6) Installing libstdc++ (15.2.0-r2)
+#29 1.937 (6/6) Installing tini (0.19.0-r3)
+#29 2.001 Executing busybox-1.37.0-r30.trigger
+#29 2.027 OK: 14.4 MiB in 35 packages
+#29 2.085 WARNING: opening from cache https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64/APKINDEX.tar.gz: No such file or directory
+#29 2.085 WARNING: opening from cache https://dl-cdn.alpinelinux.org/alpine/v3.23/community/x86_64/APKINDEX.tar.gz: No such file or directory
+#29 2.087 (1/3) Purging apk-tools (3.0.3-r1)
+#29 2.088 (2/3) Purging ca-certificates-bundle (20251003-r0)
+#29 2.093 (3/3) Purging libapk (3.0.3-r1)
+#29 2.093 Executing busybox-1.37.0-r30.trigger
+#29 2.107 Executing ca-certificates-20251003-r0.trigger
+#29 2.209 OK: 13.8 MiB in 32 packages
+#29 DONE 2.2s
+
+#30 [runtime  5/12] COPY --from=node-alpine /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/corepack
+#30 DONE 0.0s
+
+#31 [runtime  6/12] RUN ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack && 		ln -s ../lib/node_modules/corepack/dist/pnpm.js /usr/local/bin/pnpm
+#31 DONE 0.2s
+
+#32 [runtime  7/12] RUN addgroup -g 1000 -S runner  && adduser  -u 1000 -S -G runner -h /home/runner -D runner
+#32 DONE 0.2s
+
+#33 [runtime  8/12] WORKDIR /home/runner
+#33 DONE 0.0s
+
+#34 [runtime  9/12] COPY --from=javascript-runner-builder --chown=root:root /app/task-runner-javascript /opt/runners/task-runner-javascript
+#34 DONE 2.3s
+
+#35 [runtime 10/12] COPY --from=python-runner-builder --chown=root:root /app/task-runner-python /opt/runners/task-runner-python
+#35 DONE 0.3s
+
+#36 [runtime 11/12] COPY --from=launcher-downloader /launcher-bin/* /usr/local/bin/
+#36 DONE 0.1s
+
+#37 [runtime 12/12] COPY --chown=root:root docker/images/runners/n8n-task-runners.json /etc/n8n-task-runners.json
+#37 DONE 0.0s
+
+#38 exporting to image
+#38 exporting layers
+#38 exporting layers 4.5s done
+#38 exporting manifest sha256:b5cc08226f92e0488d3c43b0a182a2c2b6fd5b8d1f78e73450b4fbc8a6610b91 done
+#38 exporting config sha256:bd4b7849e68709f219d0a7fd5c2047eb2737c81792300bc7d1f536dbd2c32e16 done
+#38 naming to docker.io/n8nio/runners:local-2.10.4 done
+#38 DONE 4.6s
+
+
+══════════════════════════════════════════════════════
+           DOCKER BUILD COMPLETE
+══════════════════════════════════════════════════════
+✅ Image built: n8nio/n8n:local-2.10.4
+   Platform: linux/amd64
+   Size: 253MB
+   Build time: 350s
+
+✅ Image built: n8nio/runners:local-2.10.4
+   Platform: linux/amd64
+   Size: 120MB
+   Build time: 67s
+
+══════════════════════════════════════════════════════

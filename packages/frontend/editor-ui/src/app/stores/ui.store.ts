@@ -73,6 +73,13 @@ import {
 	COMMUNITY_PACKAGE_MANAGE_ACTIONS,
 } from '@/features/settings/communityNodes/communityNodes.constants';
 import { API_KEY_CREATE_OR_EDIT_MODAL_KEY } from '@/features/settings/apiKeys/apiKeys.constants';
+import {
+	NODE_ACCESS_REQUEST_MODAL_KEY,
+	POLICY_FORM_MODAL_KEY,
+	CATEGORY_FORM_MODAL_KEY,
+	CATEGORY_NODES_MODAL_KEY,
+	REVIEW_REQUEST_MODAL_KEY,
+} from '@/features/settings/nodeGovernance/nodeGovernance.constants';
 import { STORES } from '@n8n/stores';
 import type {
 	XYPosition,
@@ -171,6 +178,11 @@ export const useUIStore = defineStore(STORES.UI, () => {
 				WORKFLOW_HISTORY_NAME_VERSION_MODAL_KEY,
 				CREDENTIAL_RESOLVER_EDIT_MODAL_KEY,
 				AI_BUILDER_DIFF_MODAL_KEY,
+				NODE_ACCESS_REQUEST_MODAL_KEY,
+				POLICY_FORM_MODAL_KEY,
+				CATEGORY_FORM_MODAL_KEY,
+				CATEGORY_NODES_MODAL_KEY,
+				REVIEW_REQUEST_MODAL_KEY,
 			].map((modalKey) => [modalKey, { open: false }]),
 		),
 		[DELETE_USER_MODAL_KEY]: {
