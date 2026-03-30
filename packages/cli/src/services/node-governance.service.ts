@@ -4,7 +4,10 @@ import {
 	NodeCategoryRepository,
 	NodeGovernancePolicyRepository,
 	PolicyProjectAssignmentRepository,
+	ProjectRepository,
+	SettingsRepository,
 	type EntityManager,
+	type GovernanceDefaultBehavior,
 	type NodeGovernancePolicy,
 	type PolicyScope,
 	type PolicyType,
@@ -15,6 +18,9 @@ import { Service } from '@n8n/di';
 
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 import { NotFoundError } from '@/errors/response-errors/not-found.error';
+
+const GOVERNANCE_DEFAULT_BEHAVIOR_KEY = 'governance.defaultBehavior';
+const FALLBACK_DEFAULT: GovernanceDefaultBehavior = 'allow';
 
 export interface GovernanceStatus {
 	status: 'allowed' | 'blocked' | 'pending_request';
@@ -65,11 +71,77 @@ export class NodeGovernanceService {
 		private readonly categoryRepository: NodeCategoryRepository,
 		private readonly categoryAssignmentRepository: NodeCategoryAssignmentRepository,
 		private readonly accessRequestRepository: NodeAccessRequestRepository,
+		private readonly settingsRepository: SettingsRepository,
+		private readonly projectRepository: ProjectRepository,
 	) {}
+
+	// === Default Behavior Settings ===
+
+	async getGlobalDefaultBehavior(): Promise<GovernanceDefaultBehavior> {
+		const setting = await this.settingsRepository.findByKey(GOVERNANCE_DEFAULT_BEHAVIOR_KEY);
+		if (!setting) return FALLBACK_DEFAULT;
+		try {
+			const parsed = JSON.parse(setting.value) as string;
+			return parsed === 'block' ? 'block' : 'allow';
+		} catch {
+			return FALLBACK_DEFAULT;
+		}
+	}
+
+	async setGlobalDefaultBehavior(value: GovernanceDefaultBehavior) {
+		await this.settingsRepository.upsert(
+			{ key: GOVERNANCE_DEFAULT_BEHAVIOR_KEY, value: JSON.stringify(value), loadOnStartup: true },
+			['key'],
+		);
+	}
+
+	async getProjectDefaultBehavior(projectId: string): Promise<GovernanceDefaultBehavior | null> {
+		const project = await this.projectRepository.findOneBy({ id: projectId });
+		return project?.governanceDefaultBehavior ?? null;
+	}
+
+	async setProjectDefaultBehavior(projectId: string, value: GovernanceDefaultBehavior | null) {
+		await this.projectRepository.update({ id: projectId }, { governanceDefaultBehavior: value });
+	}
+
+	/**
+	 * Resolve the effective default behavior for a project.
+	 * Project override takes precedence; otherwise falls back to global default.
+	 */
+	async getEffectiveDefaultBehavior(projectId: string): Promise<GovernanceDefaultBehavior> {
+		const projectDefault = await this.getProjectDefaultBehavior(projectId);
+		if (projectDefault) return projectDefault;
+		return await this.getGlobalDefaultBehavior();
+	}
+
+	async getGovernanceSettings(): Promise<{
+		globalDefault: GovernanceDefaultBehavior;
+		projectOverrides: Array<{
+			projectId: string;
+			projectName: string;
+			defaultBehavior: GovernanceDefaultBehavior;
+		}>;
+	}> {
+		const globalDefault = await this.getGlobalDefaultBehavior();
+		const projects = await this.projectRepository.find({
+			where: {},
+			select: ['id', 'name', 'governanceDefaultBehavior'],
+		});
+
+		const projectOverrides = projects
+			.filter((p) => p.governanceDefaultBehavior !== null)
+			.map((p) => ({
+				projectId: p.id,
+				projectName: p.name,
+				defaultBehavior: p.governanceDefaultBehavior!,
+			}));
+
+		return { globalDefault, projectOverrides };
+	}
 
 	/**
 	 * Get governance status for a list of node types for a specific project
-	 * Policy priority: Project ALLOW > Global BLOCK > Global ALLOW > Project BLOCK > Default (allowed)
+	 * Policy priority: Project ALLOW > Global BLOCK > Global ALLOW > Project BLOCK > Default (configurable)
 	 */
 	async getGovernanceForNodes(
 		nodeTypes: string[],
@@ -77,10 +149,11 @@ export class NodeGovernanceService {
 		userId: string,
 		entityManager?: EntityManager,
 	): Promise<Map<string, GovernanceStatus>> {
-		// Get all policies (global and project-scoped)
-		const [globalPolicies, projectPolicies] = await Promise.all([
+		// Get all policies, and the effective default in parallel
+		const [globalPolicies, projectPolicies, effectiveDefault] = await Promise.all([
 			this.policyRepository.findGlobalPolicies(entityManager),
 			this.policyRepository.findByProjectIds([projectId], entityManager),
+			this.getEffectiveDefaultBehavior(projectId),
 		]);
 
 		// Get category assignments for all node types
@@ -119,6 +192,7 @@ export class NodeGovernanceService {
 				globalPolicies,
 				projectPolicies,
 				projectId,
+				effectiveDefault,
 			);
 
 			// Check for pending request
@@ -142,7 +216,7 @@ export class NodeGovernanceService {
 
 	/**
 	 * Resolve governance for a single node type
-	 * Priority: Project ALLOW (1) > Global BLOCK (2) > Global ALLOW (3) > Project BLOCK (4) > Default
+	 * Priority: Project ALLOW (1) > Global BLOCK (2) > Global ALLOW (3) > Project BLOCK (4) > Default (configurable)
 	 */
 	private resolveNodeGovernance(
 		nodeType: string,
@@ -150,6 +224,7 @@ export class NodeGovernanceService {
 		globalPolicies: NodeGovernancePolicy[],
 		projectPolicies: NodeGovernancePolicy[],
 		projectId: string,
+		defaultBehavior: GovernanceDefaultBehavior = FALLBACK_DEFAULT,
 	): GovernanceStatus {
 		const matchingPolicies: PolicyMatch[] = [];
 
@@ -185,8 +260,7 @@ export class NodeGovernanceService {
 			};
 		}
 
-		// Default: allowed
-		return { status: 'allowed' };
+		return { status: defaultBehavior === 'block' ? 'blocked' : 'allowed' };
 	}
 
 	private policyMatchesNode(

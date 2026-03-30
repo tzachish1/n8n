@@ -158,6 +158,7 @@ export type RelayEventMap = {
 			| 'integrated'
 			| 'evaluation'
 			| 'chat';
+		projectId?: string;
 	};
 
 	'workflow-version-updated': {
@@ -180,6 +181,7 @@ export type RelayEventMap = {
 		nodeName: string;
 		nodeType?: string;
 		projectId?: string;
+		mode?: string;
 	};
 
 	'node-post-execute': {
@@ -189,6 +191,7 @@ export type RelayEventMap = {
 		nodeName: string;
 		nodeType?: string;
 		projectId?: string;
+		mode?: string;
 	};
 
 	// #endregion
@@ -843,6 +846,12 @@ export type RelayEventMap = {
 		projectId: string;
 		requestedById: string;
 		reviewComment?: string;
+	};
+
+	'node-governance-settings-updated': {
+		user: UserLike;
+		defaultBehavior: string;
+		projectId?: string;
 	};
 
 	// #endregion

@@ -7,3 +7,7 @@ export { CreateAccessRequestDto } from './create-access-request.dto';
 export { ReviewAccessRequestDto } from './review-access-request.dto';
 export { GetNodeGovernanceQueryDto, GetNodeGovernanceBodyDto } from './get-node-governance.dto';
 export { ImportCategoriesDto } from './import-categories.dto';
+export {
+	UpdateGovernanceSettingsDto,
+	UpdateProjectGovernanceSettingsDto,
+} from './governance-settings.dto';

@@ -5,8 +5,10 @@ import {
 	NodeCategoryRepository,
 	NodeGovernancePolicyRepository,
 	PolicyProjectAssignmentRepository,
+	ProjectRepository,
+	SettingsRepository,
 } from '@n8n/db';
-import type { NodeGovernancePolicy, PolicyProjectAssignment } from '@n8n/db';
+import type { NodeGovernancePolicy, PolicyProjectAssignment, Settings } from '@n8n/db';
 import { Container } from '@n8n/di';
 import { mock } from 'jest-mock-extended';
 
@@ -18,6 +20,8 @@ describe('NodeGovernanceService', () => {
 	mockInstance(NodeCategoryRepository);
 	const categoryAssignmentRepository = mockInstance(NodeCategoryAssignmentRepository);
 	const accessRequestRepository = mockInstance(NodeAccessRequestRepository);
+	const settingsRepository = mockInstance(SettingsRepository);
+	const projectRepository = mockInstance(ProjectRepository);
 
 	const service = Container.get(NodeGovernanceService);
 
@@ -27,10 +31,15 @@ describe('NodeGovernanceService', () => {
 
 	beforeEach(() => {
 		jest.clearAllMocks();
-		// Default: no pending requests
 		accessRequestRepository.findByProjectId.mockResolvedValue([]);
-		// Default: no category assignments
 		categoryAssignmentRepository.findByNodeTypes.mockResolvedValue([]);
+		// Default: global default is 'allow', no project override
+		settingsRepository.findByKey.mockResolvedValue(
+			mock<Settings>({ key: 'governance.defaultBehavior', value: '"allow"' }),
+		);
+		projectRepository.findOneBy.mockResolvedValue(
+			mock({ id: projectId, governanceDefaultBehavior: null }),
+		);
 	});
 
 	describe('getGovernanceForNodes - Priority Resolution', () => {
@@ -190,6 +199,81 @@ describe('NodeGovernanceService', () => {
 			const result = await service.getGovernanceForNodes([nodeType], projectId, userId);
 
 			// Policy is for a different project, so default to allowed
+			expect(result.get(nodeType)?.status).toBe('allowed');
+		});
+	});
+
+	describe('getGovernanceForNodes - Configurable Default Behavior', () => {
+		it('should block when global default is "block" and no policies match', async () => {
+			settingsRepository.findByKey.mockResolvedValue(
+				mock<Settings>({ key: 'governance.defaultBehavior', value: '"block"' }),
+			);
+			policyRepository.findGlobalPolicies.mockResolvedValue([]);
+			policyRepository.findByProjectIds.mockResolvedValue([]);
+
+			const result = await service.getGovernanceForNodes([nodeType], projectId, userId);
+
+			expect(result.get(nodeType)?.status).toBe('blocked');
+		});
+
+		it('should use project override over global default', async () => {
+			settingsRepository.findByKey.mockResolvedValue(
+				mock<Settings>({ key: 'governance.defaultBehavior', value: '"allow"' }),
+			);
+			projectRepository.findOneBy.mockResolvedValue(
+				mock({ id: projectId, governanceDefaultBehavior: 'block' }),
+			);
+			policyRepository.findGlobalPolicies.mockResolvedValue([]);
+			policyRepository.findByProjectIds.mockResolvedValue([]);
+
+			const result = await service.getGovernanceForNodes([nodeType], projectId, userId);
+
+			expect(result.get(nodeType)?.status).toBe('blocked');
+		});
+
+		it('should fall back to global default when project override is null', async () => {
+			settingsRepository.findByKey.mockResolvedValue(
+				mock<Settings>({ key: 'governance.defaultBehavior', value: '"block"' }),
+			);
+			projectRepository.findOneBy.mockResolvedValue(
+				mock({ id: projectId, governanceDefaultBehavior: null }),
+			);
+			policyRepository.findGlobalPolicies.mockResolvedValue([]);
+			policyRepository.findByProjectIds.mockResolvedValue([]);
+
+			const result = await service.getGovernanceForNodes([nodeType], projectId, userId);
+
+			expect(result.get(nodeType)?.status).toBe('blocked');
+		});
+
+		it('should still allow when explicit allow policy exists even with block default', async () => {
+			settingsRepository.findByKey.mockResolvedValue(
+				mock<Settings>({ key: 'governance.defaultBehavior', value: '"block"' }),
+			);
+
+			const globalAllowPolicy = createPolicy({
+				scope: 'global',
+				policyType: 'allow',
+				targetType: 'node',
+				targetValue: nodeType,
+			});
+
+			policyRepository.findGlobalPolicies.mockResolvedValue([globalAllowPolicy]);
+			policyRepository.findByProjectIds.mockResolvedValue([]);
+
+			const result = await service.getGovernanceForNodes([nodeType], projectId, userId);
+
+			expect(result.get(nodeType)?.status).toBe('allowed');
+		});
+
+		it('should default to "allow" when no settings exist (backwards compatible)', async () => {
+			settingsRepository.findByKey.mockResolvedValue(null);
+			projectRepository.findOneBy.mockResolvedValue(null);
+			policyRepository.findGlobalPolicies.mockResolvedValue([]);
+			policyRepository.findByProjectIds.mockResolvedValue([]);
+
+			const result = await service.getGovernanceForNodes([nodeType], projectId, userId);
+
 			expect(result.get(nodeType)?.status).toBe('allowed');
 		});
 	});

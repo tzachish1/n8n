@@ -16,6 +16,18 @@ function hasUser(event: WorkflowExecutedEvent): event is WorkflowExecutedEventWi
 	return event.user !== undefined;
 }
 
+const sourceToMode: Record<WorkflowExecutedEvent['source'], string> = {
+	'user-manual': 'manual',
+	'user-retry': 'retry',
+	webhook: 'webhook',
+	trigger: 'trigger',
+	error: 'error',
+	cli: 'cli',
+	integrated: 'integrated',
+	evaluation: 'internal',
+	chat: 'manual',
+};
+
 @Service()
 export class LogStreamingEventRelay extends EventRelay {
 	constructor(
@@ -119,6 +131,7 @@ export class LogStreamingEventRelay extends EventRelay {
 			'node-governance-request-created': (event) => this.nodeGovernanceRequestCreated(event),
 			'node-governance-request-approved': (event) => this.nodeGovernanceRequestApproved(event),
 			'node-governance-request-rejected': (event) => this.nodeGovernanceRequestRejected(event),
+			'node-governance-settings-updated': (event) => this.nodeGovernanceSettingsUpdated(event),
 		});
 	}
 
@@ -327,6 +340,7 @@ export class LogStreamingEventRelay extends EventRelay {
 		workflowName,
 		executionId,
 		source,
+		projectId,
 	}: WorkflowExecutedEventWithUser) {
 		void this.eventBus.sendAuditEvent({
 			eventName: 'n8n.audit.workflow.executed',
@@ -336,6 +350,8 @@ export class LogStreamingEventRelay extends EventRelay {
 				workflowName,
 				executionId,
 				source,
+				mode: sourceToMode[source],
+				projectId,
 			},
 		});
 	}
@@ -345,6 +361,7 @@ export class LogStreamingEventRelay extends EventRelay {
 		workflowName,
 		executionId,
 		source,
+		projectId,
 	}: WorkflowExecutedEvent) {
 		void this.eventBus.sendAuditEvent({
 			eventName: 'n8n.audit.workflow.executed',
@@ -353,6 +370,8 @@ export class LogStreamingEventRelay extends EventRelay {
 				workflowName,
 				executionId,
 				source,
+				mode: sourceToMode[source],
+				projectId,
 			},
 		});
 	}
@@ -376,6 +395,7 @@ export class LogStreamingEventRelay extends EventRelay {
 		nodeName,
 		nodeType,
 		projectId,
+		mode,
 	}: RelayEventMap['node-pre-execute']) {
 		void this.eventBus.sendNodeEvent({
 			eventName: 'n8n.node.started',
@@ -387,6 +407,7 @@ export class LogStreamingEventRelay extends EventRelay {
 				nodeName,
 				nodeId,
 				projectId,
+				mode,
 			},
 		});
 	}
@@ -398,6 +419,7 @@ export class LogStreamingEventRelay extends EventRelay {
 		nodeName,
 		nodeId,
 		projectId,
+		mode,
 	}: RelayEventMap['node-post-execute']) {
 		void this.eventBus.sendNodeEvent({
 			eventName: 'n8n.node.finished',
@@ -409,6 +431,7 @@ export class LogStreamingEventRelay extends EventRelay {
 				nodeName,
 				nodeId,
 				projectId,
+				mode,
 			},
 		});
 	}
@@ -1130,6 +1153,17 @@ export class LogStreamingEventRelay extends EventRelay {
 	}: RelayEventMap['node-governance-request-rejected']) {
 		void this.eventBus.sendAuditEvent({
 			eventName: 'n8n.audit.node-governance.request.rejected',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernanceSettingsUpdated({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-settings-updated']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.settings.updated',
 			payload: { ...user, ...rest },
 		});
 	}

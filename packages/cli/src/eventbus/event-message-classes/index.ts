@@ -118,6 +118,7 @@ export const eventNamesAudit = [
 	'n8n.audit.node-governance.request.created',
 	'n8n.audit.node-governance.request.approved',
 	'n8n.audit.node-governance.request.rejected',
+	'n8n.audit.node-governance.settings.updated',
 ] as const;
 
 export type EventNamesWorkflowType = (typeof eventNamesWorkflow)[number];

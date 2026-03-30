@@ -254,6 +254,47 @@ export async function getNodeGovernanceStatus(
 	});
 }
 
+// Governance Settings (Default Behavior)
+export interface GovernanceSettings {
+	globalDefault: 'allow' | 'block';
+	projectOverrides: Array<{
+		projectId: string;
+		projectName: string;
+		defaultBehavior: 'allow' | 'block';
+	}>;
+}
+
+export async function getGovernanceSettings(context: IRestApiContext): Promise<GovernanceSettings> {
+	return await makeRestApiRequest(context, 'GET', '/node-governance/settings');
+}
+
+export async function updateGovernanceSettings(
+	context: IRestApiContext,
+	data: { defaultBehavior: 'allow' | 'block' },
+): Promise<GovernanceSettings> {
+	return await makeRestApiRequest(context, 'PATCH', '/node-governance/settings', data);
+}
+
+export async function getProjectGovernanceSettings(
+	context: IRestApiContext,
+	projectId: string,
+): Promise<{ projectId: string; defaultBehavior: 'allow' | 'block' | null }> {
+	return await makeRestApiRequest(context, 'GET', `/node-governance/settings/project/${projectId}`);
+}
+
+export async function updateProjectGovernanceSettings(
+	context: IRestApiContext,
+	projectId: string,
+	data: { defaultBehavior: 'allow' | 'block' | null },
+): Promise<{ projectId: string; defaultBehavior: 'allow' | 'block' | null }> {
+	return await makeRestApiRequest(
+		context,
+		'PATCH',
+		`/node-governance/settings/project/${projectId}`,
+		data,
+	);
+}
+
 // Import/Export
 export async function exportCategories(context: IRestApiContext): Promise<NodeGovernanceExport> {
 	return await makeRestApiRequest(context, 'GET', '/node-governance/export');

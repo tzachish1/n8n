@@ -12,6 +12,7 @@ import { useNodeGovernanceStore } from '../nodeGovernance.store';
 import PoliciesTab from '../components/PoliciesTab.vue';
 import CategoriesTab from '../components/CategoriesTab.vue';
 import RequestsTab from '../components/RequestsTab.vue';
+import SettingsTab from '../components/SettingsTab.vue';
 import { POLICY_FORM_MODAL_KEY, CATEGORY_FORM_MODAL_KEY } from '../nodeGovernance.constants';
 
 const { showError } = useToast();
@@ -22,7 +23,7 @@ const nodeGovernanceStore = useNodeGovernanceStore();
 
 const { loading, pendingRequestCount } = storeToRefs(nodeGovernanceStore);
 
-const activeTab = ref<'policies' | 'categories' | 'requests'>('policies');
+const activeTab = ref<'policies' | 'categories' | 'requests' | 'settings'>('policies');
 
 onMounted(async () => {
 	documentTitle.set(i18n.baseText('nodeGovernance.title'));
@@ -38,7 +39,7 @@ onMounted(async () => {
 	}
 });
 
-function setTab(tab: 'policies' | 'categories' | 'requests') {
+function setTab(tab: 'policies' | 'categories' | 'requests' | 'settings') {
 	activeTab.value = tab;
 }
 
@@ -136,6 +137,13 @@ function onAddCategory() {
 					}}</span>
 				</button>
 				<button
+					:class="[$style.tab, { [$style.tabActive]: activeTab === 'settings' }]"
+					data-test-id="tab-settings"
+					@click="setTab('settings')"
+				>
+					{{ i18n.baseText('nodeGovernance.tabs.settings') }}
+				</button>
+				<button
 					:class="$style.refreshBtn"
 					data-test-id="refresh-button"
 					:title="i18n.baseText('generic.refresh')"
@@ -154,6 +162,7 @@ function onAddCategory() {
 				<PoliciesTab v-if="activeTab === 'policies'" />
 				<CategoriesTab v-if="activeTab === 'categories'" />
 				<RequestsTab v-if="activeTab === 'requests'" />
+				<SettingsTab v-if="activeTab === 'settings'" />
 			</template>
 		</div>
 	</div>
