@@ -127,18 +127,18 @@ export class WorkflowExecutionService {
 		// Case 1: Partial execution to a destination node, and we have enough runData to start the execution.
 		if (isPartialExecution(payload)) {
 			if (this.partialExecutionFulfilsPreconditions(workflowData, payload)) {
-			data = {
-				destinationNode: payload.destinationNode,
-				executionMode: 'manual',
-				runData: payload.runData,
-				pinData: workflowData.pinData,
-				pushRef,
-				workflowData,
-				userId: user.id,
-				projectId,
-				dirtyNodeNames: payload.dirtyNodeNames,
-				agentRequest: payload.agentRequest,
-			};
+				data = {
+					destinationNode: payload.destinationNode,
+					executionMode: 'manual',
+					runData: payload.runData,
+					pinData: workflowData.pinData,
+					pushRef,
+					workflowData,
+					userId: user.id,
+					projectId,
+					dirtyNodeNames: payload.dirtyNodeNames,
+					agentRequest: payload.agentRequest,
+				};
 			} else {
 				payload = upgradeToFullManualExecutionFromUnknownTrigger(payload);
 			}
@@ -291,6 +291,7 @@ export class WorkflowExecutionService {
 			workflowName: workflowData.name,
 			executionId,
 			source: 'chat',
+			projectId: ownerProject?.id,
 		});
 
 		return {
@@ -452,6 +453,7 @@ export class WorkflowExecutionService {
 				workflowName: workflowData.name,
 				executionId,
 				source: 'error',
+				projectId: runningProject.id,
 			});
 		} catch (error) {
 			this.errorReporter.error(error);

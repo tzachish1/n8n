@@ -9,6 +9,8 @@ import {
 	GetNodeGovernanceQueryDto,
 	GetNodeGovernanceBodyDto,
 	ImportCategoriesDto,
+	UpdateGovernanceSettingsDto,
+	UpdateProjectGovernanceSettingsDto,
 } from '@n8n/api-types';
 import { AuthenticatedRequest } from '@n8n/db';
 import {
@@ -98,6 +100,64 @@ export class NodeGovernanceController {
 		}
 
 		return { governance };
+	}
+
+	// === Governance Settings (Default Behavior) ===
+
+	@Get('/settings')
+	@GlobalScope('nodeGovernance:manage')
+	async getGovernanceSettings() {
+		return await this.nodeGovernanceService.getGovernanceSettings();
+	}
+
+	@Patch('/settings')
+	@GlobalScope('nodeGovernance:manage')
+	async updateGovernanceSettings(
+		req: AuthenticatedRequest,
+		_res: Response,
+		@Body payload: UpdateGovernanceSettingsDto,
+	) {
+		await this.nodeGovernanceService.setGlobalDefaultBehavior(payload.defaultBehavior);
+
+		this.eventService.emit('node-governance-settings-updated', {
+			user: toUserLike(req.user),
+			defaultBehavior: payload.defaultBehavior,
+		});
+
+		return await this.nodeGovernanceService.getGovernanceSettings();
+	}
+
+	@Get('/settings/project/:projectId')
+	@GlobalScope('nodeGovernance:manage')
+	async getProjectGovernanceSettings(
+		_req: AuthenticatedRequest,
+		_res: Response,
+		@Param('projectId') projectId: string,
+	) {
+		const defaultBehavior = await this.nodeGovernanceService.getProjectDefaultBehavior(projectId);
+		return { projectId, defaultBehavior };
+	}
+
+	@Patch('/settings/project/:projectId')
+	@GlobalScope('nodeGovernance:manage')
+	async updateProjectGovernanceSettings(
+		req: AuthenticatedRequest,
+		_res: Response,
+		@Param('projectId') projectId: string,
+		@Body payload: UpdateProjectGovernanceSettingsDto,
+	) {
+		await this.nodeGovernanceService.setProjectDefaultBehavior(projectId, payload.defaultBehavior);
+
+		this.eventService.emit('node-governance-settings-updated', {
+			user: toUserLike(req.user),
+			defaultBehavior: payload.defaultBehavior ?? 'inherit',
+			projectId,
+		});
+
+		return {
+			projectId,
+			defaultBehavior: payload.defaultBehavior,
+		};
 	}
 
 	// === Policies ===

@@ -24,7 +24,7 @@ import {
 } from './node-governance-policy';
 import { PolicyProjectAssignment } from './policy-project-assignment';
 import { ProcessedData } from './processed-data';
-import { Project } from './project';
+import { Project, type GovernanceDefaultBehavior } from './project';
 import { ProjectRelation } from './project-relation';
 import { ProjectSecretsProviderAccess } from './project-secrets-provider-access';
 import type { SecretsProviderAccessRole } from './project-secrets-provider-access';
@@ -63,6 +63,7 @@ export {
 	CredentialsEntity,
 	Folder,
 	Project,
+	type GovernanceDefaultBehavior,
 	ProjectRelation,
 	Role,
 	Scope,

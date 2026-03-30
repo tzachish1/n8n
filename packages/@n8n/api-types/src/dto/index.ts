@@ -190,4 +190,6 @@ export {
 	GetNodeGovernanceQueryDto,
 	GetNodeGovernanceBodyDto,
 	ImportCategoriesDto,
+	UpdateGovernanceSettingsDto,
+	UpdateProjectGovernanceSettingsDto,
 } from './node-governance';

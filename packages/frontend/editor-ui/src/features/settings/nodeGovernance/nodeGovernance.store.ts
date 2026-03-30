@@ -7,6 +7,7 @@ import type {
 	NodeCategory,
 	NodeAccessRequest,
 	GovernanceStatus,
+	GovernanceSettings,
 	NodeGovernanceExport,
 	NodeGovernanceImportResult,
 } from './nodeGovernance.api';
@@ -30,6 +31,11 @@ export const useNodeGovernanceStore = defineStore('nodeGovernance', () => {
 	const cachedGlobalPolicies = ref<NodeGovernancePolicy[]>([]);
 	const cachedProjectPolicies = ref<NodeGovernancePolicy[]>([]);
 	const governanceDataLoaded = ref(false);
+
+	// Default behavior settings
+	const globalDefaultBehavior = ref<'allow' | 'block'>('allow');
+	const projectDefaultOverride = ref<'allow' | 'block' | null>(null);
+	const governanceSettings = ref<GovernanceSettings | null>(null);
 
 	// Getters
 	const globalPolicies = computed(() => policies.value.filter((p) => p.scope === 'global'));
@@ -228,31 +234,35 @@ export const useNodeGovernanceStore = defineStore('nodeGovernance', () => {
 		}
 
 		try {
-			// Fetch all data in parallel
 			const [
 				globalPoliciesResponse,
 				projectPoliciesResponse,
 				categoriesResponse,
 				myRequestsResponse,
+				settingsResponse,
+				projectSettingsResponse,
 			] = await Promise.all([
 				nodeGovernanceApi.getGlobalPolicies(rootStore.restApiContext),
 				nodeGovernanceApi.getProjectPolicies(rootStore.restApiContext, projectId),
 				nodeGovernanceApi.getCategories(rootStore.restApiContext),
 				nodeGovernanceApi.getMyRequests(rootStore.restApiContext),
+				nodeGovernanceApi.getGovernanceSettings(rootStore.restApiContext),
+				nodeGovernanceApi.getProjectGovernanceSettings(rootStore.restApiContext, projectId),
 			]);
 
 			cachedGlobalPolicies.value = globalPoliciesResponse.policies;
 			cachedProjectPolicies.value = projectPoliciesResponse.policies;
 			categories.value = categoriesResponse.categories;
 			myRequests.value = myRequestsResponse.requests;
+			governanceSettings.value = settingsResponse;
+			globalDefaultBehavior.value = settingsResponse.globalDefault;
+			projectDefaultOverride.value = projectSettingsResponse.defaultBehavior;
 			currentProjectId.value = projectId;
 			governanceDataLoaded.value = true;
 
-			// Clear the old status cache and rebuild it using local resolution
 			nodeGovernanceStatus.value = {};
 			governanceStatusLoaded.value = true;
 		} catch (e) {
-			// Silently fail - governance is optional
 			console.warn('Failed to fetch governance data:', e);
 		}
 	}
@@ -290,10 +300,9 @@ export const useNodeGovernanceStore = defineStore('nodeGovernance', () => {
 	/**
 	 * Resolve governance status for a single node type locally.
 	 * Uses the same priority logic as the backend:
-	 * Priority: Project ALLOW (1) > Global BLOCK (2) > Global ALLOW (3) > Project BLOCK (4) > Default (allowed)
+	 * Priority: Project ALLOW (1) > Global BLOCK (2) > Global ALLOW (3) > Project BLOCK (4) > Default (configurable)
 	 */
 	function resolveGovernanceForNode(nodeType: string, projectId?: string): GovernanceStatus {
-		// Check cache first
 		const cached = nodeGovernanceStatus.value[nodeType];
 		if (cached !== undefined) {
 			return cached;
@@ -314,7 +323,6 @@ export const useNodeGovernanceStore = defineStore('nodeGovernance', () => {
 
 		const matchingPolicies: PolicyMatch[] = [];
 
-		// Check global policies
 		for (const policy of cachedGlobalPolicies.value) {
 			if (policyMatchesNode(policy, nodeType, nodeCategories)) {
 				matchingPolicies.push({
@@ -324,9 +332,7 @@ export const useNodeGovernanceStore = defineStore('nodeGovernance', () => {
 			}
 		}
 
-		// Check project policies
 		for (const policy of cachedProjectPolicies.value) {
-			// Check if this policy is assigned to the current project
 			const isForThisProject =
 				effectiveProjectId &&
 				policy.projectAssignments?.some((a) => a.projectId === effectiveProjectId);
@@ -338,12 +344,10 @@ export const useNodeGovernanceStore = defineStore('nodeGovernance', () => {
 			}
 		}
 
-		// Sort by priority (lowest = highest priority)
 		matchingPolicies.sort((a, b) => a.priority - b.priority);
 
 		let governanceStatus: GovernanceStatus;
 
-		// Apply highest priority policy
 		if (matchingPolicies.length > 0) {
 			const highestPriorityPolicy = matchingPolicies[0].policy;
 			governanceStatus = {
@@ -351,8 +355,11 @@ export const useNodeGovernanceStore = defineStore('nodeGovernance', () => {
 				category: nodeCategories[0],
 			};
 		} else {
-			// Default: allowed
-			governanceStatus = { status: 'allowed', category: nodeCategories[0] };
+			const effectiveDefault = projectDefaultOverride.value ?? globalDefaultBehavior.value;
+			governanceStatus = {
+				status: effectiveDefault === 'block' ? 'blocked' : 'allowed',
+				category: nodeCategories[0],
+			};
 		}
 
 		// Check for pending request if blocked
@@ -376,9 +383,6 @@ export const useNodeGovernanceStore = defineStore('nodeGovernance', () => {
 		return governanceStatus;
 	}
 
-	/**
-	 * Clear all governance data and reset state.
-	 */
 	function clearGovernanceData() {
 		cachedGlobalPolicies.value = [];
 		cachedProjectPolicies.value = [];
@@ -386,6 +390,40 @@ export const useNodeGovernanceStore = defineStore('nodeGovernance', () => {
 		governanceDataLoaded.value = false;
 		nodeGovernanceStatus.value = {};
 		governanceStatusLoaded.value = false;
+		globalDefaultBehavior.value = 'allow';
+		projectDefaultOverride.value = null;
+		governanceSettings.value = null;
+	}
+
+	async function fetchGovernanceSettings() {
+		const response = await nodeGovernanceApi.getGovernanceSettings(rootStore.restApiContext);
+		governanceSettings.value = response;
+		globalDefaultBehavior.value = response.globalDefault;
+		return response;
+	}
+
+	async function updateGlobalDefaultBehavior(value: 'allow' | 'block') {
+		const response = await nodeGovernanceApi.updateGovernanceSettings(rootStore.restApiContext, {
+			defaultBehavior: value,
+		});
+		governanceSettings.value = response;
+		globalDefaultBehavior.value = response.globalDefault;
+		// Clear cached node statuses so they get re-resolved with the new default
+		nodeGovernanceStatus.value = {};
+		return response;
+	}
+
+	async function updateProjectDefaultBehavior(projectId: string, value: 'allow' | 'block' | null) {
+		const response = await nodeGovernanceApi.updateProjectGovernanceSettings(
+			rootStore.restApiContext,
+			projectId,
+			{ defaultBehavior: value },
+		);
+		if (projectId === currentProjectId.value) {
+			projectDefaultOverride.value = response.defaultBehavior;
+			nodeGovernanceStatus.value = {};
+		}
+		return response;
 	}
 
 	return {
@@ -426,9 +464,16 @@ export const useNodeGovernanceStore = defineStore('nodeGovernance', () => {
 		fetchNodeGovernanceStatus,
 		getGovernanceForNode,
 		clearGovernanceStatus,
-		// New local resolution methods
+		// Local resolution methods
 		fetchGovernanceData,
 		resolveGovernanceForNode,
 		clearGovernanceData,
+		// Governance settings (default behavior)
+		globalDefaultBehavior,
+		projectDefaultOverride,
+		governanceSettings,
+		fetchGovernanceSettings,
+		updateGlobalDefaultBehavior,
+		updateProjectDefaultBehavior,
 	};
 });
