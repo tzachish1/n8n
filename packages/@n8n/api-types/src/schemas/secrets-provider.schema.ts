@@ -5,6 +5,7 @@ import { z } from 'zod';
 // ==========
 
 export const secretsProviderTypeSchema = z.enum([
+	'akeyless',
 	'awsSecretsManager',
 	'gcpSecretsManager',
 	'vault',
