@@ -66,7 +66,7 @@ describe('workflow_success_total', () => {
 		expect(workflowSuccessCounter).toMatchInlineSnapshot(`
 "# HELP workflow_success_total Total number of n8n.workflow.success events.
 # TYPE workflow_success_total counter
-workflow_success_total{workflow_id="1234"} 1"
+workflow_success_total{workflow_id="1234",project_id="unknown"} 1"
 `);
 	});
 
@@ -111,7 +111,7 @@ workflow_success_total{workflow_id="1234"} 1"
 		expect(workflowSuccessCounter).toMatchInlineSnapshot(`
 "# HELP workflow_success_total Total number of n8n.workflow.success events.
 # TYPE workflow_success_total counter
-workflow_success_total{workflow_name="wf_1234"} 1"
+workflow_success_total{workflow_name="wf_1234",project_id="unknown"} 1"
 `);
 	});
 
@@ -156,7 +156,7 @@ workflow_success_total{workflow_name="wf_1234"} 1"
 		expect(workflowSuccessCounter).toMatchInlineSnapshot(`
 "# HELP workflow_success_total Total number of n8n.workflow.success events.
 # TYPE workflow_success_total counter
-workflow_success_total{execution_mode="manual"} 1"
+workflow_success_total{execution_mode="manual",project_id="unknown"} 1"
 `);
 	});
 
