@@ -5,6 +5,7 @@ import { computed } from 'vue';
 import infisical from '../assets/images/infisical.webp';
 import doppler from '../assets/images/doppler.webp';
 import vault from '../assets/images/hashicorp.webp';
+import Akeyless from '../assets/images/akeyless.svg';
 import AwsSecretsManager from '../assets/images/aws-secrets-manager.svg';
 import AzureKeyVault from '../assets/images/azure-key-vault.svg';
 import GcpSecretsManager from '../assets/images/gcp-secrets-manager.svg';
@@ -18,7 +19,8 @@ const image = computed(() => ({ doppler, infisical, vault })[provider.name]);
 </script>
 
 <template>
-	<AwsSecretsManager v-if="provider.name === 'awsSecretsManager'" />
+	<Akeyless v-if="provider.name === 'akeyless'" />
+	<AwsSecretsManager v-else-if="provider.name === 'awsSecretsManager'" />
 	<AzureKeyVault v-else-if="provider.name === 'azureKeyVault'" />
 	<GcpSecretsManager v-else-if="provider.name === 'gcpSecretsManager'" />
 	<OnePassword v-else-if="provider.name === 'onePassword'" />
