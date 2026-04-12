@@ -6,12 +6,14 @@ import { AzureKeyVault } from './providers/azure-key-vault/azure-key-vault';
 import { GcpSecretsManager } from './providers/gcp-secrets-manager/gcp-secrets-manager';
 import { InfisicalProvider } from './providers/infisical';
 import { OnePasswordProvider } from './providers/one-password';
+import { AkeylessProvider } from './providers/akeyless';
 import { VaultProvider } from './providers/vault';
 import type { SecretsProvider } from './types';
 
 @Service()
 export class ExternalSecretsProviders {
 	providers: Record<string, { new (): SecretsProvider }> = {
+		akeyless: AkeylessProvider,
 		awsSecretsManager: AwsSecretsManager,
 		infisical: InfisicalProvider,
 		vault: VaultProvider,
