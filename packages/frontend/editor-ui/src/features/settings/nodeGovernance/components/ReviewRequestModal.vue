@@ -8,6 +8,7 @@ import { storeToRefs } from 'pinia';
 import { N8nButton, N8nInput, N8nText, N8nSelect, N8nOption } from '@n8n/design-system';
 import Modal from '@/app/components/Modal.vue';
 import { useNodeGovernanceStore } from '../nodeGovernance.store';
+import type { NodeAccessRequest } from '../nodeGovernance.api';
 import { REVIEW_REQUEST_MODAL_KEY } from '../nodeGovernance.constants';
 
 const { showError, showMessage } = useToast();
@@ -23,7 +24,10 @@ const selectedPolicyId = ref<string | null>(null);
 const createNewPolicy = ref(true);
 
 const modalData = computed(
-	() => (uiStore.modalsById[REVIEW_REQUEST_MODAL_KEY]?.data ?? {}) as Record<string, any>,
+	() =>
+		(uiStore.modalsById[REVIEW_REQUEST_MODAL_KEY]?.data ?? {}) as {
+			request?: NodeAccessRequest;
+		},
 );
 const request = computed(() => modalData.value.request);
 const modalTitle = computed(() => i18n.baseText('nodeGovernance.requests.review.title'));
