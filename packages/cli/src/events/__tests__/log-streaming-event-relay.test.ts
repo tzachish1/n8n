@@ -1891,6 +1891,8 @@ describe('LogStreamingEventRelay', () => {
 					workflowName: 'Manual Test Workflow',
 					executionId: 'exec-manual-123',
 					source: 'user-manual',
+					mode: 'manual',
+					projectId: undefined,
 				},
 			});
 		});
@@ -1963,6 +1965,8 @@ describe('LogStreamingEventRelay', () => {
 					workflowName: 'Retry Test Workflow',
 					executionId: 'exec-retry-456',
 					source: 'user-retry',
+					mode: 'retry',
+					projectId: undefined,
 				},
 			});
 		});
@@ -1984,6 +1988,8 @@ describe('LogStreamingEventRelay', () => {
 					workflowName: 'Webhook Test Workflow',
 					executionId: 'exec-webhook-123',
 					source: 'webhook',
+					mode: 'webhook',
+					projectId: undefined,
 				},
 			});
 		});
@@ -2005,6 +2011,8 @@ describe('LogStreamingEventRelay', () => {
 					workflowName: 'Trigger Test Workflow',
 					executionId: 'exec-trigger-123',
 					source: 'trigger',
+					mode: 'trigger',
+					projectId: undefined,
 				},
 			});
 		});
@@ -2026,6 +2034,8 @@ describe('LogStreamingEventRelay', () => {
 					workflowName: 'Error Test Workflow',
 					executionId: 'exec-error-123',
 					source: 'error',
+					mode: 'error',
+					projectId: undefined,
 				},
 			});
 		});
@@ -2051,6 +2061,8 @@ describe('LogStreamingEventRelay', () => {
 					workflowName: 'CLI Test Workflow',
 					executionId: 'exec-cli-123',
 					source: 'cli',
+					mode: 'cli',
+					projectId: undefined,
 				},
 			});
 		});
@@ -2076,6 +2088,8 @@ describe('LogStreamingEventRelay', () => {
 					workflowName: 'Integrated Test Workflow',
 					executionId: 'exec-integrated-123',
 					source: 'integrated',
+					mode: 'integrated',
+					projectId: undefined,
 				},
 			});
 		});
@@ -2101,6 +2115,8 @@ describe('LogStreamingEventRelay', () => {
 					workflowName: 'Evaluation Test Workflow',
 					executionId: 'exec-evaluation-123',
 					source: 'evaluation',
+					mode: 'internal',
+					projectId: undefined,
 				},
 			});
 		});
@@ -2126,6 +2142,8 @@ describe('LogStreamingEventRelay', () => {
 					workflowName: 'Chat Test Workflow',
 					executionId: 'exec-chat-123',
 					source: 'chat',
+					mode: 'manual',
+					projectId: undefined,
 				},
 			});
 		});
