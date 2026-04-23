@@ -27,7 +27,7 @@ const selectedNodes = ref<Set<string>>(new Set());
 
 // Get category ID from modal data
 const modalData = computed(
-	() => (uiStore.modalsById[CATEGORY_NODES_MODAL_KEY]?.data ?? {}) as Record<string, any>,
+	() => (uiStore.modalsById[CATEGORY_NODES_MODAL_KEY]?.data ?? {}) as Record<string, unknown>,
 );
 const categoryId = computed(() => modalData.value.category?.id);
 

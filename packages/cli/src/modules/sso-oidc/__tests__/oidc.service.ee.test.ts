@@ -421,7 +421,7 @@ describe('OidcService', () => {
 			const storedNonce = oidcService.generateNonce().signed;
 
 			await expect(oidcService.loginUser(callbackUrl, storedState, storedNonce)).rejects.toThrow(
-				new BadRequestError('Invalid token'),
+				new BadRequestError('Invalid token - could not retrieve user info'),
 			);
 		});
 
@@ -621,6 +621,8 @@ describe('OidcService', () => {
 			provisioningService.getConfig = jest.fn().mockResolvedValue({
 				scopesInstanceRoleClaimName: 'n8n_instance_role',
 				scopesProjectsRolesClaimName: 'n8n_projects',
+				scopesProvisionInstanceRole: true,
+				scopesProvisionProjectRoles: false,
 			});
 			provisioningService.provisionInstanceRoleForUser = jest.fn().mockResolvedValue(undefined);
 			authIdentityRepository.findOne = jest.fn().mockResolvedValue({ user });

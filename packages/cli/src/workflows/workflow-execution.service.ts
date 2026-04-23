@@ -291,7 +291,7 @@ export class WorkflowExecutionService {
 			workflowName: workflowData.name,
 			executionId,
 			source: 'chat',
-			projectId: ownerProject?.id,
+			projectId: project.id,
 		});
 
 		return {

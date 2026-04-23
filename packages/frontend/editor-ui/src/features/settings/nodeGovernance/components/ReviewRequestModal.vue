@@ -23,7 +23,7 @@ const selectedPolicyId = ref<string | null>(null);
 const createNewPolicy = ref(true);
 
 const modalData = computed(
-	() => (uiStore.modalsById[REVIEW_REQUEST_MODAL_KEY]?.data ?? {}) as Record<string, any>,
+	() => (uiStore.modalsById[REVIEW_REQUEST_MODAL_KEY]?.data ?? {}) as Record<string, unknown>,
 );
 const request = computed(() => modalData.value.request);
 const modalTitle = computed(() => i18n.baseText('nodeGovernance.requests.review.title'));

@@ -406,7 +406,7 @@ export class WorkflowService {
 					user.id,
 				);
 
-				if (validation.hasBlockedNodes) {
+				if (validation?.hasBlockedNodes) {
 					const blockedNodeNames = validation.blockedNodes
 						.map((n) => n.nodeName || n.nodeType)
 						.join(', ');

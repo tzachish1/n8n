@@ -29,7 +29,7 @@ const projectIds = ref<string[]>([]);
 
 const modalState = computed(() => uiStore.modalsById[POLICY_FORM_MODAL_KEY]);
 const isOpen = computed(() => modalState.value?.open ?? false);
-const modalData = computed(() => (modalState.value?.data ?? {}) as Record<string, any>);
+const modalData = computed(() => (modalState.value?.data ?? {}) as Record<string, unknown>);
 const isEdit = computed(() => modalData.value.policy !== undefined);
 const modalTitle = computed(() =>
 	isEdit.value
