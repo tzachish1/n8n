@@ -10,6 +10,7 @@ import { N8nButton, N8nInput, N8nText, N8nIcon, N8nCheckbox } from '@n8n/design-
 import Modal from '@/app/components/Modal.vue';
 import NodeIcon from '@/app/components/NodeIcon.vue';
 import { useNodeGovernanceStore } from '../nodeGovernance.store';
+import type { NodeCategory } from '../nodeGovernance.api';
 import { CATEGORY_NODES_MODAL_KEY } from '../nodeGovernance.constants';
 
 const { showError, showMessage } = useToast();
@@ -27,7 +28,10 @@ const selectedNodes = ref<Set<string>>(new Set());
 
 // Get category ID from modal data
 const modalData = computed(
-	() => (uiStore.modalsById[CATEGORY_NODES_MODAL_KEY]?.data ?? {}) as Record<string, any>,
+	() =>
+		(uiStore.modalsById[CATEGORY_NODES_MODAL_KEY]?.data ?? {}) as {
+			category?: NodeCategory;
+		},
 );
 const categoryId = computed(() => modalData.value.category?.id);
 

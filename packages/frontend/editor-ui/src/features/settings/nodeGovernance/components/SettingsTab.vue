@@ -40,7 +40,7 @@ onBeforeMount(async () => {
 		]);
 		teamProjects.value = (projectsStore.teamProjects ?? []).map((p) => ({
 			id: p.id,
-			name: p.name,
+			name: p.name ?? '',
 		}));
 		projectOverrides.value = settings.projectOverrides;
 	} catch (e) {

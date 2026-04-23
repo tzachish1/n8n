@@ -28,7 +28,6 @@ export class OidcController {
 		private readonly globalConfig: GlobalConfig,
 		private readonly logger: Logger,
 		private readonly instanceSettingsLoaderConfig: InstanceSettingsLoaderConfig,
-		private readonly eventService: EventService,
 	) {}
 
 	@Get('/config')

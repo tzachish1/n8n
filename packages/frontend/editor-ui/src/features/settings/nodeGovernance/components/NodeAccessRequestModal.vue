@@ -4,7 +4,7 @@ import { useToast } from '@/app/composables/useToast';
 import { useI18n } from '@n8n/i18n';
 import { useUIStore } from '@/app/stores/ui.store';
 import { useProjectsStore } from '@/features/collaboration/projects/projects.store';
-import { useWorkflowsStore } from '@/app/stores/workflows.store';
+import { injectWorkflowDocumentStore } from '@/app/stores/workflowDocument.store';
 
 import { N8nButton, N8nInput, N8nSelect, N8nOption, N8nText, N8nBadge } from '@n8n/design-system';
 import Modal from '@/app/components/Modal.vue';
@@ -15,7 +15,7 @@ const { showError, showMessage } = useToast();
 const i18n = useI18n();
 const uiStore = useUIStore();
 const projectsStore = useProjectsStore();
-const workflowsStore = useWorkflowsStore();
+const workflowDocumentStore = injectWorkflowDocumentStore();
 const nodeGovernanceStore = useNodeGovernanceStore();
 
 const loading = ref(false);
@@ -24,13 +24,13 @@ const justification = ref('');
 const workflowName = ref('');
 
 const modalData = computed(
-	() => (uiStore.modalsById[NODE_ACCESS_REQUEST_MODAL_KEY]?.data ?? {}) as Record<string, any>,
+	() => (uiStore.modalsById[NODE_ACCESS_REQUEST_MODAL_KEY]?.data ?? {}) as Record<string, unknown>,
 );
 const nodeType = computed(() => (modalData.value.nodeType ?? '') as string);
 const displayName = computed(() => modalData.value.displayName ?? nodeType.value);
 
 const projects = computed(() => projectsStore.myProjects ?? []);
-const currentWorkflowName = computed(() => workflowsStore.workflowName);
+const currentWorkflowName = computed(() => workflowDocumentStore.value?.name);
 
 watch(
 	() => uiStore.modalsById[NODE_ACCESS_REQUEST_MODAL_KEY]?.open,

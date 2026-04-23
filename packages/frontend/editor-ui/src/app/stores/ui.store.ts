@@ -83,6 +83,8 @@ import {
 	CATEGORY_FORM_MODAL_KEY,
 	CATEGORY_NODES_MODAL_KEY,
 	REVIEW_REQUEST_MODAL_KEY,
+	APPROVE_REQUEST_MODAL_KEY,
+	REJECT_REQUEST_MODAL_KEY,
 } from '@/features/settings/nodeGovernance/nodeGovernance.constants';
 import { STORES } from '@n8n/stores';
 import type {
@@ -191,6 +193,8 @@ export const useUIStore = defineStore(STORES.UI, () => {
 				CATEGORY_FORM_MODAL_KEY,
 				CATEGORY_NODES_MODAL_KEY,
 				REVIEW_REQUEST_MODAL_KEY,
+				APPROVE_REQUEST_MODAL_KEY,
+				REJECT_REQUEST_MODAL_KEY,
 			].map((modalKey) => [modalKey, { open: false }]),
 		),
 		[DELETE_USER_MODAL_KEY]: {

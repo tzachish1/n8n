@@ -8,7 +8,7 @@ import {
 	ProjectRepository,
 	SettingsRepository,
 } from '@n8n/db';
-import type { NodeGovernancePolicy, PolicyProjectAssignment, Settings } from '@n8n/db';
+import type { NodeGovernancePolicy, PolicyProjectAssignment, Project, Settings } from '@n8n/db';
 import { Container } from '@n8n/di';
 import { mock } from 'jest-mock-extended';
 
@@ -38,7 +38,7 @@ describe('NodeGovernanceService', () => {
 			mock<Settings>({ key: 'governance.defaultBehavior', value: '"allow"' }),
 		);
 		projectRepository.findOneBy.mockResolvedValue(
-			mock({ id: projectId, governanceDefaultBehavior: null }),
+			mock<Project>({ id: projectId, governanceDefaultBehavior: null }),
 		);
 	});
 
@@ -221,7 +221,7 @@ describe('NodeGovernanceService', () => {
 				mock<Settings>({ key: 'governance.defaultBehavior', value: '"allow"' }),
 			);
 			projectRepository.findOneBy.mockResolvedValue(
-				mock({ id: projectId, governanceDefaultBehavior: 'block' }),
+				mock<Project>({ id: projectId, governanceDefaultBehavior: 'block' }),
 			);
 			policyRepository.findGlobalPolicies.mockResolvedValue([]);
 			policyRepository.findByProjectIds.mockResolvedValue([]);
@@ -236,7 +236,7 @@ describe('NodeGovernanceService', () => {
 				mock<Settings>({ key: 'governance.defaultBehavior', value: '"block"' }),
 			);
 			projectRepository.findOneBy.mockResolvedValue(
-				mock({ id: projectId, governanceDefaultBehavior: null }),
+				mock<Project>({ id: projectId, governanceDefaultBehavior: null }),
 			);
 			policyRepository.findGlobalPolicies.mockResolvedValue([]);
 			policyRepository.findByProjectIds.mockResolvedValue([]);

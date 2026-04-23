@@ -212,6 +212,7 @@ describe('WorkflowService', () => {
 				mock(), // workflowPublishHistoryRepository
 				mock(), // workflowValidationService
 				mock(), // nodeTypes
+				mock(), // nodeGovernanceService
 				mock(), // webhookService
 				licenseStateMock, // licenseState
 				mock(), // projectRepository

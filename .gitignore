@@ -70,3 +70,29 @@ packages/cli/src/commands/export/outputs
 .n8n
 lefthook-local.yml
 .playwright-mcp
+
+# Local build / docker experiment logs
+# Broad catch-all (covers build-pack.log, dockerize-n8n.log, docker-build.log,
+# lint.log, typecheck.log and anything else step 8/9 of CUSTOMS.md emits).
+# Safe because no tracked files end in .log.
+*.log
+*.logtail
+# Kept for documentation of historical naming patterns; redundant under *.log.
+/build-*.log
+/docker-build-*.log
+/pnpm-install-*.log
+/typecheck-*.log
+/lint-*.log
+/lintfix-*.log
+/eslint-*.log
+/test-*.log
+**/lint-by-pkg.log
+
+# Personal Cursor IDE scope (kept local-only; not part of the fork).
+/.cursorignore
+
+# Project-local pnpm content-addressable store (build artefact, never commit).
+/.pnpm-store/
+
+# Local smoke scripts (not for commit)
+/test-akeyless-live.ts

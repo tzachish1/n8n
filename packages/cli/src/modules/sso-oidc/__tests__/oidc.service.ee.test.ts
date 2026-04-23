@@ -422,7 +422,7 @@ describe('OidcService', () => {
 
 			const promise = oidcService.loginUser(callbackUrl, storedState, storedNonce);
 			await expect(promise).rejects.toThrow(BadRequestError);
-			await expect(promise).rejects.toThrow('Invalid token');
+			await expect(promise).rejects.toThrow('Invalid token - could not retrieve user info');
 		});
 
 		it('throws an error if there is no email', async () => {
@@ -623,6 +623,8 @@ describe('OidcService', () => {
 			provisioningService.getConfig = jest.fn().mockResolvedValue({
 				scopesInstanceRoleClaimName: 'n8n_instance_role',
 				scopesProjectsRolesClaimName: 'n8n_projects',
+				scopesProvisionInstanceRole: true,
+				scopesProvisionProjectRoles: false,
 			});
 			provisioningService.provisionInstanceRoleForUser = jest.fn().mockResolvedValue(undefined);
 			authIdentityRepository.findOne = jest.fn().mockResolvedValue({ user });

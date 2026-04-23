@@ -903,18 +903,13 @@ export class OidcService {
 
 		const proxyFetch = this.createProxyAwareFetch();
 
-		const discoveryOptions: Record<symbol, unknown> = {};
-		if (proxyFetch) {
-			discoveryOptions[this.openidClient.customFetch] = proxyFetch;
-		}
-
-		const configuration = await this.openidClient.discovery(
-			discoveryUrl,
-			clientId,
-			clientSecret,
-			undefined,
-			discoveryOptions,
-		);
+		// When no proxy is configured, preserve the upstream 3-argument discovery
+		// call shape so upstream tests and behaviour are unchanged.
+		const configuration = proxyFetch
+			? await this.openidClient.discovery(discoveryUrl, clientId, clientSecret, undefined, {
+					[this.openidClient.customFetch]: proxyFetch,
+				})
+			: await this.openidClient.discovery(discoveryUrl, clientId, clientSecret);
 
 		if (proxyFetch) {
 			(configuration as unknown as Record<symbol, unknown>)[this.openidClient.customFetch] =

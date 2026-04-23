@@ -2,7 +2,7 @@ import { Logger } from '@n8n/backend-common';
 import { Container } from '@n8n/di';
 import type { AxiosInstance } from 'axios';
 import axios from 'axios';
-import type { IDataObject, INodeProperties } from 'n8n-workflow';
+import { jsonParse, type IDataObject, type INodeProperties } from 'n8n-workflow';
 
 import { DOCS_HELP_NOTICE } from '../constants';
 import type { SecretsProviderSettings } from '../types';
@@ -172,19 +172,15 @@ export class AkeylessProvider extends SecretsProvider {
 						(config as unknown as { __isRetry: boolean }).__isRetry = true;
 						this.logger.debug('Token expired, re-authenticating and retrying request');
 
-						try {
-							this.#currentToken = await this.authenticate();
-							const data =
-								typeof config.data === 'string'
-									? (JSON.parse(config.data) as Record<string, unknown>)
-									: (config.data as Record<string, unknown>);
-							data.token = this.#currentToken;
-							config.data = JSON.stringify(data);
+						this.#currentToken = await this.authenticate();
+						const data =
+							typeof config.data === 'string'
+								? jsonParse<Record<string, unknown>>(config.data)
+								: (config.data as Record<string, unknown>);
+						data.token = this.#currentToken;
+						config.data = JSON.stringify(data);
 
-							return await this.#http.request(config);
-						} catch (retryError) {
-							throw retryError;
-						}
+						return await this.#http.request(config);
 					}
 				}
 				throw error;

@@ -8,6 +8,7 @@ import { storeToRefs } from 'pinia';
 import { useProjectsStore } from '@/features/collaboration/projects/projects.store';
 import type { ProjectSharingData } from '@/features/collaboration/projects/projects.types';
 import ProjectSharing from '@/features/collaboration/projects/components/ProjectSharing.vue';
+import { useAvailableProjectSearch } from '@/features/collaboration/projects/projects.utils';
 
 import {
 	N8nActionBox,
@@ -34,6 +35,7 @@ const i18n = useI18n();
 const uiStore = useUIStore();
 const nodeGovernanceStore = useNodeGovernanceStore();
 const projectsStore = useProjectsStore();
+const projectSearchFn = useAvailableProjectSearch();
 
 const { policies, categories } = storeToRefs(nodeGovernanceStore);
 
@@ -358,7 +360,7 @@ function getNodeCount(policy: NodeGovernancePolicy): number {
 									/>
 									<ProjectSharing
 										v-model="selectedProject"
-										:projects="projectsStore.availableProjects"
+										:search-fn="projectSearchFn"
 										:placeholder="
 											i18n.baseText('nodeGovernance.policies.filters.project.placeholder')
 										"
