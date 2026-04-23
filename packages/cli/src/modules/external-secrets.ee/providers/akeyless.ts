@@ -24,7 +24,8 @@ interface AkeylessListItem {
 
 interface AkeylessListItemsResponse {
 	items: AkeylessListItem[] | null;
-	'pagination-token'?: string;
+	folders?: string[];
+	next_page?: string;
 }
 
 export class AkeylessProvider extends SecretsProvider {
@@ -105,7 +106,7 @@ export class AkeylessProvider extends SecretsProvider {
 
 	private static readonly TOKEN_REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
-	private cachedSecrets: Record<string, IDataObject> = {};
+	private cachedSecrets: Record<string, string | IDataObject> = {};
 
 	private settings: AkeylessSettings;
 
@@ -320,7 +321,7 @@ export class AkeylessProvider extends SecretsProvider {
 		);
 		const rotatedItems = normalizedItems.filter((i) => i.item_type === 'key');
 
-		const secrets: Record<string, IDataObject> = {};
+		const secrets: Record<string, string | IDataObject> = {};
 
 		if (staticItems.length > 0) {
 			const staticValues = await this.fetchStaticSecrets(staticItems.map((i) => i.item_name));
@@ -338,61 +339,70 @@ export class AkeylessProvider extends SecretsProvider {
 
 	private async listAllItems(): Promise<AkeylessListItem[]> {
 		const allItems: AkeylessListItem[] = [];
-		let paginationToken: string | undefined;
+		const pathQueue: string[] = [this.settings.path || '/'];
 
-		do {
-			const body: Record<string, unknown> = {
-				token: this.#currentToken,
-				path: this.settings.path || '/',
-			};
+		while (pathQueue.length > 0) {
+			const currentPath = pathQueue.shift()!;
+			let paginationToken: string | undefined;
 
-			if (paginationToken) {
-				body['pagination-token'] = paginationToken;
-			}
+			for (;;) {
+				const body: Record<string, unknown> = {
+					token: this.#currentToken,
+					path: currentPath,
+					'minimal-view': true,
+					'auto-pagination': 'enabled',
+				};
 
-			try {
-				const resp = await this.#http.post<AkeylessListItemsResponse>('list-items', body);
-				const items = resp.data.items;
-
-				if (items && items.length > 0) {
-					allItems.push(...items);
+				if (paginationToken) {
+					body['pagination-token'] = paginationToken;
 				}
 
-				paginationToken = resp.data['pagination-token'] || undefined;
-			} catch (e) {
-				this.logger.error('Failed to list items from Akeyless', {
-					error: e instanceof Error ? e.message : String(e),
-				});
-				break;
+				try {
+					const resp = await this.#http.post<AkeylessListItemsResponse>('list-items', body);
+
+					const items = resp.data.items;
+					const folders = resp.data.folders;
+					const hasItems = items && items.length > 0;
+					const hasFolders = folders && folders.length > 0;
+
+					if (!hasItems && !hasFolders) break;
+
+					if (hasItems) {
+						allItems.push(...items);
+					}
+
+					if (hasFolders) {
+						pathQueue.push(...folders);
+					}
+
+					paginationToken = resp.data.next_page || undefined;
+					if (!paginationToken) break;
+				} catch (e) {
+					this.logger.error('Failed to list items from Akeyless', {
+						error: e instanceof Error ? e.message : String(e),
+						path: currentPath,
+					});
+					break;
+				}
 			}
-		} while (paginationToken);
+		}
 
 		this.logger.debug(`Akeyless provider discovered ${allItems.length} items`);
 		return allItems;
 	}
 
-	private async fetchStaticSecrets(names: string[]): Promise<Record<string, IDataObject>> {
+	private async fetchStaticSecrets(names: string[]): Promise<Record<string, string>> {
 		try {
 			const resp = await this.#http.post<Record<string, unknown>>('get-secret-value', {
 				token: this.#currentToken,
 				names,
 			});
 
-			const result: Record<string, IDataObject> = {};
+			const result: Record<string, string> = {};
 
 			for (const [fullPath, value] of Object.entries(resp.data)) {
 				const key = this.stripBasePath(fullPath);
-				if (typeof value === 'string') {
-					try {
-						result[key] = JSON.parse(value) as IDataObject;
-					} catch {
-						result[key] = { value } as unknown as IDataObject;
-					}
-				} else if (typeof value === 'object' && value !== null) {
-					result[key] = value as IDataObject;
-				} else {
-					result[key] = { value } as unknown as IDataObject;
-				}
+				result[key] = typeof value === 'string' ? value : JSON.stringify(value);
 			}
 
 			this.logger.debug(`Akeyless provider fetched ${Object.keys(result).length} static secrets`);
@@ -405,7 +415,9 @@ export class AkeylessProvider extends SecretsProvider {
 		}
 	}
 
-	private async fetchRotatedSecrets(names: string[]): Promise<Record<string, IDataObject>> {
+	private async fetchRotatedSecrets(
+		names: string[],
+	): Promise<Record<string, string | IDataObject>> {
 		const results = await Promise.allSettled(
 			names.map(async (name): Promise<[string, IDataObject] | null> => {
 				try {
@@ -434,7 +446,7 @@ export class AkeylessProvider extends SecretsProvider {
 			}),
 		);
 
-		const secrets: Record<string, IDataObject> = {};
+		const secrets: Record<string, string | IDataObject> = {};
 		for (const result of results) {
 			if (result.status === 'fulfilled' && result.value !== null) {
 				const [key, value] = result.value;
@@ -461,7 +473,7 @@ export class AkeylessProvider extends SecretsProvider {
 		return fullPath;
 	}
 
-	getSecret(name: string): IDataObject {
+	getSecret(name: string): string | IDataObject {
 		return this.cachedSecrets[name];
 	}
 

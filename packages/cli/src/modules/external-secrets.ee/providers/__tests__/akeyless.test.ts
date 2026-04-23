@@ -96,7 +96,7 @@ describe('AkeylessProvider', () => {
 				.post('/api/v2/list-items', (body: Record<string, unknown>) => {
 					return body.token === 't-temp-token-from-auth';
 				})
-				.reply(200, { items: [], 'pagination-token': '' });
+				.reply(200, { items: [], next_page: '' });
 
 			await provider.connect();
 
@@ -126,7 +126,7 @@ describe('AkeylessProvider', () => {
 				.post('/api/v2/list-items', (body: Record<string, unknown>) => {
 					return body.token === 't-test-token-123';
 				})
-				.reply(200, { items: [], 'pagination-token': '' });
+				.reply(200, { items: [], next_page: '' });
 
 			await provider.connect();
 
@@ -161,7 +161,7 @@ describe('AkeylessProvider', () => {
 		async function connectWithToken(provider: AkeylessProvider) {
 			const scope = nock(AKEYLESS_BASE_URL)
 				.post('/api/v2/list-items')
-				.reply(200, { items: [], 'pagination-token': '' });
+				.reply(200, { items: [], next_page: '' });
 			await provider.connect();
 			scope.done();
 		}
@@ -178,7 +178,7 @@ describe('AkeylessProvider', () => {
 						{ item_name: '/db-password', item_type: 'static-secret' },
 						{ item_name: '/api-key', item_type: 'static-secret' },
 					],
-					'pagination-token': '',
+					next_page: '',
 				})
 				.post('/api/v2/get-secret-value', (body: Record<string, unknown>) => {
 					const names = body.names as string[];
@@ -193,8 +193,8 @@ describe('AkeylessProvider', () => {
 
 			expect(provider.hasSecret('db-password')).toBe(true);
 			expect(provider.hasSecret('api-key')).toBe(true);
-			expect(provider.getSecret('db-password')).toEqual({ value: 'hunter2' });
-			expect(provider.getSecret('api-key')).toEqual({ value: 'sk-abc123' });
+			expect(provider.getSecret('db-password')).toBe('hunter2');
+			expect(provider.getSecret('api-key')).toBe('sk-abc123');
 			expect(provider.getSecretNames()).toEqual(expect.arrayContaining(['db-password', 'api-key']));
 			scope.done();
 		});
@@ -206,7 +206,7 @@ describe('AkeylessProvider', () => {
 			const connectAuthScope = mockAuthEndpoint();
 			const connectListScope = nock(AKEYLESS_BASE_URL)
 				.post('/api/v2/list-items')
-				.reply(200, { items: [], 'pagination-token': '' });
+				.reply(200, { items: [], next_page: '' });
 			await provider.connect();
 			connectAuthScope.done();
 			connectListScope.done();
@@ -218,7 +218,7 @@ describe('AkeylessProvider', () => {
 				})
 				.reply(200, {
 					items: [{ item_name: '/secret', item_type: 'static-secret' }],
-					'pagination-token': '',
+					next_page: '',
 				});
 			const getScope = nock(AKEYLESS_BASE_URL)
 				.post('/api/v2/get-secret-value')
@@ -242,7 +242,7 @@ describe('AkeylessProvider', () => {
 				.post('/api/v2/list-items')
 				.reply(200, {
 					items: [{ item_name: '/db-creds', item_type: 'key' }],
-					'pagination-token': '',
+					next_page: '',
 				})
 				.post('/api/v2/rotated-secret-get-value', (body: Record<string, unknown>) => {
 					return body.name === '/db-creds';
@@ -273,7 +273,7 @@ describe('AkeylessProvider', () => {
 						{ item_name: '/static-secret', item_type: 'static-secret' },
 						{ item_name: '/rotated-creds', item_type: 'key' },
 					],
-					'pagination-token': '',
+					next_page: '',
 				})
 				.post('/api/v2/get-secret-value')
 				.reply(200, { '/static-secret': 'my-value' })
@@ -284,7 +284,7 @@ describe('AkeylessProvider', () => {
 
 			expect(provider.hasSecret('static-secret')).toBe(true);
 			expect(provider.hasSecret('rotated-creds')).toBe(true);
-			expect(provider.getSecret('static-secret')).toEqual({ value: 'my-value' });
+			expect(provider.getSecret('static-secret')).toBe('my-value');
 			expect(provider.getSecret('rotated-creds')).toEqual({ user: 'svc', pass: 'p@ss' });
 			scope.done();
 		});
@@ -300,15 +300,20 @@ describe('AkeylessProvider', () => {
 				})
 				.reply(200, {
 					items: [{ item_name: '/secret-1', item_type: 'static-secret' }],
-					'pagination-token': 'page-2-token',
+					next_page: 'page-2-token',
 				})
 				.post('/api/v2/list-items', (body: Record<string, unknown>) => {
 					return body['pagination-token'] === 'page-2-token';
 				})
 				.reply(200, {
 					items: [{ item_name: '/secret-2', item_type: 'static-secret' }],
-					'pagination-token': '',
+					next_page: 'page-3-token',
 				})
+				// Empty response signals end of pagination
+				.post('/api/v2/list-items', (body: Record<string, unknown>) => {
+					return body['pagination-token'] === 'page-3-token';
+				})
+				.reply(200, {})
 				.post('/api/v2/get-secret-value')
 				.reply(200, {
 					'/secret-1': 'value-1',
@@ -322,13 +327,83 @@ describe('AkeylessProvider', () => {
 			scope.done();
 		});
 
+		it('should discover secrets in subfolders via recursive folder traversal', async () => {
+			const provider = new AkeylessProvider(logger);
+			await provider.init(akeylessSettingsWithPath);
+
+			const connectScope = nock(AKEYLESS_BASE_URL)
+				.post('/api/v2/list-items')
+				.reply(200, { items: [], next_page: '' });
+			await provider.connect();
+			connectScope.done();
+
+			const scope = nock(AKEYLESS_BASE_URL)
+				// Page 1 for base path: items + subfolders + next_page (always present)
+				.post('/api/v2/list-items', (body: Record<string, unknown>) => {
+					return body.path === '/myapp/prod/' && !body['pagination-token'];
+				})
+				.reply(200, {
+					items: [{ item_name: '/myapp/prod/db-password', item_type: 'static-secret' }],
+					folders: ['/myapp/prod/auth/', '/myapp/prod/services/'],
+					next_page: 'base-page-2',
+				})
+				// Page 2 for base path: empty response = done with this path
+				.post('/api/v2/list-items', (body: Record<string, unknown>) => {
+					return body.path === '/myapp/prod/' && body['pagination-token'] === 'base-page-2';
+				})
+				.reply(200, {})
+				// Subfolder /myapp/prod/auth/: returns items
+				.post('/api/v2/list-items', (body: Record<string, unknown>) => {
+					return body.path === '/myapp/prod/auth/' && !body['pagination-token'];
+				})
+				.reply(200, {
+					items: [{ item_name: '/myapp/prod/auth/token', item_type: 'static-secret' }],
+					next_page: 'auth-page-2',
+				})
+				// Empty follow-up for auth folder
+				.post('/api/v2/list-items', (body: Record<string, unknown>) => {
+					return body.path === '/myapp/prod/auth/' && body['pagination-token'] === 'auth-page-2';
+				})
+				.reply(200, {})
+				// Subfolder /myapp/prod/services/: returns items
+				.post('/api/v2/list-items', (body: Record<string, unknown>) => {
+					return body.path === '/myapp/prod/services/' && !body['pagination-token'];
+				})
+				.reply(200, {
+					items: [{ item_name: '/myapp/prod/services/api-key', item_type: 'static-secret' }],
+					next_page: 'svc-page-2',
+				})
+				// Empty follow-up for services folder
+				.post('/api/v2/list-items', (body: Record<string, unknown>) => {
+					return body.path === '/myapp/prod/services/' && body['pagination-token'] === 'svc-page-2';
+				})
+				.reply(200, {})
+				// get-secret-value for all discovered secrets
+				.post('/api/v2/get-secret-value')
+				.reply(200, {
+					'/myapp/prod/db-password': 'hunter2',
+					'/myapp/prod/auth/token': 'tok-abc',
+					'/myapp/prod/services/api-key': 'sk-xyz',
+				});
+
+			await provider.update();
+
+			expect(provider.hasSecret('db-password')).toBe(true);
+			expect(provider.hasSecret('auth/token')).toBe(true);
+			expect(provider.hasSecret('services/api-key')).toBe(true);
+			expect(provider.getSecret('db-password')).toBe('hunter2');
+			expect(provider.getSecret('auth/token')).toBe('tok-abc');
+			expect(provider.getSecret('services/api-key')).toBe('sk-xyz');
+			scope.done();
+		});
+
 		it('should strip base path from secret names', async () => {
 			const provider = new AkeylessProvider(logger);
 			await provider.init(akeylessSettingsWithPath);
 
 			const connectScope = nock(AKEYLESS_BASE_URL)
 				.post('/api/v2/list-items')
-				.reply(200, { items: [], 'pagination-token': '' });
+				.reply(200, { items: [], next_page: '' });
 			await provider.connect();
 			connectScope.done();
 
@@ -339,7 +414,7 @@ describe('AkeylessProvider', () => {
 						{ item_name: '/myapp/prod/db-password', item_type: 'static-secret' },
 						{ item_name: '/myapp/prod/api-key', item_type: 'static-secret' },
 					],
-					'pagination-token': '',
+					next_page: '',
 				})
 				.post('/api/v2/get-secret-value')
 				.reply(200, {
@@ -362,7 +437,7 @@ describe('AkeylessProvider', () => {
 
 			const scope = nock(AKEYLESS_BASE_URL)
 				.post('/api/v2/list-items')
-				.reply(200, { items: null, 'pagination-token': '' });
+				.reply(200, { items: null, next_page: '' });
 
 			await provider.update();
 
@@ -382,7 +457,7 @@ describe('AkeylessProvider', () => {
 						{ item_name: '/good-rotated', item_type: 'key' },
 						{ item_name: '/bad-rotated', item_type: 'key' },
 					],
-					'pagination-token': '',
+					next_page: '',
 				})
 				.post('/api/v2/rotated-secret-get-value', (body: Record<string, unknown>) => {
 					return body.name === '/good-rotated';
@@ -400,7 +475,7 @@ describe('AkeylessProvider', () => {
 			scope.done();
 		});
 
-		it('should parse JSON string secret values as objects', async () => {
+		it('should return JSON string secret values as raw strings', async () => {
 			const provider = new AkeylessProvider(logger);
 			await provider.init(akeylessSettingsToken);
 			await connectWithToken(provider);
@@ -409,7 +484,7 @@ describe('AkeylessProvider', () => {
 				.post('/api/v2/list-items')
 				.reply(200, {
 					items: [{ item_name: '/json-secret', item_type: 'static-secret' }],
-					'pagination-token': '',
+					next_page: '',
 				})
 				.post('/api/v2/get-secret-value')
 				.reply(200, {
@@ -418,10 +493,7 @@ describe('AkeylessProvider', () => {
 
 			await provider.update();
 
-			expect(provider.getSecret('json-secret')).toEqual({
-				host: 'db.example.com',
-				port: 5432,
-			});
+			expect(provider.getSecret('json-secret')).toBe('{"host":"db.example.com","port":5432}');
 			scope.done();
 		});
 	});
@@ -434,7 +506,7 @@ describe('AkeylessProvider', () => {
 			const connectAuth = mockAuthEndpoint();
 			const connectList = nock(AKEYLESS_BASE_URL)
 				.post('/api/v2/list-items')
-				.reply(200, { items: [], 'pagination-token': '' });
+				.reply(200, { items: [], next_page: '' });
 			await provider.connect();
 			connectAuth.done();
 			connectList.done();
@@ -452,7 +524,7 @@ describe('AkeylessProvider', () => {
 				})
 				.reply(200, {
 					items: [{ item_name: '/secret', item_type: 'static-secret' }],
-					'pagination-token': '',
+					next_page: '',
 				})
 				.post('/api/v2/get-secret-value')
 				.reply(200, { '/secret': 'refreshed-value' });
@@ -460,7 +532,7 @@ describe('AkeylessProvider', () => {
 			await provider.update();
 
 			expect(provider.hasSecret('secret')).toBe(true);
-			expect(provider.getSecret('secret')).toEqual({ value: 'refreshed-value' });
+			expect(provider.getSecret('secret')).toBe('refreshed-value');
 			updateAuth1.done();
 			updateAuth2.done();
 			scope.done();
@@ -474,7 +546,7 @@ describe('AkeylessProvider', () => {
 
 			const connectList = nock(AKEYLESS_BASE_URL)
 				.post('/api/v2/list-items')
-				.reply(200, { items: [], 'pagination-token': '' });
+				.reply(200, { items: [], next_page: '' });
 			await provider.connect();
 			connectList.done();
 
@@ -497,7 +569,7 @@ describe('AkeylessProvider', () => {
 			const connectAuth = mockAuthEndpoint();
 			const connectList = nock(AKEYLESS_BASE_URL)
 				.post('/api/v2/list-items')
-				.reply(200, { items: [], 'pagination-token': '' });
+				.reply(200, { items: [], next_page: '' });
 			await provider.connect();
 			connectAuth.done();
 			connectList.done();
