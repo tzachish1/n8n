@@ -214,6 +214,7 @@ describe('GlobalConfig', () => {
 				includeWorkflowIdLabel: false,
 				includeWorkflowNameLabel: false,
 				includeExecutionModeLabel: false,
+				includeProjectIdLabel: false,
 				includeDefaultMetrics: true,
 				includeMessageEventBusMetrics: false,
 				includeNodeTypeLabel: false,

@@ -24,13 +24,13 @@ const justification = ref('');
 const workflowName = ref('');
 
 const modalData = computed(
-	() => (uiStore.modalsById[NODE_ACCESS_REQUEST_MODAL_KEY]?.data ?? {}) as Record<string, any>,
+	() => (uiStore.modalsById[NODE_ACCESS_REQUEST_MODAL_KEY]?.data ?? {}) as Record<string, unknown>,
 );
 const nodeType = computed(() => (modalData.value.nodeType ?? '') as string);
 const displayName = computed(() => modalData.value.displayName ?? nodeType.value);
 
 const projects = computed(() => projectsStore.myProjects ?? []);
-const currentWorkflowName = computed(() => workflowsStore.workflowName);
+const currentWorkflowName = computed(() => workflowsStore.workflow.name);
 
 watch(
 	() => uiStore.modalsById[NODE_ACCESS_REQUEST_MODAL_KEY]?.open,

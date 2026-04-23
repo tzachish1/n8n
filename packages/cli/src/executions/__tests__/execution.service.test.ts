@@ -55,6 +55,7 @@ describe('ExecutionService', () => {
 		mock(),
 		mock(),
 		executionRedactionServiceProxy,
+		mock(),
 	);
 
 	beforeEach(() => {
@@ -165,6 +166,7 @@ describe('ExecutionService', () => {
 				mock(),
 				mock(),
 				localExecutionRedactionProxy,
+				mock(),
 			);
 
 			const mockUser = mock<User>({ id: 'user-1' });

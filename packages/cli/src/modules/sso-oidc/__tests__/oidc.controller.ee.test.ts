@@ -7,6 +7,7 @@ import { mock } from 'jest-mock-extended';
 
 import type { AuthService } from '@/auth/auth.service';
 import { OIDC_NONCE_COOKIE_NAME, OIDC_STATE_COOKIE_NAME } from '@/constants';
+import type { EventService } from '@/events/event.service';
 import type { AuthlessRequest } from '@/requests';
 import type { UrlService } from '@/services/url.service';
 
@@ -21,6 +22,7 @@ const logger = mock<Logger>();
 const instanceSettingsLoaderConfig = mock<InstanceSettingsLoaderConfig>({
 	ssoManagedByEnv: false,
 });
+const eventService = mock<EventService>();
 const controller = new OidcController(
 	oidcService,
 	authService,
@@ -28,6 +30,7 @@ const controller = new OidcController(
 	globalConfig,
 	logger,
 	instanceSettingsLoaderConfig,
+	eventService,
 );
 
 const user = mock<User>({
@@ -268,6 +271,7 @@ describe('OidcController', () => {
 			globalConfig,
 			logger,
 			envManagedConfig,
+			eventService,
 		);
 
 		test('saveConfiguration should reject writes when managed by env', async () => {
