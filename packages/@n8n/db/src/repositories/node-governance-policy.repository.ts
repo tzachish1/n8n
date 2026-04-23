@@ -48,7 +48,7 @@ export class NodeGovernancePolicyRepository extends Repository<NodeGovernancePol
 	async findPoliciesForNode(
 		nodeType: string,
 		categorySlug: string | undefined,
-		projectIds: string[],
+		_projectIds: string[],
 		entityManager?: EntityManager,
 	) {
 		const em = entityManager ?? this.manager;

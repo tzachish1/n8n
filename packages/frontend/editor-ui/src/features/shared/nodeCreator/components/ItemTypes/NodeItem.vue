@@ -56,10 +56,10 @@ const nodeTypesStore = useNodeTypesStore();
 const uiStore = useUIStore();
 const nodeGovernanceStore = useNodeGovernanceStore();
 
-const _emit = defineEmits<{
+const emit = defineEmits<{
 	requestAccess: [nodeType: string];
 }>();
-void _emit;
+void emit;
 
 const dragging = ref(false);
 
@@ -92,7 +92,7 @@ const _governanceStatus = computed(() => {
 	const storeStatus = nodeGovernanceStore.resolveGovernanceForNode(props.nodeType.name);
 	return storeStatus?.status ?? 'allowed';
 });
-void _governanceStatus;
+void _governanceStatus.value;
 const draggablePosition = ref({ x: -100, y: -100 });
 const draggableDataTransfer = ref(null as Element | null);
 
@@ -333,6 +333,10 @@ function onCommunityNodeTooltipClick(event: MouseEvent) {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+
+	&.dimmed {
+		opacity: 0.5;
+	}
 }
 
 .nodeIcon {
@@ -387,15 +391,6 @@ function onCommunityNodeTooltipClick(event: MouseEvent) {
 .blocked {
 	opacity: 0.6;
 	cursor: not-allowed;
-}
-
-.iconWrapper {
-	position: relative;
-	display: inline-flex;
-
-	&.dimmed {
-		opacity: 0.5;
-	}
 }
 
 .lockIcon {
