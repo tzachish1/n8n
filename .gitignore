@@ -96,3 +96,6 @@ lefthook-local.yml
 
 # Local smoke scripts (not for commit)
 /test-akeyless-live.ts
+
+# Local DB backups (never commit)
+/backups/
