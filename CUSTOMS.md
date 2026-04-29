@@ -80,6 +80,7 @@ most invasive customization — it touches DB, API, FE, permissions, and audit.
 - `packages/@n8n/db/src/entities/project.ts` *(adds `governanceDefaultBehavior` column)*
 - `packages/@n8n/db/src/migrations/common/1768981346000-AddNodeGovernanceTables.ts`
 - `packages/@n8n/db/src/migrations/common/1772850000000-AddGovernanceDefaultBehavior.ts`
+- `packages/@n8n/db/src/migrations/common/1778500000000-AddPendingAccessRequestUniqueIndex.ts` *(added by Cubic-AI backport, see below)*
 - `packages/@n8n/db/src/migrations/postgresdb/index.ts` *(registers migrations)*
 - `packages/@n8n/db/src/migrations/sqlite/index.ts` *(registers migrations)*
 - `packages/@n8n/db/src/repositories/*.ts` (five new repositories)
@@ -130,10 +131,63 @@ most invasive customization — it touches DB, API, FE, permissions, and audit.
   - `...categories.imported`, `...request.{created,approved,rejected}`,
     `...policy.{created,updated,deleted}`.
 
+**Cubic-AI fixes backport (2026-04-29)**
+
+Backport of upstream PR [n8n-io/n8n#29442](https://github.com/n8n-io/n8n/pull/29442) review-comment fixes from `feat/node-governance` (master-based) into this branch via [self-PR #2](https://github.com/tzachish1/n8n/pull/2). Both rounds of Cubic-AI feedback (20 issues) are addressed; one item is intentionally excluded — see below.
+
+**Cherry-picks landed on current branch**
+- `2583379001 fix(core): Address Cubic-AI P1/P2/P3 review comments for node governance (GHC-6560)` — round 1, 13 fixes, cherry-picked from upstream `9caf4032fe`.
+- `c37ce5eb3c fix(core): Address Cubic-AI round 2 review comments for node governance (GHC-6560)` — round 2, 7 fixes, cherry-picked from upstream `aed3bef4d3`.
+- `5a83936c1b Merge pull request #2 from tzachish1/fix/governance-cubic-fixes-2.17.7` — merge commit (preserves both `(cherry picked from commit ...)` provenance lines).
+
+**What changed (high level)**
+
+*Backend correctness/robustness*
+- Migrations: `AddGovernanceDefaultBehavior` is now prefix-aware (escapes table/column names so non-default `tablePrefix` setups don't break).
+- New migration: [`packages/@n8n/db/src/migrations/common/1778500000000-AddPendingAccessRequestUniqueIndex.ts`](packages/@n8n/db/src/migrations/common/1778500000000-AddPendingAccessRequestUniqueIndex.ts) — partial unique index on `node_access_request(requestedById, nodeType, projectId) WHERE status='pending'`. `createAccessRequest` catches the unique-violation race and returns the conflicting pending request.
+- `node-governance.service`: `pending_request` nodes are treated as blocked during workflow validation (an access-request submission can no longer bypass enforcement until approval); `updatePolicy` is wrapped in `withTransaction` so policy update + assignment replacement commit/rollback together.
+- `policy-project-assignment.repository.replaceAssignments`: switched to the `withTransaction` helper so the delete + insert is atomic regardless of caller.
+- `node-category.repository.updateCategory`: skips `em.update` on empty `data` (avoids `UpdateValuesMissingError`).
+- `node-category-assignment.repository.findByNodeTypes` and `node-governance-policy.repository.findByProjectIds`: empty-array short-circuit so `In([])` cannot generate invalid SQL.
+- `workflows/workflow.service.ts`: governance check now uses `ownerProject.id` (deterministic) instead of a non-deterministic `sharedWorkflowRepository.findOne` lookup, so project-scoped policies resolve correctly when a workflow is shared with multiple projects. Error message clarified to mention "blocked or pending approval". Defensive `validation?.hasBlockedNodes` guard kept (2.17.7-only).
+- `workflow-runner.ts`: governance enforcement falls back to `OwnershipService.getWorkflowProjectCached(workflowId)` when `data.projectId` is missing (scheduled / sub-workflow paths previously bypassed enforcement). New `OwnershipService` constructor injection.
+- `node-governance.controller.updatePolicy`: mirrors `createPolicy`'s `projectIds` guard (rejects inconsistent project-scoped policies).
+- DTOs (`create-category`, `update-category`, `create-policy`, `update-policy`): trim `displayName`/`description`/`targetValue`.
+
+*Frontend*
+- `nodeGovernance` store: dedupe in-flight `fetchGovernanceData` calls and use a sequence number to drop stale responses; removed the `clearGovernanceData()` call from `NodeCreator` that caused the empty-state flicker race.
+- `CategoryNodesModal.addSelectedNodes`: track per-node success; only remove successfully-added nodes from the selection (retries don't re-attempt already-assigned nodes).
+- `CategoriesTab` / `RequestsTab` / `PoliciesTab`: clamp `currentPage` when the filtered list shrinks or `itemsPerPage` changes.
+- Governance modals (`Approve` / `Reject` / `Review` / `NodeAccessRequest` / `CategoryFormModal` / `CategoryNodesModal`): replaced hardcoded spacing/sizing/typography/radius values with design-system tokens; replaced hardcoded English copy in `CategoryFormModal` with i18n keys.
+- `NodeItem.vue`: deduped duplicate `.iconWrapper` SCSS selector.
+- `NodeCreatorNode.vue` (design-system): `afterTitle` slot moved after `ElTag` to preserve `v-if/v-else-if` adjacency in `NodeCreatorNode` (tag branch was being lost).
+- `en.json`: added 11 new `nodeGovernance.categories.form.*` i18n keys (round 1); removed 7 duplicate keys (`generic.update`, `generic.edit`, `nodeGovernance.categories.form.{displayName,slug,description,color}`, `nodeCreator.nodeItem.deprecated`) — round 2.
+
+**Intentional exclusion: `packages/frontend/editor-ui/src/app/init.ts`**
+
+The round-2 hunk for `init.ts` from upstream commit `aed3bef4d3` was deliberately dropped during cherry-pick. Cubic's change *removes* the `state.initialized = false` and `authenticatedFeaturesInitialized = false` reset in the logout hook to avoid duplicate auth-hook registration on master. **On 2.17.7 we keep that reset** because it fixes a different, locally-reported bug: without it, role changes require 2 login/logout cycles to take effect (see commit `a6b4020e93`). The Cubic finding is specific to master's surrounding code (newer login-hook re-fetch logic), is not reproducible on 2.17.7's older init flow, and removing the reset would regress the existing fix on this branch. The exclusion is recorded in `c37ce5eb3c`'s commit-message footer and in PR #2's body.
+
+**Validation captured at backport time**
+
+| | baseline (pre-cherry-pick) | post-cherry-pick | delta |
+|---|---|---|---|
+| `pnpm --filter @n8n/db typecheck` | 0 errors | 0 | = |
+| `pnpm --filter n8n typecheck` | 7 errors | 7 | = (same 7 pre-existing) |
+| `pnpm --filter n8n-editor-ui typecheck` | 45 errors | 7 | **−38** (Cubic's added i18n keys regenerated `BaseTextKey`, clearing pre-existing key-mismatch errors) |
+| `en.json` JSON parse | OK | OK | = |
+| `en.json` duplicate keys | n/a | 0 | ✓ |
+
+**Rollback path**
+
+- Local-only safety branch `backup/upgrade-2.17.7-pre-governance-fixes` retained at `04a3a5cc90` (the pre-backport tip). Keep it until at least one successful build/test cycle on 2.17.7.
+- Remote rollback if needed: `git revert -m 1 5a83936c1b` then push.
+
 **Upgrade checklist**
-- After rebase, **run `pnpm build` and confirm the two governance migrations still register** in both `postgresdb/index.ts` and `sqlite/index.ts`. Upstream frequently adds migrations and the merge tool can drop our lines silently.
+- After rebase, **run `pnpm build` and confirm the three governance migrations still register** in both `postgresdb/index.ts` and `sqlite/index.ts` (`AddNodeGovernanceTables1768981346000`, `AddGovernanceDefaultBehavior1772850000000`, `AddPendingAccessRequestUniqueIndex1778500000000`). Upstream frequently adds migrations and the merge tool can drop our lines silently.
 - `packages/@n8n/db/src/entities/project.ts` is a hotspot — upstream often extends the entity; make sure `governanceDefaultBehavior` survives.
 - If upstream refactors `WorkflowService.create/update/import` signatures, re-wire the governance enforcement call at the same call-site.
+- If upstream refactors `WorkflowRunner`'s constructor, the `OwnershipService` parameter added by the Cubic-AI backport is a hotspot — preserve it (and the `governanceProjectId` fallback inside `runMainProcess`).
+- If upstream changes `init.ts` again, **re-verify the role-change reset block (`state.initialized = false; authenticatedFeaturesInitialized = false;` inside `usersStore.registerLogoutHook`) is preserved** — it's the deliberate exclusion from Cubic's round-2 fix.
 - FE side: any upstream refactor of settings navigation / RBAC store can silently remove the `nodeGovernance` entry. Verify the menu item actually appears for an owner user.
 
 ### 2. Akeyless External Secrets Provider
