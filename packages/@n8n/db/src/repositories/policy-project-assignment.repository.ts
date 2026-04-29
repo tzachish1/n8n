@@ -3,6 +3,7 @@ import type { EntityManager } from '@n8n/typeorm';
 import { DataSource, Repository } from '@n8n/typeorm';
 
 import { PolicyProjectAssignment } from '../entities';
+import { withTransaction } from '../utils/transaction';
 
 @Service()
 export class PolicyProjectAssignmentRepository extends Repository<PolicyProjectAssignment> {
@@ -39,17 +40,18 @@ export class PolicyProjectAssignmentRepository extends Repository<PolicyProjectA
 		return await em.delete(PolicyProjectAssignment, { policyId });
 	}
 
-	async replaceAssignments(policyId: string, projectIds: string[], entityManager?: EntityManager) {
-		const em = entityManager ?? this.manager;
+	async replaceAssignments(policyId: string, projectIds: string[], trx?: EntityManager) {
+		// If a (transactional) EntityManager is supplied by the caller we reuse it; otherwise
+		// withTransaction opens a fresh transaction so delete+create stay atomic and a partial
+		// failure cannot leave the policy with no assignments.
+		return await withTransaction(this.manager, trx, async (em) => {
+			await em.delete(PolicyProjectAssignment, { policyId });
 
-		// Delete existing assignments
-		await em.delete(PolicyProjectAssignment, { policyId });
+			if (projectIds.length > 0) {
+				return await this.createAssignments(policyId, projectIds, em);
+			}
 
-		// Create new assignments if any
-		if (projectIds.length > 0) {
-			return await this.createAssignments(policyId, projectIds, em);
-		}
-
-		return [];
+			return [];
+		});
 	}
 }

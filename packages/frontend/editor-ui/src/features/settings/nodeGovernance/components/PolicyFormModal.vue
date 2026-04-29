@@ -234,18 +234,18 @@ function closeModal() {
 .form {
 	display: flex;
 	flex-direction: column;
-	gap: 16px;
+	gap: var(--spacing--sm);
 }
 
 .field {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
+	gap: var(--spacing--3xs);
 }
 
 .label {
-	font-weight: 500;
-	font-size: 13px;
+	font-weight: var(--font-weight--medium);
+	font-size: var(--font-size--xs);
 	color: var(--color--text--shade-1);
 }
 
@@ -257,6 +257,6 @@ function closeModal() {
 .footer {
 	display: flex;
 	justify-content: flex-end;
-	gap: 10px;
+	gap: var(--spacing--2xs);
 }
 </style>
