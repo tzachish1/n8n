@@ -23,7 +23,7 @@ We always branch from the upstream release tag, never from upstream `master`.
 | `feat/upgrade-to-n8n-2.13.3`             | `n8n@2.13.3` | (unsquashed)   | initial node-governance introduction               |
 | `feat/upgrade-to-n8n-2.15.1`             | `n8n@2.15.1` | (unsquashed)   | intermediate upgrade                               |
 | `feat/upgrade-to-n8n-2.17.5`             | `n8n@2.17.5` | 7              | OIDC provisioning hardening, audit enrich — **squashed one commit per feature area** |
-| `feat/upgrade-to-n8n-2.17.7` (current)   | `n8n@2.17.7` | 8              | type-safe Node Governance modal data; chore folded into a fresh `chore(upgrade-2.17.7)`; CI workflow trim added as Section 8 |
+| `feat/upgrade-to-n8n-2.17.7` (current)   | `n8n@2.17.7` | 9              | type-safe Node Governance modal data; chore folded into a fresh `chore(upgrade-2.17.7)`; CI workflow trim added as Section 8; audit/log-streaming login events added under Section 3 |
 
 ## Commit-structure convention
 
@@ -301,6 +301,69 @@ rigid DB row shape. We need:
   Azure Entra / Okta / Auth0 / Keycloak emit by default.
 - Keep the test expectations aligned with the log wording used in
   `provisioning.service.ee.ts`.
+
+#### Audit / log-streaming login events (2026-04-29)
+
+**What & why.** Two upstream gaps left login activity invisible to log-streaming
+destinations (SIEM, webhook, syslog) when SSO is enabled — a hard security
+problem because brute-force against the email/password endpoint was completely
+silent, and OIDC successful logins were not audited at all (SAML was).
+
+1. **Failed password login under SSO** — `validateSsoRestrictions` in
+   `auth.controller.ts` threw an `AuthError` *before* the existing
+   `user-login-failed` emit was reached. Every blocked attempt (including
+   brute-force against the owner account, which is the only one that *can*
+   still log in with email+password while SSO is enabled) was dropped on the
+   floor.
+2. **Successful OIDC login** — `oidc.controller.ee.ts` issued the auth cookie
+   and redirected, but never emitted `user-logged-in`. SAML's controller
+   (`saml.controller.ee.ts:132`) already emits the same event, so this was
+   pure parity.
+
+The relay (`packages/cli/src/events/relays/log-streaming.event-relay.ts`)
+already maps both events to `n8n.audit.user.login.failed` /
+`n8n.audit.user.login.success`. Only emit sites needed adding.
+
+**Entry points / key files**
+- `packages/cli/src/controllers/auth.controller.ts`
+  - `validateSsoRestrictions(preliminaryUser, emailOrLdapLoginId)` — extra
+    parameter; emits `user-login-failed` with
+    `{ authenticationMethod: 'email', userEmail, reason: 'SSO is enabled' }`
+    before `throw new AuthError(...)`.
+  - Call site updated to pass `emailOrLdapLoginId` through.
+- `packages/cli/src/modules/sso-oidc/oidc.controller.ee.ts`
+  - Constructor injects `EventService`.
+  - `callbackHandler()` emits `user-logged-in` with
+    `{ user, authenticationMethod: 'oidc' }` after `issueCookie`, before
+    `res.redirect('/')`.
+
+**Audit events emitted (after fix)**
+
+| Event name (audit)                | Trigger                                                    | Payload extras                            |
+|-----------------------------------|------------------------------------------------------------|-------------------------------------------|
+| `n8n.audit.user.login.failed`     | password login while SSO enabled and user not allowed      | `userEmail`, `reason: "SSO is enabled"`   |
+| `n8n.audit.user.login.success`    | successful OIDC callback                                   | `user`, `authenticationMethod: "oidc"`    |
+
+**Upgrade checklist**
+- Upstream may eventually add the `user-login-failed` emit in
+  `validateSsoRestrictions`; if so, drop our emit to avoid double-counting
+  attempts in the audit log.
+- Upstream may eventually add the `user-logged-in` emit in the OIDC
+  controller; if so, drop our emit (same reason).
+- If upstream renames `validateSsoRestrictions` or restructures the OIDC
+  callback, re-apply the emits at the equivalent points: **after the failure
+  decision** (before throwing) and **after `issueCookie`** (before redirect)
+  respectively.
+- The relay listens for both event names already (`log-streaming.event-relay.ts:63-64`);
+  if upstream changes the event name or payload shape, update both the emit
+  and the relay handler.
+
+**Verification**
+- Try password login with wrong credentials while OIDC SSO is enabled →
+  expect `n8n.audit.user.login.failed` with `reason: "SSO is enabled"` on the
+  log-streaming destination.
+- Complete a successful OIDC login → expect `n8n.audit.user.login.success`
+  with `authenticationMethod: "oidc"` on the log-streaming destination.
 
 ### 4. Azure OpenAI APIM support (nodes-langchain)
 
