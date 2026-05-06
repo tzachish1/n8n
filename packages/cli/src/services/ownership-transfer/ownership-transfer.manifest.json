@@ -35,6 +35,16 @@
 			"reason": "SSO role-mapping config attached to the project, not user data."
 		},
 		{
+			"name": "PolicyProjectAssignment",
+			"path": "packages/@n8n/db/src/entities/policy-project-assignment.ts",
+			"reason": "Node-governance policy binding attached to the project, not user data; dropped via the projectId FK cascade."
+		},
+		{
+			"name": "NodeAccessRequest",
+			"path": "packages/@n8n/db/src/entities/node-access-request.ts",
+			"reason": "Node-access requests are scoped to the project they were raised in and are dropped via the projectId FK cascade; the requesting user's rows also cascade on user deletion."
+		},
+		{
 			"name": "Variables",
 			"path": "packages/@n8n/db/src/entities/variables.ts",
 			"reason": "Project-scoped variables are dropped via FK cascade; personal projects do not expose them."

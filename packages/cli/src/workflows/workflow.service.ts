@@ -57,6 +57,7 @@ import type { ListQuery } from '@/requests';
 import { hasSharing } from '@/requests';
 import { PollTriggerJobRegistrar } from '@/scheduling/poll-trigger-node/poll-trigger-job-registrar';
 import { ScheduleTriggerJobRegistrar } from '@/scheduling/schedule-trigger-node/schedule-trigger-job-registrar';
+import { NodeGovernanceService } from '@/services/node-governance.service';
 import { OwnershipService } from '@/services/ownership.service';
 import { ProjectService } from '@/services/project.service.ee';
 import { RoleService } from '@/services/role.service';
@@ -90,6 +91,7 @@ export class WorkflowService {
 		private readonly outboxRepository: WorkflowPublicationOutboxRepository,
 		private readonly workflowValidationService: WorkflowValidationService,
 		private readonly nodeTypes: NodeTypes,
+		private readonly nodeGovernanceService: NodeGovernanceService,
 		private readonly webhookService: WebhookService,
 		private readonly licenseState: LicenseState,
 		private readonly projectRepository: ProjectRepository,
@@ -482,6 +484,27 @@ export class WorkflowService {
 			});
 			if (!canUpdate) {
 				delete workflowUpdateData.settings.redactionPolicy;
+			}
+		}
+
+		// Validate node governance - check for blocked or pending-approval nodes.
+		// Use the workflow's owning project (deterministic) rather than a non-deterministic
+		// shared-workflow lookup, to ensure project-scoped policies resolve correctly when
+		// the workflow is shared across multiple projects.
+		if (workflowUpdateData.nodes && workflowUpdateData.nodes.length > 0 && ownerProject?.id) {
+			const validation = await this.nodeGovernanceService.validateWorkflowNodes(
+				workflowUpdateData.nodes,
+				ownerProject.id,
+				user.id,
+			);
+
+			if (validation?.hasBlockedNodes) {
+				const blockedNodeNames = validation.blockedNodes
+					.map((n) => n.nodeName || n.nodeType)
+					.join(', ');
+				throw new BadRequestError(
+					`Cannot save workflow: The following nodes are blocked or pending approval by governance policies: ${blockedNodeNames}. Please remove these nodes or wait for the access request to be approved.`,
+				);
 			}
 		}
 

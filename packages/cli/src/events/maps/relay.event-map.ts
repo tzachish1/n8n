@@ -222,6 +222,7 @@ export type RelayEventMap = {
 			| 'integrated'
 			| 'evaluation'
 			| 'chat';
+		projectId?: string;
 	};
 
 	'workflow-version-updated': {
@@ -243,6 +244,8 @@ export type RelayEventMap = {
 		nodeId?: string;
 		nodeName: string;
 		nodeType?: string;
+		projectId?: string;
+		mode?: string;
 	};
 
 	'node-post-execute': {
@@ -251,6 +254,8 @@ export type RelayEventMap = {
 		nodeId?: string;
 		nodeName: string;
 		nodeType?: string;
+		projectId?: string;
+		mode?: string;
 	};
 
 	'hitl-response-actioned': HitlResponseTelemetryPayload;
@@ -1073,6 +1078,106 @@ export type RelayEventMap = {
 		agentId: string;
 		projectId: string;
 	};
+
+	// #region Node Governance
+
+	'node-governance-policy-created': {
+		user: UserLike;
+		policyId: string;
+		policyType: string;
+		scope: string;
+		targetType: string;
+		targetValue: string;
+		projectIds?: string[];
+	};
+
+	'node-governance-policy-updated': {
+		user: UserLike;
+		policyId: string;
+		policyType?: string;
+		scope?: string;
+		targetType?: string;
+		targetValue?: string;
+		projectIds?: string[];
+	};
+
+	'node-governance-policy-deleted': {
+		user: UserLike;
+		policyId: string;
+	};
+
+	'node-governance-category-created': {
+		user: UserLike;
+		categoryId: string;
+		categorySlug: string;
+		categoryDisplayName: string;
+	};
+
+	'node-governance-category-updated': {
+		user: UserLike;
+		categoryId: string;
+		categorySlug?: string;
+		categoryDisplayName?: string;
+	};
+
+	'node-governance-category-deleted': {
+		user: UserLike;
+		categoryId: string;
+	};
+
+	'node-governance-category-node-assigned': {
+		user: UserLike;
+		categoryId: string;
+		nodeType: string;
+	};
+
+	'node-governance-category-node-removed': {
+		user: UserLike;
+		categoryId: string;
+		nodeType: string;
+	};
+
+	'node-governance-categories-imported': {
+		user: UserLike;
+		importCreated: number;
+		importUpdated: number;
+		importUnchanged: number;
+	};
+
+	'node-governance-request-created': {
+		user: UserLike;
+		requestId: string;
+		nodeType: string;
+		projectId: string;
+	};
+
+	'node-governance-request-approved': {
+		user: UserLike;
+		requestId: string;
+		nodeType: string;
+		projectId: string;
+		requestedById: string;
+		reviewComment?: string;
+		policyId?: string;
+	};
+
+	'node-governance-request-rejected': {
+		user: UserLike;
+		requestId: string;
+		nodeType: string;
+		projectId: string;
+		requestedById: string;
+		reviewComment?: string;
+	};
+
+	'node-governance-settings-updated': {
+		user: UserLike;
+		defaultBehavior: string;
+		projectId?: string;
+		projectName?: string;
+	};
+
+	// #endregion
 
 	// #region Instance Policies
 

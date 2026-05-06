@@ -38,6 +38,7 @@ import { ExecutionNotFoundError } from '@/errors/execution-not-found-error';
 import * as ExecutionLifecycleHooks from '@/execution-lifecycle/execution-lifecycle-hooks';
 import { CredentialsPermissionChecker } from '@/executions/pre-execution-checks';
 import { ManualExecutionService } from '@/manual-execution.service';
+import { NodeGovernanceService } from '@/services/node-governance.service';
 import { OwnershipService } from '@/services/ownership.service';
 import { Telemetry } from '@/telemetry';
 import * as WorkflowExecuteAdditionalData from '@/workflow-execute-additional-data';
@@ -75,6 +76,10 @@ mockInstance(OwnershipService, {
 	getWorkflowProjectCached: vi.fn().mockResolvedValue(mock<Project>({ id: 'project-id' })),
 });
 
+const nodeGovernanceService = mockInstance(NodeGovernanceService, {
+	validateWorkflowNodes: vi.fn().mockResolvedValue({ blockedNodes: [], hasBlockedNodes: false }),
+});
+
 beforeAll(async () => {
 	owner = await createUser({ role: GLOBAL_OWNER_ROLE });
 
@@ -89,6 +94,63 @@ beforeEach(async () => {
 	await testDb.truncate(['WorkflowEntity', 'SharedWorkflow']);
 	vi.clearAllMocks();
 	vi.spyOn(Container.get(ExecutionRepository), 'setRunning').mockResolvedValue(new Date());
+});
+
+describe('node governance enforcement', () => {
+	const blockedNode = {
+		type: 'n8n-nodes-base.httpRequest',
+		name: 'HTTP Request',
+		typeVersion: 1,
+		position: [0, 0],
+		parameters: {},
+	} as unknown as INode;
+
+	function buildData(overrides: Partial<IWorkflowExecutionDataProcess>) {
+		return mock<IWorkflowExecutionDataProcess>({
+			projectId: undefined,
+			workflowData: { nodes: [blockedNode], staticData: {} },
+			executionData: undefined,
+			...overrides,
+		});
+	}
+
+	beforeEach(() => {
+		globalConfig.executions.mode = 'regular';
+		nodeGovernanceService.validateWorkflowNodes.mockResolvedValue({
+			blockedNodes: [{ nodeType: blockedNode.type, nodeName: blockedNode.name, governance: mock() }],
+			hasBlockedNodes: true,
+		});
+		vi.spyOn(Container.get(ActiveExecutions), 'add').mockResolvedValue('1');
+		vi.spyOn(Container.get(CredentialsPermissionChecker), 'check').mockResolvedValue();
+	});
+
+	/**
+	 * Schedule/webhook/trigger runs carry no `userId`. Enforcement must not depend on
+	 * one, otherwise a policy added after a workflow was activated would never apply
+	 * to its automated runs.
+	 */
+	test('blocks a non-interactive execution that has no userId', async () => {
+		const executeSpy = vi.spyOn(WorkflowExecute.prototype, 'run');
+
+		await runner.run(buildData({ executionMode: 'trigger', userId: undefined }));
+
+		expect(nodeGovernanceService.validateWorkflowNodes).toHaveBeenCalledTimes(1);
+		const [, projectIdArg, userIdArg] =
+			nodeGovernanceService.validateWorkflowNodes.mock.calls[0];
+		expect(projectIdArg).toBe('project-id');
+		expect(userIdArg).toBeUndefined();
+		expect(executeSpy).not.toHaveBeenCalled();
+	});
+
+	test('still passes the userId through for interactive executions', async () => {
+		await runner.run(buildData({ executionMode: 'manual', userId: 'user-id' }));
+
+		expect(nodeGovernanceService.validateWorkflowNodes).toHaveBeenCalledTimes(1);
+		const [, projectIdArg, userIdArg] =
+			nodeGovernanceService.validateWorkflowNodes.mock.calls[0];
+		expect(projectIdArg).toBe('project-id');
+		expect(userIdArg).toBe('user-id');
+	});
 });
 
 describe('processError', () => {

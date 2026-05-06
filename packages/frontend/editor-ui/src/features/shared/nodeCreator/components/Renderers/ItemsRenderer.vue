@@ -16,6 +16,7 @@ import SectionHeaderCreditsTag from '../SectionHeaderCreditsTag.vue';
 
 import { useViewStacks } from '../../composables/useViewStacks';
 import OpenTemplateItem from '../ItemTypes/OpenTemplateItem.vue';
+import { useNodeGovernanceStore } from '@/features/settings/nodeGovernance/nodeGovernance.store';
 
 import { N8nLoading } from '@n8n/design-system';
 export interface Props {
@@ -41,6 +42,7 @@ const emit = defineEmits<{
 const renderedItems = ref<INodeCreateElement[]>([]);
 const renderAnimationRequest = ref<number>(0);
 const { activeViewStack } = useViewStacks();
+const nodeGovernanceStore = useNodeGovernanceStore();
 
 const activeItemId = computed(() => useKeyboardNavigation()?.activeItemId);
 
@@ -57,6 +59,31 @@ const highlightActiveItem = computed(() => {
 
 	return true;
 });
+
+// Helper function to check if a node is blocked (checks both props and store)
+function isNodeBlocked(element: INodeCreateElement): boolean {
+	if (element.type !== 'node') {
+		return false;
+	}
+
+	// Check governance status from element properties first
+	const governanceStatus = element.properties?.governance?.status;
+	if (governanceStatus !== undefined) {
+		return governanceStatus === 'blocked' || governanceStatus === 'pending_request';
+	}
+
+	// Fallback to local resolution for items not pre-augmented by NodeCreator
+	// (e.g. sub-nodes inside view-stack subcategories like "AI"). Without this,
+	// items missing from `mergedNodes` would slip through as allowed even when
+	// the project's default behaviour is `block`.
+	const nodeType = element.properties?.name || element.key;
+	if (nodeType) {
+		const storeStatus = nodeGovernanceStore.resolveGovernanceForNode(nodeType);
+		return storeStatus?.status === 'blocked' || storeStatus?.status === 'pending_request';
+	}
+
+	return false;
+}
 
 // Lazy render large items lists to prevent the browser from freezing
 // when loading many items.
@@ -83,6 +110,11 @@ function wrappedEmit(
 	$e?: Event,
 ) {
 	if (props.disabled) return;
+
+	// Prevent selection of blocked nodes
+	if (isNodeBlocked(element)) {
+		return;
+	}
 
 	switch (event) {
 		case 'dragstart':
@@ -171,11 +203,12 @@ watch(
 					v-else
 					ref="iteratorItems"
 					:class="{
-						clickable: !disabled,
+						clickable: !disabled && !isNodeBlocked(item),
 						[$style.active]: activeItemId === item.uuid && highlightActiveItem,
 						[$style.iteratorItem]: !communityNode,
 						[$style[item.type]]: true,
 						[$style.preview]: isPreview,
+						[$style.blocked]: isNodeBlocked(item),
 						// Borderless is only applied to views
 						[$style.borderless]: item.type === 'view' && item.properties.borderless === true,
 					}"
@@ -327,5 +360,10 @@ watch(
 .preview {
 	pointer-events: none;
 	cursor: default;
+}
+
+.blocked {
+	cursor: not-allowed;
+	opacity: 0.6;
 }
 </style>

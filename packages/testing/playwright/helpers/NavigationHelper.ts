@@ -287,4 +287,12 @@ export class NavigationHelper {
 	currentUrl(): string {
 		return this.page.url();
 	}
+
+	/**
+	 * Navigate to Node Governance settings
+	 * URL: /settings/node-governance
+	 */
+	async toNodeGovernance(): Promise<void> {
+		await this.page.goto('/settings/node-governance');
+	}
 }

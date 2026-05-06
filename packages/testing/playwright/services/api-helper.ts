@@ -23,6 +23,7 @@ import { ExternalSecretsApiHelper } from './external-secrets-api-helper';
 import { McpApiHelper } from './mcp-api-helper';
 import { McpOAuthApiHelper } from './mcp-oauth-api-helper';
 import { MetricsApiHelper } from './metrics-api-helper';
+import { NodeGovernanceApiHelper } from './node-governance-api-helper';
 import { ProjectApiHelper } from './project-api-helper';
 import { PublicApiHelper } from './public-api-helper';
 import { RoleApiHelper } from './role-api-helper';
@@ -85,6 +86,7 @@ export class ApiHelpers {
 	sourceControl: SourceControlApiHelper;
 	securitySettings: SecuritySettingsApiHelper;
 	tokenExchange: TokenExchangeApiHelper;
+	nodeGovernance: NodeGovernanceApiHelper;
 
 	publicApi: PublicApiHelper;
 
@@ -106,6 +108,7 @@ export class ApiHelpers {
 		this.sourceControl = new SourceControlApiHelper(this);
 		this.securitySettings = new SecuritySettingsApiHelper(this);
 		this.tokenExchange = new TokenExchangeApiHelper(this);
+		this.nodeGovernance = new NodeGovernanceApiHelper(this);
 
 		this.publicApi = new PublicApiHelper(this);
 	}

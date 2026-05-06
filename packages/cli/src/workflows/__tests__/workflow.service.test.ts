@@ -101,6 +101,7 @@ describe('WorkflowService', () => {
 					validateCredentialNodeRestrictions: () => ({ isValid: true }),
 				}), // workflowValidationService
 				mock(), // nodeTypes
+				mock(), // nodeGovernanceService
 				webhookServiceMock, // webhookService
 				mock(), // licenseState
 				mock(), // projectRepository
@@ -371,6 +372,7 @@ describe('WorkflowService', () => {
 					validateCredentialNodeRestrictions: () => ({ isValid: true }),
 				}), // workflowValidationService
 				mock(), // nodeTypes
+				mock(), // nodeGovernanceService
 				mock(), // webhookService
 				licenseStateMock, // licenseState
 				mock(), // projectRepository
@@ -1112,6 +1114,7 @@ describe('WorkflowService', () => {
 					validateCredentialNodeRestrictions: () => ({ isValid: true }),
 				}), // workflowValidationService
 				mock(), // nodeTypes
+				mock(), // nodeGovernanceService
 				mock(), // webhookService
 				mock(), // licenseState
 				mock(), // projectRepository
@@ -1616,6 +1619,7 @@ describe('WorkflowService', () => {
 				mock(), // outboxRepository
 				mock(), // workflowValidationService
 				mock(), // nodeTypes
+				mock(), // nodeGovernanceService
 				mock(), // webhookService
 				mock(), // licenseState
 				mock(), // projectRepository
@@ -1736,6 +1740,7 @@ describe('WorkflowService', () => {
 				mock(), // outboxRepository
 				mock(), // workflowValidationService
 				mock(), // nodeTypes
+				mock(), // nodeGovernanceService
 				mock(), // webhookService
 				mock(), // licenseState
 				mock(), // projectRepository
@@ -1983,6 +1988,7 @@ describe('WorkflowService', () => {
 					validateCredentialNodeRestrictions: () => ({ isValid: true }),
 				}), // workflowValidationService
 				mock(), // nodeTypes
+				mock(), // nodeGovernanceService
 				mock(), // webhookService
 				licenseStateMock, // licenseState
 				mock(), // projectRepository
@@ -2142,6 +2148,7 @@ describe('WorkflowService', () => {
 				mock(), // outboxRepository
 				mock(), // workflowValidationService
 				mock(), // nodeTypes
+				mock(), // nodeGovernanceService
 				mock(), // webhookService
 				mock(), // licenseState
 				mock(), // projectRepository
@@ -2239,6 +2246,7 @@ describe('WorkflowService', () => {
 				mock(), // outboxRepository
 				mock(), // workflowValidationService
 				mock(), // nodeTypes
+				mock(), // nodeGovernanceService
 				mock(), // webhookService
 				mock(), // licenseState
 				mock(), // projectRepository

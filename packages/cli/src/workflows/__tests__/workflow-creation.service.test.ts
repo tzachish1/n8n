@@ -12,6 +12,7 @@ import type { ExternalHooks, WorkflowLifecycleHookActor } from '@/external-hooks
 import type { InstanceRedactionEnforcementService } from '@/modules/redaction/instance-redaction-enforcement.service';
 import type { NodeTypes } from '@/node-types';
 import { userHasScopes } from '@/permissions.ee/check-access';
+import type { NodeGovernanceService } from '@/services/node-governance.service';
 import type { ProjectService } from '@/services/project.service.ee';
 import * as WorkflowHelpers from '@/workflow-helpers';
 import type { WorkflowHookContextService } from '@/workflow-hook-context.service';
@@ -40,6 +41,7 @@ describe('WorkflowCreationService', () => {
 	let externalHooksMock: MockProxy<ExternalHooks>;
 	let workflowFinderServiceMock: MockProxy<WorkflowFinderService>;
 	let workflowHookContextServiceMock: MockProxy<WorkflowHookContextService>;
+	let nodeGovernanceServiceMock: MockProxy<NodeGovernanceService>;
 
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -55,8 +57,13 @@ describe('WorkflowCreationService', () => {
 		externalHooksMock = mock<ExternalHooks>();
 		workflowFinderServiceMock = mock<WorkflowFinderService>();
 		workflowHookContextServiceMock = mock<WorkflowHookContextService>();
+		nodeGovernanceServiceMock = mock<NodeGovernanceService>();
 		workflowValidationServiceMock.validateCredentialNodeRestrictions.mockReturnValue({
 			isValid: true,
+		});
+		nodeGovernanceServiceMock.validateWorkflowNodes.mockResolvedValue({
+			hasBlockedNodes: false,
+			blockedNodes: [],
 		});
 
 		// Default: no active floor. Tests opt into a floor explicitly.
@@ -82,6 +89,7 @@ describe('WorkflowCreationService', () => {
 			workflowValidationServiceMock,
 			instanceRedactionEnforcementServiceMock,
 			workflowHookContextServiceMock,
+			nodeGovernanceServiceMock,
 		);
 	});
 
