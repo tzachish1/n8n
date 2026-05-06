@@ -59,6 +59,7 @@ import { userHasScopes } from '@/permissions.ee/check-access';
 import { AuthService } from '@/auth/auth.service';
 import * as ResponseHelper from '@/response-helper';
 import { NamingService } from '@/services/naming.service';
+import { OwnershipService } from '@/services/ownership.service';
 import { ProjectService } from '@/services/project.service.ee';
 import { SsrfBlockedIpError } from '@/services/ssrf/ssrf-blocked-ip.error';
 import { SsrfProtectionService } from '@/services/ssrf/ssrf-protection.service';
@@ -88,6 +89,7 @@ export class WorkflowsController {
 		private readonly collaborationService: CollaborationService,
 		private readonly ssrfConfig: SsrfProtectionConfig,
 		private readonly ssrfProtectionService: SsrfProtectionService,
+		private readonly ownershipService: OwnershipService,
 	) {}
 
 	@Post('/')
@@ -529,6 +531,7 @@ export class WorkflowsController {
 		);
 
 		if ('executionId' in result) {
+			const ownerProject = await this.ownershipService.getWorkflowProjectCached(dbWorkflow.id);
 			this.eventService.emit('workflow-executed', {
 				user: {
 					id: req.user.id,
@@ -541,6 +544,7 @@ export class WorkflowsController {
 				workflowName: dbWorkflow.name,
 				executionId: result.executionId,
 				source: 'user-manual',
+				projectId: ownerProject?.id,
 			});
 		}
 

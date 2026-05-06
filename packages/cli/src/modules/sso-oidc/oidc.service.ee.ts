@@ -275,8 +275,29 @@ export class OidcService {
 				claims.sub,
 			);
 		} catch (error) {
-			this.logger.error('Failed to fetch user info', { error });
-			throw new BadRequestError('Invalid token');
+			// Userinfo endpoint may fail when using custom API scopes (e.g., Azure AD with custom scopes)
+			// In this case, fall back to using ID token claims which already contain user info
+			this.logger.debug('Userinfo endpoint failed, falling back to ID token claims', {
+				error: error instanceof Error ? error.message : String(error),
+			});
+
+			// Use claims from ID token as userInfo fallback
+			// Azure AD and other providers include email, name, etc. in the ID token
+			if (typeof claims.email === 'string') {
+				userInfo = {
+					sub: claims.sub,
+					email: claims.email,
+					name: typeof claims.name === 'string' ? claims.name : undefined,
+					given_name: typeof claims.given_name === 'string' ? claims.given_name : undefined,
+					family_name: typeof claims.family_name === 'string' ? claims.family_name : undefined,
+					preferred_username:
+						typeof claims.preferred_username === 'string' ? claims.preferred_username : undefined,
+				};
+				this.logger.debug('Using ID token claims as user info', { email: userInfo.email });
+			} else {
+				this.logger.error('Failed to fetch user info and no email in ID token claims', { error });
+				throw new BadRequestError('Invalid token - could not retrieve user info');
+			}
 		}
 
 		if (!userInfo.email) {
@@ -485,11 +506,18 @@ export class OidcService {
 		const provisioningConfig = await this.provisioningService.getConfig();
 		const projectRoleMapping = claims[provisioningConfig.scopesProjectsRolesClaimName];
 		const instanceRole = claims[provisioningConfig.scopesInstanceRoleClaimName];
-		if (instanceRole) {
+
+		// Always call provisioning methods, even with empty/undefined claims
+		// This allows the provisioning service to handle role removal when roles are revoked in the IdP
+		if (provisioningConfig.scopesProvisionInstanceRole) {
 			await this.provisioningService.provisionInstanceRoleForUser(user, instanceRole);
 		}
-		if (projectRoleMapping) {
-			await this.provisioningService.provisionProjectRolesForUser(user.id, projectRoleMapping);
+		if (provisioningConfig.scopesProvisionProjectRoles) {
+			// Pass empty array if claim is missing/undefined to trigger removal of all project access
+			await this.provisioningService.provisionProjectRolesForUser(
+				user.id,
+				projectRoleMapping ?? [],
+			);
 		}
 	}
 
@@ -665,8 +693,44 @@ export class OidcService {
 		| undefined;
 
 	/**
+	 * Creates a proxy-aware fetch function that respects HTTP_PROXY, HTTPS_PROXY, and NO_PROXY environment variables.
+	 * Returns undefined if no proxy is configured.
+	 * The function is typed to match openid-client's CustomFetch signature.
+	 */
+	private createProxyAwareFetch():
+		| ((url: string, options: unknown) => Promise<Response>)
+		| undefined {
+		const hasProxyConfig =
+			process.env.HTTP_PROXY ?? process.env.HTTPS_PROXY ?? process.env.ALL_PROXY;
+
+		if (!hasProxyConfig) {
+			return undefined;
+		}
+
+		this.logger.debug('Configuring OIDC client with proxy support', {
+			HTTP_PROXY: process.env.HTTP_PROXY,
+			HTTPS_PROXY: process.env.HTTPS_PROXY,
+			NO_PROXY: process.env.NO_PROXY,
+			ALL_PROXY: process.env.ALL_PROXY,
+		});
+
+		// Create a proxy agent that automatically reads from environment variables
+		const proxyAgent = new EnvHttpProxyAgent();
+
+		// Return a fetch function that uses the proxy agent
+		// openid-client passes CustomFetchOptions which is compatible with RequestInit
+		return async (url: string, options: unknown) => {
+			return await fetch(url, {
+				...(options as RequestInit),
+				// @ts-expect-error - dispatcher is an undici-specific option not in standard fetch
+				dispatcher: proxyAgent,
+			});
+		};
+	}
+
+	/**
 	 * Creates a proxy-aware configuration for openid-client.
-	 * This method configures customFetch to respect HTTP_PROXY, HTTPS_PROXY, and NO_PROXY environment variables.
+	 * This method ensures the proxy is used for BOTH the discovery request AND subsequent requests.
 	 */
 	private async createProxyAwareConfiguration(
 		discoveryUrl: URL,
@@ -675,46 +739,30 @@ export class OidcService {
 	): Promise<openidClientTypes.Configuration> {
 		await this.loadOpenIdClient();
 
-		// Check if proxy environment variables are set
-		const hasProxyConfig =
-			process.env.HTTP_PROXY ?? process.env.HTTPS_PROXY ?? process.env.ALL_PROXY;
+		// Create proxy-aware fetch BEFORE discovery so the metadata request uses the proxy
+		const proxyFetch = this.createProxyAwareFetch();
 
-		if (hasProxyConfig) {
-			this.logger.debug('Configuring OIDC client with proxy support', {
-				HTTP_PROXY: process.env.HTTP_PROXY,
-				HTTPS_PROXY: process.env.HTTPS_PROXY,
-				NO_PROXY: process.env.NO_PROXY,
-				ALL_PROXY: process.env.ALL_PROXY,
-			});
-
-			// Create a proxy agent that automatically reads from environment variables
-			const proxyAgent = new EnvHttpProxyAgent();
-			const proxyFetch: openidClientTypes.CustomFetch = async (url, options) => {
-				return await fetch(url, {
-					...options,
-					// @ts-expect-error - dispatcher is an undici-specific option not in standard fetch
-					dispatcher: proxyAgent,
-				});
-			};
-
-			// discovery call with custom fetch client using proxy agent
-			const configuration = await this.openidClient.discovery(
-				discoveryUrl,
-				clientId,
-				clientSecret,
-				undefined,
-				{
-					[this.openidClient.customFetch]: proxyFetch,
-				},
-			);
-
-			// Configure customFetch to use the proxy agent
-			configuration[this.openidClient.customFetch] = proxyFetch;
-
-			return configuration;
+		// Pass customFetch to discovery so the initial metadata fetch also uses the proxy
+		// This fixes the issue where discovery requests failed behind corporate proxies
+		const discoveryOptions: Record<symbol, unknown> = {};
+		if (proxyFetch) {
+			discoveryOptions[this.openidClient.customFetch] = proxyFetch;
 		}
 
-		return await this.openidClient.discovery(discoveryUrl, clientId, clientSecret);
+		const configuration = await this.openidClient.discovery(
+			discoveryUrl,
+			clientId,
+			clientSecret,
+			undefined,
+			discoveryOptions,
+		);
+
+		if (proxyFetch) {
+			(configuration as unknown as Record<symbol, unknown>)[this.openidClient.customFetch] =
+				proxyFetch;
+		}
+
+		return configuration;
 	}
 
 	private async getOidcConfiguration(): Promise<openidClientTypes.Configuration> {

@@ -19,6 +19,7 @@ import OfficialIcon from 'virtual:icons/mdi/verified';
 import { useNodeType } from '@/app/composables/useNodeType';
 import { useTelemetry } from '@/app/composables/useTelemetry';
 import { useNodeTypesStore } from '@/app/stores/nodeTypes.store';
+import { useUIStore } from '@/app/stores/ui.store';
 import { useI18n } from '@n8n/i18n';
 import { useActions } from '../../composables/useActions';
 import { useViewStacks } from '../../composables/useViewStacks';
@@ -27,6 +28,8 @@ import {
 	removePreviewToken,
 	shouldShowCommunityNodeDetails,
 } from '../../nodeCreator.utils';
+import { NODE_ACCESS_REQUEST_MODAL_KEY } from '@/features/settings/nodeGovernance/nodeGovernance.constants';
+import { useNodeGovernanceStore } from '@/features/settings/nodeGovernance/nodeGovernance.store';
 
 import { N8nIcon, N8nNodeCreatorNode, N8nTooltip } from '@n8n/design-system';
 export interface Props {
@@ -50,8 +53,46 @@ const { isSubNodeType } = useNodeType({
 	nodeType: props.nodeType,
 });
 const nodeTypesStore = useNodeTypesStore();
+const uiStore = useUIStore();
+const nodeGovernanceStore = useNodeGovernanceStore();
+
+const _emit = defineEmits<{
+	requestAccess: [nodeType: string];
+}>();
+void _emit;
 
 const dragging = ref(false);
+
+// Node Governance - check props first, then fallback to store lookup
+const isBlocked = computed(() => {
+	const governanceStatus = props.nodeType.governance?.status;
+	if (governanceStatus !== undefined) {
+		return governanceStatus === 'blocked';
+	}
+	// Fallback to local resolution for items not pre-augmented by NodeCreator
+	// (e.g. sub-nodes inside view-stack subcategories like "AI"). Without this,
+	// items missing from `mergedNodes` would slip through as allowed even when
+	// the project's default behaviour is `block`.
+	const storeStatus = nodeGovernanceStore.resolveGovernanceForNode(props.nodeType.name);
+	return storeStatus?.status === 'blocked';
+});
+const isPendingRequest = computed(() => {
+	const governanceStatus = props.nodeType.governance?.status;
+	if (governanceStatus !== undefined) {
+		return governanceStatus === 'pending_request';
+	}
+	const storeStatus = nodeGovernanceStore.resolveGovernanceForNode(props.nodeType.name);
+	return storeStatus?.status === 'pending_request';
+});
+const _governanceStatus = computed(() => {
+	const governanceStatus = props.nodeType.governance?.status;
+	if (governanceStatus !== undefined) {
+		return governanceStatus;
+	}
+	const storeStatus = nodeGovernanceStore.resolveGovernanceForNode(props.nodeType.name);
+	return storeStatus?.status ?? 'allowed';
+});
+void _governanceStatus;
 const draggablePosition = ref({ x: -100, y: -100 });
 const draggableDataTransfer = ref(null as Element | null);
 
@@ -141,6 +182,13 @@ const author = computed(() => {
 });
 
 const tag = computed(() => {
+	// Show governance status as tag
+	if (isBlocked.value) {
+		return { text: i18n.baseText('nodeCreator.nodeItem.blocked'), type: 'danger' };
+	}
+	if (isPendingRequest.value) {
+		return { text: i18n.baseText('nodeCreator.nodeItem.pendingRequest'), type: 'warning' };
+	}
 	if (props.nodeType.tag) {
 		return props.nodeType.tag;
 	}
@@ -153,6 +201,13 @@ const tag = computed(() => {
 // Only surface the "new" badge in search results — under the category itself
 // the parent subcategory tile already carries the badge.
 const showNewBadge = computed(() => Boolean(props.nodeType.isNew && activeViewStack.search));
+
+function onRequestAccess() {
+	uiStore.openModalWithData({
+		name: NODE_ACCESS_REQUEST_MODAL_KEY,
+		data: { nodeType: props.nodeType.name, displayName: props.nodeType.displayName },
+	});
+}
 
 function onDragStart(event: DragEvent): void {
 	if (event.dataTransfer) {
@@ -183,13 +238,13 @@ function onCommunityNodeTooltipClick(event: MouseEvent) {
 </script>
 
 <template>
-	<!-- Node Item is draggable only if it doesn't contain actions -->
+	<!-- Node Item is draggable only if it doesn't contain actions and is not blocked -->
 	<N8nNodeCreatorNode
-		:draggable="!showActionArrow"
-		:class="$style.nodeItem"
+		:draggable="!showActionArrow && !isBlocked && !isPendingRequest"
+		:class="[$style.nodeItem, { [$style.blocked]: isBlocked || isPendingRequest }]"
 		:description="description"
 		:title="displayName"
-		:show-action-arrow="showActionArrow"
+		:show-action-arrow="showActionArrow && !isBlocked && !isPendingRequest"
 		:is-trigger="isTrigger"
 		:is-official="isOfficial"
 		:data-test-id="dataTestId"
@@ -199,7 +254,7 @@ function onCommunityNodeTooltipClick(event: MouseEvent) {
 		@dragend="onDragEnd"
 	>
 		<template #icon>
-			<div :class="$style.iconWrapper">
+			<div :class="{ [$style.iconWrapper]: true, [$style.dimmed]: isBlocked || isPendingRequest }">
 				<div v-if="isSubNodeType" :class="$style.subNodeBackground"></div>
 				<NodeIcon
 					:class="$style.nodeIcon"
@@ -207,7 +262,14 @@ function onCommunityNodeTooltipClick(event: MouseEvent) {
 					:size="nodeListIconSize"
 					color-default="var(--color--foreground--shade-2)"
 				/>
+				<N8nIcon v-if="isBlocked" icon="lock" size="small" :class="$style.lockIcon" />
 			</div>
+		</template>
+
+		<template v-if="isBlocked" #afterTitle>
+			<button :class="$style.requestAccessLink" @click.stop="onRequestAccess">
+				{{ i18n.baseText('nodeCreator.nodeItem.requestAccess') }}
+			</button>
 		</template>
 
 		<template v-if="isOfficial" #extraDetails>
@@ -276,6 +338,10 @@ function onCommunityNodeTooltipClick(event: MouseEvent) {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+
+	&.dimmed {
+		opacity: 0.5;
+	}
 }
 
 .nodeIcon {
@@ -324,6 +390,36 @@ function onCommunityNodeTooltipClick(event: MouseEvent) {
 
 	&.official {
 		width: 14px;
+	}
+}
+
+.blocked {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.lockIcon {
+	position: absolute;
+	bottom: -2px;
+	right: -2px;
+	background: var(--color--background--light-2);
+	border-radius: 50%;
+	padding: 2px;
+	color: var(--color--danger);
+}
+
+.requestAccessLink {
+	background: none;
+	border: none;
+	color: var(--color--primary);
+	cursor: pointer;
+	font-size: var(--font-size--2xs);
+	padding: 0;
+	margin-left: var(--spacing--2xs);
+	text-decoration: underline;
+
+	&:hover {
+		color: var(--color--primary--shade-1);
 	}
 }
 </style>

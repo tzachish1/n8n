@@ -437,8 +437,11 @@ export class PrometheusMetricsService {
 						: {};
 				}
 
-				if (eventName.startsWith('n8n.audit.workflow')) {
+				if (eventName === 'n8n.audit.workflow.executed') {
 					return this.buildWorkflowLabels(payload);
+				}
+				if (eventName.startsWith('n8n.audit.workflow')) {
+					return this.buildBaseWorkflowLabels(payload);
 				}
 				break;
 
@@ -461,6 +464,17 @@ export class PrometheusMetricsService {
 	}
 
 	private buildWorkflowLabels(payload: any): Record<string, string> {
+		const labels: Record<string, string> = {};
+		if (this.includes.labels.workflowId) {
+			labels.workflow_id = String(payload.workflowId ?? 'unknown');
+		}
+		if (this.includes.labels.workflowName) {
+			labels.workflow_name = String(payload.workflowName ?? 'unknown');
+		}
+		return labels;
+	}
+
+	private buildBaseWorkflowLabels(payload: any): Record<string, string> {
 		const labels: Record<string, string> = {};
 		if (this.includes.labels.workflowId) {
 			labels.workflow_id = String(payload.workflowId ?? 'unknown');
