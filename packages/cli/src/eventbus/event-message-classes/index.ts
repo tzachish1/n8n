@@ -138,6 +138,19 @@ export const eventNamesAudit = [
 	'n8n.audit.cluster.instance-left',
 	'n8n.audit.oauth.callback.binding.rejected',
 	'n8n.audit.credentials.authorize.rejected',
+	'n8n.audit.node-governance.policy.created',
+	'n8n.audit.node-governance.policy.updated',
+	'n8n.audit.node-governance.policy.deleted',
+	'n8n.audit.node-governance.category.created',
+	'n8n.audit.node-governance.category.updated',
+	'n8n.audit.node-governance.category.deleted',
+	'n8n.audit.node-governance.category.node-assigned',
+	'n8n.audit.node-governance.category.node-removed',
+	'n8n.audit.node-governance.categories.imported',
+	'n8n.audit.node-governance.request.created',
+	'n8n.audit.node-governance.request.approved',
+	'n8n.audit.node-governance.request.rejected',
+	'n8n.audit.node-governance.settings.updated',
 ] as const;
 
 export type EventNamesWorkflowType = (typeof eventNamesWorkflow)[number];

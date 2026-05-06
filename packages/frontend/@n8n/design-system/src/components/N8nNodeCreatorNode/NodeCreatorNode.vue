@@ -27,7 +27,7 @@ defineEmits<{
 	tooltipClick: [e: MouseEvent];
 }>();
 
-defineSlots<{ icon: {}; extraDetails: {}; dragContent: {} }>();
+defineSlots<{ icon: {}; afterTitle: {}; extraDetails: {}; dragContent: {} }>();
 
 const { t } = useI18n();
 </script>
@@ -58,6 +58,7 @@ const { t } = useI18n();
 				>
 					{{ tag.text }}
 				</ElTag>
+				<slot name="afterTitle" />
 				<N8nBadge v-if="isNew" theme="success">{{ t('nodeCreatorNode.new') }}</N8nBadge>
 				<N8nIcon
 					v-if="isTrigger"
@@ -102,7 +103,7 @@ const { t } = useI18n();
 	margin-left: var(--spacing--2xs);
 }
 :root .tag {
-	margin-left: var(--spacing--2xs);
+	margin-left: auto;
 	line-height: var(--font-size--3xs);
 	font-size: var(--font-size--3xs);
 	padding: 0.1875rem var(--spacing--3xs) var(--spacing--4xs) var(--spacing--3xs);

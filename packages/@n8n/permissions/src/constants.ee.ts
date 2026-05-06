@@ -83,6 +83,7 @@ export const RESOURCES = {
 	instanceAi: ['message', 'manage', 'gateway', 'eval'] as const,
 	roleMappingRule: [...DEFAULT_OPERATIONS] as const,
 	otel: ['manage'] as const,
+	nodeGovernance: ['manage'] as const,
 } as const;
 
 export const API_KEY_RESOURCES = {

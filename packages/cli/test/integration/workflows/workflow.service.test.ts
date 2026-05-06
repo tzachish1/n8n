@@ -85,6 +85,7 @@ beforeAll(async () => {
 		outboxRepository,
 		workflowValidationService,
 		nodeTypes,
+		mock(), // nodeGovernanceService
 		webhookServiceMock,
 		mock(), // licenseState
 		Container.get(ProjectRepository), // projectRepository

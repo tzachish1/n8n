@@ -29,6 +29,18 @@ function withoutExecutionMetadata(
 	return trimmed;
 }
 
+const sourceToMode: Record<WorkflowExecutedEvent['source'], string> = {
+	'user-manual': 'manual',
+	'user-retry': 'retry',
+	webhook: 'webhook',
+	trigger: 'trigger',
+	error: 'error',
+	cli: 'cli',
+	integrated: 'integrated',
+	evaluation: 'internal',
+	chat: 'manual',
+};
+
 @Service()
 export class LogStreamingEventRelay extends EventRelay {
 	constructor(
@@ -142,6 +154,22 @@ export class LogStreamingEventRelay extends EventRelay {
 			'role-mapping-rule-updated': (event) => this.roleMappingRuleUpdated(event),
 			'role-mapping-rule-deleted': (event) => this.roleMappingRuleDeleted(event),
 			'role-mapping-rules-bulk-deleted': (event) => this.roleMappingRulesBulkDeleted(event),
+			'node-governance-policy-created': (event) => this.nodeGovernancePolicyCreated(event),
+			'node-governance-policy-updated': (event) => this.nodeGovernancePolicyUpdated(event),
+			'node-governance-policy-deleted': (event) => this.nodeGovernancePolicyDeleted(event),
+			'node-governance-category-created': (event) => this.nodeGovernanceCategoryCreated(event),
+			'node-governance-category-updated': (event) => this.nodeGovernanceCategoryUpdated(event),
+			'node-governance-category-deleted': (event) => this.nodeGovernanceCategoryDeleted(event),
+			'node-governance-category-node-assigned': (event) =>
+				this.nodeGovernanceCategoryNodeAssigned(event),
+			'node-governance-category-node-removed': (event) =>
+				this.nodeGovernanceCategoryNodeRemoved(event),
+			'node-governance-categories-imported': (event) =>
+				this.nodeGovernanceCategoriesImported(event),
+			'node-governance-request-created': (event) => this.nodeGovernanceRequestCreated(event),
+			'node-governance-request-approved': (event) => this.nodeGovernanceRequestApproved(event),
+			'node-governance-request-rejected': (event) => this.nodeGovernanceRequestRejected(event),
+			'node-governance-settings-updated': (event) => this.nodeGovernanceSettingsUpdated(event),
 		});
 	}
 
@@ -389,6 +417,7 @@ export class LogStreamingEventRelay extends EventRelay {
 		projectId,
 		projectName,
 		source,
+		projectId,
 	}: WorkflowExecutedEventWithUser) {
 		void this.eventBus.sendAuditEvent({
 			eventName: 'n8n.audit.workflow.executed',
@@ -400,6 +429,8 @@ export class LogStreamingEventRelay extends EventRelay {
 				projectId,
 				projectName,
 				source,
+				mode: sourceToMode[source],
+				projectId,
 			},
 		});
 	}
@@ -411,6 +442,7 @@ export class LogStreamingEventRelay extends EventRelay {
 		projectId,
 		projectName,
 		source,
+		projectId,
 	}: WorkflowExecutedEvent) {
 		void this.eventBus.sendAuditEvent({
 			eventName: 'n8n.audit.workflow.executed',
@@ -421,6 +453,8 @@ export class LogStreamingEventRelay extends EventRelay {
 				projectId,
 				projectName,
 				source,
+				mode: sourceToMode[source],
+				projectId,
 			},
 		});
 	}
@@ -443,6 +477,8 @@ export class LogStreamingEventRelay extends EventRelay {
 		nodeId,
 		nodeName,
 		nodeType,
+		projectId,
+		mode,
 	}: RelayEventMap['node-pre-execute']) {
 		void this.eventBus.sendNodeEvent({
 			eventName: 'n8n.node.started',
@@ -453,6 +489,8 @@ export class LogStreamingEventRelay extends EventRelay {
 				nodeType,
 				nodeName,
 				nodeId,
+				projectId,
+				mode,
 			},
 		});
 	}
@@ -463,6 +501,8 @@ export class LogStreamingEventRelay extends EventRelay {
 		nodeType,
 		nodeName,
 		nodeId,
+		projectId,
+		mode,
 	}: RelayEventMap['node-post-execute']) {
 		void this.eventBus.sendNodeEvent({
 			eventName: 'n8n.node.finished',
@@ -473,6 +513,8 @@ export class LogStreamingEventRelay extends EventRelay {
 				nodeType,
 				nodeName,
 				nodeId,
+				projectId,
+				mode,
 			},
 		});
 	}
@@ -1279,6 +1321,153 @@ export class LogStreamingEventRelay extends EventRelay {
 					reason: event.reason,
 				},
 			},
+		});
+	}
+
+	// #endregion
+
+	// #region Node Governance
+
+	@Redactable()
+	private nodeGovernancePolicyCreated({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-policy-created']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.policy.created',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernancePolicyUpdated({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-policy-updated']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.policy.updated',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernancePolicyDeleted({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-policy-deleted']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.policy.deleted',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernanceCategoryCreated({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-category-created']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.category.created',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernanceCategoryUpdated({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-category-updated']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.category.updated',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernanceCategoryDeleted({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-category-deleted']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.category.deleted',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernanceCategoryNodeAssigned({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-category-node-assigned']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.category.node-assigned',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernanceCategoryNodeRemoved({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-category-node-removed']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.category.node-removed',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernanceCategoriesImported({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-categories-imported']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.categories.imported',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernanceRequestCreated({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-request-created']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.request.created',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernanceRequestApproved({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-request-approved']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.request.approved',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernanceRequestRejected({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-request-rejected']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.request.rejected',
+			payload: { ...user, ...rest },
+		});
+	}
+
+	@Redactable()
+	private nodeGovernanceSettingsUpdated({
+		user,
+		...rest
+	}: RelayEventMap['node-governance-settings-updated']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.node-governance.settings.updated',
+			payload: { ...user, ...rest },
 		});
 	}
 

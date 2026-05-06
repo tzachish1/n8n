@@ -293,8 +293,29 @@ export class OidcService {
 				claims.sub,
 			);
 		} catch (error) {
-			this.logger.error('Failed to fetch user info', { cause: safeStringify(error) });
-			throw new BadRequestError('Invalid token');
+			// Userinfo endpoint may fail when using custom API scopes (e.g., Azure AD with custom scopes)
+			// In this case, fall back to using ID token claims which already contain user info
+			this.logger.debug('Userinfo endpoint failed, falling back to ID token claims', {
+				error: error instanceof Error ? error.message : String(error),
+			});
+
+			// Use claims from ID token as userInfo fallback
+			// Azure AD and other providers include email, name, etc. in the ID token
+			if (typeof claims.email === 'string') {
+				userInfo = {
+					sub: claims.sub,
+					email: claims.email,
+					name: typeof claims.name === 'string' ? claims.name : undefined,
+					given_name: typeof claims.given_name === 'string' ? claims.given_name : undefined,
+					family_name: typeof claims.family_name === 'string' ? claims.family_name : undefined,
+					preferred_username:
+						typeof claims.preferred_username === 'string' ? claims.preferred_username : undefined,
+				};
+				this.logger.debug('Using ID token claims as user info', { email: userInfo.email });
+			} else {
+				this.logger.error('Failed to fetch user info and no email in ID token claims', { error });
+				throw new BadRequestError('Invalid token - could not retrieve user info');
+			}
 		}
 
 		if (!userInfo.email) {
@@ -516,11 +537,18 @@ export class OidcService {
 		const provisioningConfig = await this.provisioningService.getConfig();
 		const projectRoleMapping = claims[provisioningConfig.scopesProjectsRolesClaimName];
 		const instanceRole = claims[provisioningConfig.scopesInstanceRoleClaimName];
-		if (instanceRole) {
+
+		// Always call provisioning methods, even with empty/undefined claims
+		// This allows the provisioning service to handle role removal when roles are revoked in the IdP
+		if (provisioningConfig.scopesProvisionInstanceRole) {
 			await this.provisioningService.provisionInstanceRoleForUser(user, instanceRole);
 		}
-		if (projectRoleMapping) {
-			await this.provisioningService.provisionProjectRolesForUser(user.id, projectRoleMapping);
+		if (provisioningConfig.scopesProvisionProjectRoles) {
+			// Pass empty array if claim is missing/undefined to trigger removal of all project access
+			await this.provisioningService.provisionProjectRolesForUser(
+				user.id,
+				projectRoleMapping ?? [],
+			);
 		}
 	}
 

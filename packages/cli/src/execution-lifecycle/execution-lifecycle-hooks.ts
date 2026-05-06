@@ -206,7 +206,7 @@ function hookFunctionsWorkflowEvents(
 function hookFunctionsNodeEvents(hooks: ExecutionLifecycleHooks) {
 	const eventService = Container.get(EventService);
 	hooks.addHandler('nodeExecuteBefore', function (nodeName) {
-		const { executionId, workflowData: workflow } = this;
+		const { executionId, workflowData: workflow, mode } = this;
 		const node = workflow.nodes.find((n) => n.name === nodeName);
 
 		eventService.emit('node-pre-execute', {
@@ -215,10 +215,12 @@ function hookFunctionsNodeEvents(hooks: ExecutionLifecycleHooks) {
 			nodeId: node?.id,
 			nodeName,
 			nodeType: node?.type,
+			projectId,
+			mode,
 		});
 	});
 	hooks.addHandler('nodeExecuteAfter', function (nodeName) {
-		const { executionId, workflowData: workflow } = this;
+		const { executionId, workflowData: workflow, mode } = this;
 		const node = workflow.nodes.find((n) => n.name === nodeName);
 
 		eventService.emit('node-post-execute', {
@@ -227,6 +229,8 @@ function hookFunctionsNodeEvents(hooks: ExecutionLifecycleHooks) {
 			nodeId: node?.id,
 			nodeName,
 			nodeType: node?.type,
+			projectId,
+			mode,
 		});
 	});
 }

@@ -17,6 +17,8 @@ import type { SharedWorkflow } from './shared-workflow';
 import { User } from './user';
 import type { Variables } from './variables';
 
+export type GovernanceDefaultBehavior = 'allow' | 'block';
+
 @Entity()
 export class Project extends WithTimestampsAndStringId {
 	@Column({ length: 255 })
@@ -58,4 +60,7 @@ export class Project extends WithTimestampsAndStringId {
 	@ManyToOne('User', { onDelete: 'SET NULL' })
 	@JoinColumn({ name: 'creatorId' })
 	creator?: Relation<User>;
+
+	@Column({ type: 'varchar', length: 10, nullable: true })
+	governanceDefaultBehavior: 'allow' | 'block' | null;
 }
