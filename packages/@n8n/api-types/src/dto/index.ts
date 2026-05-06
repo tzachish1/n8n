@@ -322,3 +322,20 @@ export { UpdateOtelSettingsDto } from './otel/update-otel-settings.dto';
 export { TestOtelTraceDto } from './otel/test-otel-trace.dto';
 
 export { InstanceAiExamplesQueryDto } from './instance-ai-examples/instance-ai-examples-query.dto';
+
+// Node Governance
+export {
+	CreatePolicyDto,
+	UpdatePolicyDto,
+	CreateCategoryDto,
+	UpdateCategoryDto,
+	CategoryAssignmentDto,
+	BulkCategoryAssignmentDto,
+	CreateAccessRequestDto,
+	ReviewAccessRequestDto,
+	GetNodeGovernanceQueryDto,
+	GetNodeGovernanceBodyDto,
+	ImportCategoriesDto,
+	UpdateGovernanceSettingsDto,
+	UpdateProjectGovernanceSettingsDto,
+} from './node-governance';
