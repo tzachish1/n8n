@@ -8,6 +8,7 @@ import {
 import type { AuthenticatedRequest } from '@n8n/db';
 import { ProjectRelationRepository, ProjectRepository } from '@n8n/db';
 import { Container } from '@n8n/di';
+import omit from 'lodash/omit';
 import pick from 'lodash/pick';
 
 import { ProjectController } from '@/controllers/project.controller';
@@ -42,6 +43,11 @@ type ProjectHandlers = {
 	>;
 };
 
+const stripGovernanceFields = <T>(project: T): T =>
+	project && typeof project === 'object'
+		? (omit(project as Record<string, unknown>, ['governanceDefaultBehavior']) as T)
+		: project;
+
 const projectHandlers: ProjectHandlers = {
 	createProject: [
 		isLicensed('feat:projectRole:admin'),
@@ -54,7 +60,7 @@ const projectHandlers: ProjectHandlers = {
 
 			const project = await Container.get(ProjectController).createProject(req, res, payload.data);
 
-			return res.status(201).json(project);
+			return res.status(201).json(stripGovernanceFields(project));
 		},
 	],
 	updateProject: [
@@ -108,7 +114,7 @@ const projectHandlers: ProjectHandlers = {
 			});
 
 			return res.json({
-				data: projects,
+				data: projects.map(stripGovernanceFields),
 				nextCursor: encodeNextCursor({
 					offset,
 					limit,

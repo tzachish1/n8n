@@ -441,6 +441,12 @@ export type ActionsRecord<T extends SimplifiedNodeType[]> = {
 	[K in ExtractActionKeys<T[number]>]: ActionTypeDescription[];
 };
 
+export interface NodeGovernanceStatus {
+	status: 'allowed' | 'blocked' | 'pending_request';
+	category?: string;
+	requestId?: string;
+}
+
 export type SimplifiedNodeType = Pick<
 	INodeTypeDescription,
 	| 'displayName'
@@ -457,6 +463,7 @@ export type SimplifiedNodeType = Pick<
 > & {
 	tag?: NodeCreatorTag;
 	isNew?: boolean;
+	governance?: NodeGovernanceStatus;
 };
 export interface SubcategoryItemProps {
 	description?: string;

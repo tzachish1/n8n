@@ -279,5 +279,11 @@ function registerAuthenticationHooks() {
 		telemetry.reset();
 		RBACStore.setGlobalScopes([]);
 		favoritesStore.reset();
+		settingsStore.reset();
+
+		// Reset initialization flags so that on next login, stores are properly re-initialized
+		// This fixes the bug where role changes require 2 login/logout cycles to take effect
+		state.initialized = false;
+		authenticatedFeaturesInitialized = false;
 	});
 }
