@@ -228,3 +228,20 @@ export { VersionQueryDto } from './instance-version-history/version-query.dto';
 export { CreateEncryptionKeyDto } from './encryption/create-encryption-key.dto';
 export { ListEncryptionKeysQueryDto } from './encryption/list-encryption-keys-query.dto';
 export type { EncryptionKeyResponseDto } from './encryption/encryption-key-response.dto';
+
+// Node Governance
+export {
+	CreatePolicyDto,
+	UpdatePolicyDto,
+	CreateCategoryDto,
+	UpdateCategoryDto,
+	CategoryAssignmentDto,
+	BulkCategoryAssignmentDto,
+	CreateAccessRequestDto,
+	ReviewAccessRequestDto,
+	GetNodeGovernanceQueryDto,
+	GetNodeGovernanceBodyDto,
+	ImportCategoriesDto,
+	UpdateGovernanceSettingsDto,
+	UpdateProjectGovernanceSettingsDto,
+} from './node-governance';

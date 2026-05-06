@@ -29,6 +29,7 @@ import {
 	ExecutionCancelledError,
 	ManualExecutionCancelledError,
 	TimeoutExecutionCancelledError,
+	NodeOperationError,
 	Workflow,
 } from 'n8n-workflow';
 import PCancelable from 'p-cancelable';
@@ -47,6 +48,8 @@ import { CredentialsPermissionChecker } from '@/executions/pre-execution-checks'
 import { ExternalHooks } from '@/external-hooks';
 import { ManualExecutionService } from '@/manual-execution.service';
 import { NodeTypes } from '@/node-types';
+import { NodeGovernanceService } from '@/services/node-governance.service';
+import { OwnershipService } from '@/services/ownership.service';
 import type { ScalingService } from '@/scaling/scaling.service';
 import type { Job, JobData } from '@/scaling/scaling.types';
 import * as WorkflowExecuteAdditionalData from '@/workflow-execute-additional-data';
@@ -87,8 +90,10 @@ export class WorkflowRunner {
 		private readonly failedRunFactory: FailedRunFactory,
 		private readonly eventService: EventService,
 		private readonly executionsConfig: ExecutionsConfig,
+		private readonly nodeGovernanceService: NodeGovernanceService,
 		private readonly storageConfig: StorageConfig,
 		private readonly externalHooks: ExternalHooks,
+		private readonly ownershipService: OwnershipService,
 	) {}
 
 	/** The process did error */
@@ -247,6 +252,62 @@ export class WorkflowRunner {
 		} catch (error) {
 			await this.failExecution(data, executionId, error, responsePromise);
 			return executionId;
+		}
+
+		// Check node governance - validate for blocked nodes.
+		// data.projectId is not always populated (e.g. internal/scheduled/sub-workflow paths),
+		// so fall back to the workflow's owning project derived from workflowId. We only skip
+		// enforcement when neither is available or no userId is known (system executions).
+		let governanceProjectId = data.projectId;
+		if (!governanceProjectId && workflowId) {
+			try {
+				const owningProject = await this.ownershipService.getWorkflowProjectCached(workflowId);
+				governanceProjectId = owningProject?.id;
+			} catch (error) {
+				this.logger.debug('Could not resolve owning project for governance check', {
+					workflowId,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		}
+
+		if (nodes && nodes.length > 0 && data.userId && governanceProjectId) {
+			try {
+				const validation = await this.nodeGovernanceService.validateWorkflowNodes(
+					nodes,
+					governanceProjectId,
+					data.userId,
+				);
+
+				if (validation.hasBlockedNodes) {
+					const blockedNodeNames = validation.blockedNodes
+						.map((n) => n.nodeName || n.nodeType)
+						.join(', ');
+					const error = new NodeOperationError(
+						null as any, // node is not available in this context
+						`Cannot execute workflow: The following nodes are blocked by governance policies: ${blockedNodeNames}. Please remove these nodes or request access.`,
+					);
+					// Create a failed execution with the error
+					const runData = this.failedRunFactory.generateFailedExecutionFromError(
+						data.executionMode,
+						error,
+						undefined, // no specific node
+					);
+					const lifecycleHooks = getLifecycleHooksForRegularMain(data, executionId);
+					await lifecycleHooks.runHook('workflowExecuteBefore', [undefined, data.executionData]);
+					await lifecycleHooks.runHook('workflowExecuteAfter', [runData]);
+					responsePromise?.reject(error);
+					this.activeExecutions.finalizeExecution(executionId);
+					return executionId;
+				}
+			} catch (error) {
+				// If governance check fails, log but don't block execution (fail open for now)
+				// This prevents breaking existing workflows if governance service is unavailable
+				this.logger.warn('Node governance check failed, continuing execution', {
+					workflowId,
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
 		}
 
 		if (responsePromise) {
