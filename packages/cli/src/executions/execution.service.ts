@@ -52,6 +52,7 @@ import { EventService } from '@/events/event.service';
 import type { IExecutionFlattedResponse } from '@/interfaces';
 import { License } from '@/license';
 import { NodeTypes } from '@/node-types';
+import { OwnershipService } from '@/services/ownership.service';
 import { RoleService } from '@/services/role.service';
 import { WaitTracker } from '@/wait-tracker';
 import { WorkflowRunner } from '@/workflow-runner';
@@ -128,6 +129,7 @@ export class ExecutionService {
 		private readonly workflowSharingService: WorkflowSharingService,
 		private readonly eventService: EventService,
 		private readonly executionRedactionServiceProxy: ExecutionRedactionServiceProxy,
+		private readonly ownershipService: OwnershipService,
 	) {}
 
 	/**
@@ -337,6 +339,9 @@ export class ExecutionService {
 			throw new UnexpectedError('The retry did not start for an unknown reason.');
 		}
 
+		const retryOwnerProject = await this.ownershipService.getWorkflowProjectCached(
+			execution.workflowId,
+		);
 		this.eventService.emit('workflow-executed', {
 			user: {
 				id: req.user.id,
@@ -349,6 +354,7 @@ export class ExecutionService {
 			workflowName: execution.workflowData.name,
 			executionId: retriedExecutionId,
 			source: 'user-retry',
+			projectId: retryOwnerProject?.id,
 		});
 
 		const response: Omit<IExecutionResponse, 'createdAt'> = {
