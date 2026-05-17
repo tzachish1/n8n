@@ -272,6 +272,30 @@ export class OidcService {
 			throw new ForbiddenError('No claims found in the OIDC token');
 		}
 
+		// Per-login diagnostic of the raw ID-token shape, before any provisioning
+		// logic runs. Only claim KEYS are logged - never values - so no PII leaks.
+		// Used to reconcile reports of inconsistent role-claim presence across
+		// logins (e.g. Azure Entra v1 tokens where `roles` is sometimes omitted
+		// from the ID token but present in the access token).
+		this.logger.debug('OIDC token claims fingerprint (loginUser)', {
+			availableClaimKeys: Object.keys(claims),
+			rolesClaimType:
+				claims.roles === undefined
+					? 'undefined'
+					: Array.isArray(claims.roles)
+						? `array[${claims.roles.length}]`
+						: typeof claims.roles,
+			groupsClaimType:
+				claims.groups === undefined
+					? 'undefined'
+					: Array.isArray(claims.groups)
+						? `array[${claims.groups.length}]`
+						: typeof claims.groups,
+			hasAccessToken: typeof tokens.access_token === 'string',
+			accessTokenIsJwt:
+				typeof tokens.access_token === 'string' && tokens.access_token.split('.').length === 3,
+		});
+
 		let userInfo;
 		try {
 			userInfo = await this.openidClient.fetchUserInfo(
