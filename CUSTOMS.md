@@ -643,6 +643,174 @@ Reusable workflows referenced by the keepers:
   delete it as part of the next chore-upgrade commit and append it to the
   list above.
 
+### 9. Dynamic Credential Seeding Endpoint
+
+See also: [Credential-Seeding-Guide.md](./Credential-Seeding-Guide.md) for the
+auth-backend integration recipe, Entra setup cookbook, and troubleshooting
+table. This section is the upstream-rebase reference; the guide is the
+operator/integrator handbook.
+
+**What & why.** The upstream Dynamic Credentials EE module supports per-user
+OAuth2 credentials by routing every caller through an interactive consent
+flow (`POST /credentials/:id/authorize` → IdP login → `…/callback` →
+encrypted token persisted under a resolver-derived subject). On our fork
+that consent step is impossible to use for **server-to-server bots** that
+already hold the user's Entra/Graph tokens on their own backend: there is no
+browser, the user shouldn't be re-prompted, and the existing endpoints don't
+accept raw tokens.
+
+This customization adds **one new endpoint** that pushes pre-acquired OAuth2
+tokens directly into the same encrypted store that the interactive flow
+populates. Once seeded, the credential is indistinguishable from one created
+via consent — refresh, expiry, and resolver lookup all go through the
+existing OAuth2 plumbing. Built specifically for the Microsoft ecosystem
+(Outlook, Teams, OneDrive, SharePoint, Azure OpenAI on Entra), but works for
+any OAuth2 credential whose resolver can validate an Azure AD-issued token.
+
+**Entry points / key files**
+- `packages/cli/src/modules/dynamic-credentials.ee/credential-seed.controller.ts`
+  *(new)* — single `POST /credentials/:id/seed` endpoint plus an `OPTIONS`
+  preflight twin. Body is Zod-validated against `SeedBodySchema`
+  (`.passthrough()` so future token claims roll out without controller
+  changes). Only OAuth2 credentials with `isResolvable=true` are accepted.
+  The handler reads `req.body` directly rather than using `@Body` because
+  the controller registry's `@Body` injector requires a `Z.class` DTO
+  (something with `safeParse`); we deliberately keep the schema co-located
+  here instead of coupling this fork-only feature to `@n8n/api-types`.
+- `packages/cli/src/modules/dynamic-credentials.ee/dynamic-credentials.module.ts`
+  — one-line registration: `await import('./credential-seed.controller');`
+  next to the existing controller imports.
+- `packages/cli/src/modules/dynamic-credentials.ee/__tests__/credential-seed.controller.test.ts`
+  *(new)* — 11 unit tests: four happy-path shapes (single token, split
+  identity/access token, `extraTokenFields` merging, metadata merging) plus
+  seven sad paths (bad body, missing credential, non-resolvable credential,
+  non-OAuth2 credential, missing resolver, `CredentialStorageError` mapped to
+  400, generic errors masked behind 400).
+- `packages/cli/test/integration/dynamic-credentials.ee/credential-seed.api.test.ts`
+  *(new)* — 11 supertest cases exercising the full middleware chain (static
+  token gate, cookie bypass, body parser, resolver lookup, encrypted DB
+  write via `DynamicCredentialEntryRepository`, upsert on re-seed,
+  split-token shape). Stubs `LoadNodesAndCredentials.getCredential` to a
+  minimal `oAuth2Api` fixture because the integration env doesn't load
+  `nodes-base`; production sees the real registration.
+- `Credential-Seeding-Guide.md` *(new, repo root)* — auth-backend recipe and
+  Microsoft Entra cookbook.
+
+**Runtime contract**
+- **Route.** `POST /rest/credentials/:id/seed` (relative to `N8N_PATH`). The
+  same auth/CORS/rate-limit middleware as the existing dynamic-credentials
+  routes is reused via `getDynamicCredentialMiddlewares()` and
+  `DynamicCredentialCorsService`. Rate limit reuses
+  `dynamicCredentialsConfig.rateLimitAuthorizePerMinute` so operators can
+  tune both endpoints with one knob.
+- **Body schema** (Zod, `.passthrough()` so future fields don't break
+  callers — they're stored as part of `oauthTokenData`):
+  - `resolverId` — id of an existing `DynamicCredentialResolver`.
+  - `userAccessToken` — token that gets stored as `oauthTokenData.access_token`.
+    For Graph-audience services (Outlook, Teams, OneDrive, generic
+    `https://graph.microsoft.com/*`) this is also the token the resolver
+    validates.
+  - `identityToken` *(optional)* — when present, used as the resolver
+    identity instead of `userAccessToken`. Required whenever
+    `userAccessToken`'s audience is **not** something the resolver can
+    introspect: SharePoint (`https://{tenant}.sharepoint.com/.default`),
+    Azure OpenAI (`https://cognitiveservices.azure.com/.default`), any
+    Azure-resource-scoped token. Pass a Graph-audience access token (or an
+    OIDC `id_token` if the resolver is configured for ID-token
+    introspection) here.
+  - `refreshToken` — stored as `oauthTokenData.refresh_token`.
+  - `tokenType` *(default `Bearer`)*, `expiresIn` *(default `3599`)*,
+    `scope` *(optional)* — stored verbatim.
+  - `extraTokenFields` *(optional)* — `Record<string, unknown>` merged into
+    `oauthTokenData` (use this for `id_token`, `ext_expires_in`, vendor
+    extensions).
+  - `metadata` *(optional)* — `Record<string, unknown>` merged into the
+    audit metadata; the controller always prepends
+    `{ source: 'seed', enrolledAt: Date.now() }`.
+- **Storage path.** The controller delegates to
+  `OauthService.saveDynamicCredential(credential, { oauthTokenData },
+  resolverIdentity, resolverId, authMetadata)`, the same method the
+  interactive callback uses after a successful authorization. That call
+  ends up at `DynamicCredentialsProxy.storeIfNeeded(...)`, which re-runs
+  the resolver's `setSecret` and persists encrypted blobs into
+  `DynamicCredentialEntry` / `DynamicCredentialUserEntry`. Net effect: a
+  seeded record and a consent-flow record are byte-identical in the DB.
+- **Responses.** `200 { ok: true }` on success.
+  `400 BadRequestError` for invalid body, non-OAuth2 credential type,
+  non-`isResolvable` credential, `CredentialStorageError` from
+  `setSecret` (e.g. unverifiable identity token), or any other unexpected
+  error (message scrubbed to `"Failed to seed credential"` to avoid leaking
+  internal failure modes — full error is logged at `error` level).
+  `404 NotFoundError` for missing credential or missing resolver.
+- **Auth model.** The endpoint is registered with
+  `allowUnauthenticated: true` so it can be reached by the auth backend
+  using the same Bearer-token shape n8n's `BearerTokenExtractor` is
+  designed for. Identity validation happens **inside** `saveDynamicCredential`
+  via the resolver's `setSecret` (introspection/userinfo against your
+  Entra tenant) — there is no second auth layer on this route and no
+  attempt to validate the token at the HTTP boundary, exactly mirroring the
+  upstream `/authorize` endpoint. Operators MUST front this with
+  network-level controls (private VPC, IP allowlist, mTLS, or an upstream
+  proxy that strips/validates the Bearer header) when exposed beyond the
+  auth backend.
+
+**Microsoft setup checklist (operator)**
+1. **Entra app registration.** Single confidential client. Grant the
+   delegated scopes you need (Graph: `Mail.ReadWrite`, `Calendars.ReadWrite`,
+   `Files.ReadWrite.All`, etc.; SharePoint: `Sites.Read.All` plus the
+   resource-specific `.default`; Azure OpenAI:
+   `https://cognitiveservices.azure.com/.default`). Tenant-admin **pre-consent**
+   the whole set so end users never see a consent dialog.
+2. **Refresh tokens.** Configure the app for **`offline_access`** scope on
+   every flow that seeds n8n; without it `userAccessToken` is single-use
+   and the seeded credential expires after one Graph hop.
+3. **Resolver registration.** Create one
+   `DynamicCredentialResolver` per token-audience family using the existing
+   `POST /rest/credential-resolvers` endpoint:
+   - **Graph family** (Outlook, Teams, OneDrive, generic Graph callers):
+     point the introspection endpoint at Graph
+     (`https://graph.microsoft.com/v1.0/me`) or the Entra OIDC userinfo
+     endpoint. `userAccessToken` alone is enough for the seed call —
+     `identityToken` can be omitted.
+   - **Non-Graph services** (SharePoint, Azure OpenAI, any resource-scoped
+     token): the resolver still introspects against Graph or OIDC
+     userinfo; the auth backend MUST request a separate Graph token in
+     parallel and pass it as `identityToken` while passing the
+     service-audience token as `userAccessToken`.
+4. **Credential creation.** Create the credential as you would for the
+   interactive flow — typed (e.g. `microsoftOutlookOAuth2Api`), marked
+   `isResolvable=true`, and linked to a `resolverId` via the
+   credential-resolvers UI. Leave its `oauthTokenData` empty; the seed
+   call populates it per user.
+5. **Seed call from the auth backend.** Server-to-server POST to
+   `/rest/credentials/:credentialId/seed` with the body shape above. Re-seed
+   when (a) the resolver subject changes (e.g. tenant migration), (b)
+   the refresh token is invalidated by an admin, or (c) the user re-consents
+   to broader scopes. **There is no need to re-seed on every webhook call** —
+   the OAuth2 path inside the workflow refreshes `access_token` from
+   `refresh_token` automatically.
+
+**Upgrade checklist**
+- If upstream changes the `dynamic-credentials.ee` module layout (e.g.
+  splits controllers into a sub-folder, renames `DynamicCredentialsConfig`,
+  changes the signature of `OauthService.saveDynamicCredential`), follow
+  the breakage: the controller file is intentionally small (~140 lines) and
+  uses only documented internal APIs, so the diff to repair is mechanical.
+- If upstream introduces an official seeding endpoint with the same route
+  (`POST /credentials/:id/seed`) and equivalent semantics, **delete this
+  customization** and rely on theirs. Audit by grepping the upstream tag
+  for `'/seed'` inside `packages/cli/src/modules/dynamic-credentials.ee/`.
+- If the Zod body schema is extended on the fork, keep the `.passthrough()`
+  modifier — callers depend on unknown fields being forwarded into
+  `oauthTokenData` so new IdP token claims roll out without coupling
+  releases.
+- The test file mocks `getDynamicCredentialMiddlewares` and
+  `DynamicCredentialCorsService`. If upstream renames either, mirror the
+  rename in the test or the `jest.mock('../utils', ...)` factory will leak.
+- Keep `allowUnauthenticated: true` on the route until/unless the fork
+  introduces a service-to-service auth scheme that the auth backend can
+  speak. Removing it without that scheme breaks the entire flow.
+
 ## Upgrade procedure (repeatable)
 
 This is the workflow we actually followed for 2.15.1 → 2.17.5 → 2.17.7 and

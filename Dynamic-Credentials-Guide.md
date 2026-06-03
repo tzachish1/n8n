@@ -4,6 +4,11 @@ Dynamic Credentials is an Enterprise Edition feature in n8n that enables **per-u
 
 This is ideal for scenarios where workflows are triggered via webhooks or forms, and downstream nodes (e.g., Jira, Confluence, Slack, Google) should operate as the user who triggered the workflow, not as a shared service account.
 
+> **Sibling guide:** if your auth backend already holds users' OAuth tokens
+> (typical for platforms federated with Entra/Azure AD) and you want to push
+> them into n8n server-to-server with **no consent UI**, use the seeding
+> endpoint instead -- see [Credential-Seeding-Guide.md](./Credential-Seeding-Guide.md).
+
 ---
 
 ## Table of Contents

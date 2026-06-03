@@ -15,6 +15,7 @@ export class DynamicCredentialsModule implements ModuleInterface {
 		}
 		await import('./dynamic-credentials.controller');
 		await import('./credential-resolvers.controller');
+		await import('./credential-seed.controller');
 		await import('./context-establishment-hooks');
 		await import('./credential-resolvers');
 		const {
