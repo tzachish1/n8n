@@ -16,6 +16,7 @@ function isExternalResolversEnabled(): boolean {
 export class DynamicCredentialsModule implements ModuleInterface {
 	async init() {
 		await import('./dynamic-credentials.controller.js');
+		await import('./credential-seed.controller.js');
 
 		// System resolver powers private credentials; OAuth/Slack resolvers and
 		// their management/identity-extractor surfaces are external-only.
