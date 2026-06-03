@@ -17,7 +17,15 @@ function isExternalResolversEnabled(): boolean {
 @BackendModule({ name: 'dynamic-credentials', licenseFlag: LICENSE_FEATURES.DYNAMIC_CREDENTIALS })
 export class DynamicCredentialsModule implements ModuleInterface {
 	async init() {
+<<<<<<< HEAD
 		await import('./dynamic-credentials.controller.js');
+=======
+		if (!isPrivateCredentialsEnabled()) {
+			return;
+		}
+		await import('./dynamic-credentials.controller');
+		await import('./credential-seed.controller');
+>>>>>>> 4cdb2ab5c84 (feat(dynamic-credentials): add programmatic credential seeding endpoint)
 
 		// Import the n8n oauth extractor and seeder
 		const { N8nOAuthIdentitySeeder } = await import(
