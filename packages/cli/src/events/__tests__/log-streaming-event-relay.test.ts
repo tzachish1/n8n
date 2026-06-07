@@ -1497,6 +1497,56 @@ describe('LogStreamingEventRelay', () => {
 		});
 	});
 
+	// Fork §10 — OIDC Graph token auto-seed audit events. Payloads carry ids and
+	// reasons only; no token material ever flows through here.
+	describe('OIDC Graph token auto-seed events', () => {
+		it('should log on `oidc-graph-token-captured` event', () => {
+			const event: RelayEventMap['oidc-graph-token-captured'] = {
+				userId: 'user-graph-1',
+				resolverId: 'resolver-a',
+				credentialId: 'cred-99',
+				credentialType: 'microsoftOAuth2Api',
+			};
+
+			eventService.emit('oidc-graph-token-captured', event);
+
+			expect(eventBus.sendAuditEvent).toHaveBeenCalledWith({
+				eventName: 'n8n.audit.user.graph-token.captured',
+				payload: event,
+			});
+		});
+
+		it('should log on `oidc-graph-token-seed-failed` event', () => {
+			const event: RelayEventMap['oidc-graph-token-seed-failed'] = {
+				userId: 'user-graph-2',
+				resolverId: 'resolver-b',
+				credentialId: 'cred-100',
+				errorMessage: 'resolver unreachable',
+			};
+
+			eventService.emit('oidc-graph-token-seed-failed', event);
+
+			expect(eventBus.sendAuditEvent).toHaveBeenCalledWith({
+				eventName: 'n8n.audit.user.graph-token.seed-failed',
+				payload: event,
+			});
+		});
+
+		it('should log on `oidc-graph-token-skipped` event', () => {
+			const event: RelayEventMap['oidc-graph-token-skipped'] = {
+				userId: 'user-graph-3',
+				reason: 'no_refresh_token',
+			};
+
+			eventService.emit('oidc-graph-token-skipped', event);
+
+			expect(eventBus.sendAuditEvent).toHaveBeenCalledWith({
+				eventName: 'n8n.audit.user.graph-token.skipped',
+				payload: event,
+			});
+		});
+	});
+
 	describe('community package events', () => {
 		it('should log on `community-package-updated` event', () => {
 			const event: RelayEventMap['community-package-updated'] = {

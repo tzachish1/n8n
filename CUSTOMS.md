@@ -252,7 +252,10 @@ rigid DB row shape. We need:
 - `3bfa831d5e` harden OIDC instance-role claim handling for 2.17.5 (merge env defaults before Zod parse, fallback chain, alias table, diagnostic logs)
 
 **Entry points / key files**
-- `packages/cli/src/modules/sso-oidc/oidc.service.ee.ts`
+- `packages/cli/src/modules/sso-oidc/oidc.service.ee.ts` — also carries the
+  §10 Graph auto-seed path (`autoSeedGraphCredentials()`, scope-string
+  helper `buildAuthorizationScope()`). See §10 for that extension; the two
+  customizations share one file but are independent on the call graph.
   - `resolveInstanceRoleClaim()` — tries configured claim, falls back to
     `['roles', 'appRoles', 'app_roles', 'groups']` (logs a warn on fallback).
   - `applySsoProvisioning()` — info-level diagnostic log at entry (present
@@ -650,6 +653,12 @@ auth-backend integration recipe, Entra setup cookbook, and troubleshooting
 table. This section is the upstream-rebase reference; the guide is the
 operator/integrator handbook.
 
+See also §10 below for the n8n-native self-seeding path that removes the
+external auth-backend requirement when the n8n IdP itself is Entra (i.e. SSO
+is already configured) — same storage shape, same refresh semantics, but the
+token capture happens inside `OidcService.loginUser` instead of an HTTP POST
+from outside.
+
 **What & why.** The upstream Dynamic Credentials EE module supports per-user
 OAuth2 credentials by routing every caller through an interactive consent
 flow (`POST /credentials/:id/authorize` → IdP login → `…/callback` →
@@ -811,6 +820,877 @@ any OAuth2 credential whose resolver can validate an Azure AD-issued token.
   introduces a service-to-service auth scheme that the auth backend can
   speak. Removing it without that scheme breaks the entire flow.
 
+### 10. OIDC Self-Seeding for Microsoft Graph
+
+See also: [Credential-Seeding-Guide.md](./Credential-Seeding-Guide.md)
+("Self-Seeding from OIDC Login") for the operator-facing setup walkthrough.
+This section is the upstream-rebase reference.
+
+**What & why.** §9 requires an **external auth backend** to POST pre-acquired
+Microsoft Graph tokens into n8n's encrypted store via
+`POST /credentials/:id/seed`. That works for headless server-to-server flows
+but is overkill when the n8n IdP itself is Entra and the workflow author logs
+into n8n via OIDC — in that case n8n is already holding a valid Entra session
+for the user. This customization closes the gap with the **Microsoft
+On-Behalf-Of (OBO) flow**:
+
+1. OIDC login proceeds byte-identically to upstream — `OidcService.loginUser`
+   exchanges the code for the tokenset Entra issues against the n8n API
+   resource (or whichever provisioning scope the operator configured).
+2. After the callback succeeds, `autoSeedGraphCredentials` calls the new
+   private `exchangeForGraphToken` which POSTs the user's access token to
+   Entra's `token_endpoint` with
+   `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer` and
+   `requested_token_use=on_behalf_of`. Entra returns a **Graph-audience**
+   access token + refresh token.
+3. The OBO response is seeded via the same
+   `OauthService.saveDynamicCredential` path the §9 `/seed` controller uses,
+   producing byte-identical `DynamicCredentialEntry` /
+   `DynamicCredentialUserEntry` rows.
+
+The set of credentials seeded for a user is discovered from **two sources**,
+merged so that a credential is never seeded twice:
+
+- **Credential-level binding** — `credentials_entity.isResolvable = true`
+  AND `credentials_entity.resolverId IN (<opted-in resolver ids>)`. This is
+  the §9-native path used when an external script created the credential
+  pre-bound to a resolver (e.g. via the `/seed` controller flow).
+- **Workflow-level binding** *(v3)* — `workflow_entity.settings.credentialResolverId`
+  IN `(<opted-in resolver ids>)`. Every credential referenced by any node
+  in that workflow is treated as a seed candidate. This is the path
+  triggered by the standard n8n editor UI, which sets the resolver on the
+  **workflow settings** dialog rather than on each credential individually
+  — without this fallback, UI-created credentials would never be auto-seeded
+  and the operator would see `no resolvable credentials found for opted-in
+  resolver ids` despite a fully wired-up workflow.
+
+If the same credential is reachable via both paths, the credential-level
+binding wins (it's the more specific signal). Workflow discovery failure
+(e.g. `WorkflowRepository.find()` throws) is downgraded to a warn — the
+credential-level path is still attempted so a workflow-table outage cannot
+silently block the §9-native flow.
+
+This avoids the fatal flaw the v1/v2 design had: appending Graph scopes to
+the `/authorize` request collided with the n8n provisioning scope and either
+triggered `AADSTS70011` ("static scope limit exceeded") or produced an
+access token with the wrong `aud`. With OBO the OIDC request stays clean
+and Graph is a separate, server-side exchange that always targets a single
+resource. Native Outlook / Teams / OneDrive node integration from §9
+continues to work transparently — no per-execution token plumbing,
+no editor-side reconnect prompts, no extra service to deploy.
+
+Also adds a parallel **`microsoftGraphAppOnlyOAuth2Api`** credential type for
+unattended workflows (schedules, webhooks without user context) that
+legitimately should run as the platform identity, not as any specific human.
+Uses the OAuth2 client-credentials grant; n8n's existing `oAuth2Api` helper
+re-mints access tokens on expiry, so there's no refresh token to capture.
+Wireable into HTTP Request nodes day-one; native `microsoft*` accept-lists
+are intentionally deferred (see "What we are explicitly NOT doing" below).
+
+**Entry points / key files**
+- `packages/@n8n/db/src/migrations/common/1784000000007-AddOidcSeedSourceToCredentialResolver.ts`
+  *(new)* — additive nullable `oidcSeedSource VARCHAR(64)` column on
+  `dynamic_credential_resolver`. Default `NULL` keeps every existing row
+  inert post-migration.
+- `packages/cli/src/modules/dynamic-credentials.ee/database/entities/credential-resolver.ts`
+  — `oidcSeedSource?: string | null` field on the entity. v1 valid value
+  is just `'oidc'`; the field is a varchar (not enum) so future capture
+  sources (`'monday'`, etc.) don't require another migration.
+- `packages/@n8n/api-types/src/schemas/credential-resolver.schema.ts` —
+  new `OIDC_SEED_SOURCES = ['oidc']` const + `oidcSeedSourceSchema` zod
+  enum, threaded through `credentialResolverSchema` and the create /
+  update DTOs.
+- `packages/cli/src/modules/dynamic-credentials.ee/services/credential-resolver.service.ts`
+  — `create` persists `oidcSeedSource` verbatim (defaults to `null`);
+  `update` follows the upstream "undefined leaves untouched" contract.
+- `packages/cli/src/modules/dynamic-credentials.ee/credential-resolvers.controller.ts`
+  — controller passes the new field through from DTO → service.
+- `packages/frontend/editor-ui/src/app/components/CredentialResolverEditModal.vue`
+  — new `oidcSeedSource` `N8nSelect` between the resolver-type select and
+  the config inputs. Two options: "None" (`null`) and
+  "OIDC SSO (e.g. Microsoft Entra)" (`'oidc'`). i18n keys added under
+  `credentialResolverEdit.oidcSeedSource.*` in `@n8n/i18n`.
+- `packages/@n8n/config/src/configs/sso.config.ts` — `OidcConfig` declares
+  three `N8N_SSO_OIDC_GRAPH_*` env vars (`graphAutoSeedEnabled`,
+  `graphScopes`, `graphSeedFailOpen`). The legacy
+  `N8N_SSO_OIDC_GRAPH_SEED_RESOLVER_IDS` was removed in Phase 2d — the
+  per-resolver `oidcSeedSource` DB column is the single source of truth.
+  `graphScopes` is the **OBO** scope parameter (server-side), not a value
+  appended to the user-facing authorization URL; empty-string resolves to
+  `https://graph.microsoft.com/.default` at the service layer.
+- `packages/cli/src/modules/sso-oidc/services/graph-token-exchanger.service.ts`
+  *(new, Phase 2a)* — `GraphTokenExchanger` service. Encapsulates the
+  full Microsoft On-Behalf-Of (OBO) call lifecycle: scope assembly with
+  `offline_access` injection + `/.default` fallback, IdP token-endpoint
+  resolution via an injected callable, HTTP POST, all four failure modes
+  (discovery error, missing endpoint, network error, IdP rejection),
+  audit emission of `oidc-graph-token-skipped` with reason
+  `obo_exchange_failed`, and the `graphSeedFailOpen` fail-open / fail-closed
+  contract. Extracted from `OidcService` in Phase 2a so the planned
+  webhook lazy-seed path (see
+  `.claude/specs/oidc-lazy-seed-on-webhook.md`) can call OBO without
+  depending on `OidcService`. Pure helper — no DB access, no
+  `openid-client` configuration loading; both are injected.
+- `packages/cli/src/modules/sso-oidc/oidc.service.ee.ts` — surgical
+  additions on top of v1:
+  - Constructor takes three fork-only dependencies appended to the
+    upstream parameter list: `DynamicCredentialResolverRepository` *(v2)*,
+    `WorkflowRepository` *(v3)*, and `GraphTokenExchanger` *(Phase 2a)*.
+    The first powers DB-discovered resolver opt-in; the second powers
+    workflow-level credential discovery (see
+    `discoverWorkflowLevelCandidates` below); the third owns the OBO
+    exchange.
+  - `buildAuthorizationScope()` is byte-identical to upstream
+    (`'openid email profile [provisioningScope]'`). Graph scopes are
+    **not** appended to the `/authorize` URL because mixing them with a
+    provisioning scope targeting a different Entra resource (e.g.
+    `api://<n8n-app>/.default`) triggers `AADSTS70011`. Even if Entra
+    accepted the request, the resulting access token's `aud` would be
+    the n8n API — not Graph — making it useless for seeding.
+  - `exchangeForGraphToken(userAccessToken, userId)` — *(thin adapter
+    since Phase 2a)* delegates to
+    `GraphTokenExchanger.exchange({...})`. Bridges the runtime-loaded
+    `oidcConfig.clientId` / `oidcConfig.clientSecret` and the
+    openid-client `Configuration → serverMetadata().token_endpoint`
+    resolution; everything else (scope assembly, fail-open/fail-closed,
+    audit emission) lives in the exchanger. Behavior is
+    byte-identical to v3.
+  - `resolveSeedableResolverIds(envVarValue, userId)` — new private
+    helper. Unions ids from (1) the DB query
+    `WHERE oidcSeedSource = 'oidc'` and (2) the deprecated env var,
+    logging a deprecation warn whenever (2) is non-empty. A DB query
+    failure is downgraded to a warn so a resolver-table outage cannot
+    block OIDC login.
+  - `resolveSeedCandidates(resolverIds)` — *(new in v3)* private helper
+    that produces the final `Array<{ credential, resolverId }>` to seed.
+    Merges credential-level matches (the v1 query
+    `WHERE isResolvable=true AND resolverId IN (...)`) with the workflow
+    -level set returned by `discoverWorkflowLevelCandidates`, dedupes by
+    `credential.id`, and gives credential-level binding precedence on
+    conflict.
+  - `discoverWorkflowLevelCandidates(resolverIds)` — *(new in v3)* private
+    helper that returns `Map<credentialId, resolverId>`. Loads every
+    workflow whose `settings.credentialResolverId` is in the opted-in set,
+    walks each workflow's `nodes[].credentials` JSON, and emits one map
+    entry per referenced `credentialId` → owning workflow's resolver. A
+    `WorkflowRepository.find` failure is logged warn and returns an empty
+    map (degrades to credential-level-only discovery).
+  - `autoSeedGraphCredentials()` flow: (a) resolve eligible resolver
+    ids; (b) bail with `no_user_access_token` if the OIDC tokenset is
+    missing the access token to use as OBO assertion; (c) call
+    `exchangeForGraphToken`; (d) bail with `no_refresh_token` if the
+    OBO response lacks one; (e) call `resolveSeedCandidates` to gather
+    credentials from both the credential-level and workflow-level paths;
+    (f) seed the OBO-issued Graph tokens via
+    `OauthService.saveDynamicCredential`. The per-credential success log
+    is emitted at **`info`** (not `debug`) so operators can confirm the
+    feature actually fired without enabling verbose logging. Iteration /
+    fail-open semantics are unchanged from v1.
+  - `processTestCallback()` remains explicitly side-effect-free.
+- `packages/cli/src/events/maps/relay.event-map.ts` — three new event
+  types: `oidc-graph-token-captured`, `oidc-graph-token-seed-failed`,
+  `oidc-graph-token-skipped`. The skip-reason union covers
+  `'no_refresh_token' | 'auto_seed_disabled' | 'no_resolvers_configured' | 'no_user_access_token' | 'obo_exchange_failed'`.
+  No token material on payloads.
+- `packages/cli/src/events/relays/log-streaming.event-relay.ts` — three
+  matching handlers map the events onto
+  `n8n.audit.user.graph-token.{captured,seed-failed,skipped}`.
+- `packages/nodes-base/credentials/MicrosoftGraphAppOnlyOAuth2Api.credentials.ts`
+  *(new)* — `extends ['oAuth2Api']`, `grantType: 'clientCredentials'`,
+  hidden `scope: 'https://graph.microsoft.com/.default'`, tenant-templated
+  `accessTokenUrl`, four-cloud `graphApiBaseUrl` selector.
+- `packages/nodes-base/package.json` — credential registered in the
+  alphabetically-ordered `credentials` array between
+  `MicrosoftGraphSecurityOAuth2Api` and `MicrosoftOAuth2Api`. Keep that
+  ordering to avoid spurious diffs on upstream rebases.
+- `packages/cli/src/modules/sso-oidc/__tests__/oidc.service.ee.test.ts` —
+  `describe('auto-seed Graph credentials')` block (74 tests, all green):
+  happy path, default-off parity, no-refresh-token skip,
+  no-user-access-token skip *(v3)*, empty-resolver-list skip,
+  multi-resolver iteration, fail-open continuation, fail-closed
+  re-throw, test-callback safety, authorization-URL upstream-parity
+  *(no Graph append, v3)*, provisioning-scope passthrough *(v3)*, OBO
+  request shape & Graph-token persistence *(v3)*, OBO `/.default`
+  default *(v3)*, OBO IdP-rejection skip *(v3)*, OBO network-error skip
+  *(v3)*, OBO fail-closed re-throw *(v3)*, DB-discovery via
+  `oidcSeedSource='oidc'`, env-var × DB-discovery union (back-compat),
+  deprecation-warn assertion, resolver-repo-failure fallback, and
+  *(v3)* workflow-level candidate discovery, workflow-vs-credential-level
+  precedence, no double-seed when both bindings reference the same
+  credential, and graceful degradation when `WorkflowRepository.find`
+  throws.
+- `packages/cli/src/events/__tests__/log-streaming-event-relay.test.ts` —
+  three relay-mapping cases mirror the §3 OIDC event coverage.
+- `packages/nodes-base/credentials/test/MicrosoftGraphAppOnlyOAuth2Api.credentials.test.ts`
+  *(new, optional)* — 7 declarative assertions on identity, grant type,
+  scope default, access-token-URL templating, tenant requirement,
+  national-cloud selector, body-auth posture.
+
+**Runtime contract**
+
+The primary contract is the per-resolver `oidcSeedSource` field set via
+the resolver edit modal in n8n's UI. With both env vars below empty, the
+admin only needs (1) to enable OIDC login, (2) to enable auto-seed,
+(3) to mark one resolver as "OIDC SSO" in the UI, and (4) to bind that
+resolver to either the credential (§9-native path) **or** to the workflow
+that owns the Graph credential (`Workflow settings → Credential resolver`
+in the editor — the v3 workflow-level discovery path picks this up
+automatically):
+
+| Env var                                          | Default            | Notes                                                                                                                              |
+|--------------------------------------------------|--------------------|------------------------------------------------------------------------------------------------------------------------------------|
+| `N8N_SSO_OIDC_GRAPH_AUTO_SEED_ENABLED`           | `false`            | Master switch. With `false` the OIDC flow is byte-identical to upstream — no OBO call, no seed attempt, no new audit events.       |
+| `N8N_SSO_OIDC_GRAPH_SCOPES`                      | `""`               | **Server-side OBO scope** (not appended to the `/authorize` URL). Empty (default) resolves to `https://graph.microsoft.com/.default` — Entra mints a Graph token containing the admin-consented set, no enumeration needed. Only set this for least-privilege scenarios. |
+| `N8N_SSO_OIDC_GRAPH_SEED_FAIL_OPEN`              | `true`             | When `true`, OBO and seed failures log warn + emit a skip/seed-failed audit and login continues. When `false`, the OIDC login fails closed. |
+
+`offline_access` is appended automatically to the OBO scope set whenever
+`graphAutoSeedEnabled=true` — operators do not need to list it explicitly.
+
+**Prerequisite on the Entra side:** the n8n App Registration must have
+the relevant Graph **delegated permissions** added under "API
+permissions" AND admin-consented. The OIDC login must yield an access
+token (automatic when `N8N_SSO_SCOPES_PROVISION_*` is on or
+`N8N_SSO_SCOPES_NAME` points to a real API scope on the n8n app); that
+token is the OBO `assertion`.
+
+**Audit events emitted**
+
+| Event name (audit)                              | Trigger                                                                                                  | Payload extras                                                                          |
+|-------------------------------------------------|----------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------|
+| `n8n.audit.user.graph-token.captured`           | A `DynamicCredentialEntry` was successfully populated for this user (one event per credential seeded).   | `userId`, `resolverId`, `credentialId`, `credentialType`. No token material.             |
+| `n8n.audit.user.graph-token.seed-failed`        | A per-credential seed call threw, OR the candidate-credential query failed at the repository layer.      | `userId`, `resolverId`, `credentialId?` (omitted when the failure pre-dates iteration), `errorMessage`. |
+| `n8n.audit.user.graph-token.skipped`            | Auto-seed bailed before any storage call (no resolvers configured, OIDC tokenset missing access token, OBO exchange failed, or OBO response missing refresh token). | `userId`, `reason: 'no_refresh_token' \| 'auto_seed_disabled' \| 'no_resolvers_configured' \| 'no_user_access_token' \| 'obo_exchange_failed'`. |
+
+**Storage path.** Identical to §9 — `OauthService.saveDynamicCredential` →
+`DynamicCredentialsProxy.storeIfNeeded` → `DynamicCredentialEntry` /
+`DynamicCredentialUserEntry`. The only field on §9's audit metadata that
+differentiates a self-seeded record from an external-backend-seeded one is
+`source: 'oidc-self-seed'` vs `source: 'seed'`. Use that field if you need to
+distinguish in downstream reporting.
+
+**Upgrade checklist**
+- **`OauthService.saveDynamicCredential` signature** — if upstream refactors
+  the parameter order or shape of the second arg, fix the call site in
+  `autoSeedGraphCredentials()`. The test in
+  `oidc.service.ee.test.ts:'seeds the credential via OauthService.saveDynamicCredential ...'`
+  asserts the exact 5-arg shape, so the failure is loud.
+- **`CredentialsEntity.isResolvable` / `resolverId` columns** — if upstream
+  removes either, the auto-seed becomes a no-op silently. On every rebase,
+  grep `packages/@n8n/db/src/entities/credentials-entity.ts` for both
+  column declarations; if missing, surface this in the OIDC service
+  startup log and consider gating the feature.
+- **`DynamicCredentialResolver` entity / schema** — if upstream refactors
+  the resolver entity (e.g. adds a typed discriminator, splits into
+  per-source tables), re-home the `oidcSeedSource` field accordingly.
+  The migration `1784000000007-AddOidcSeedSourceToCredentialResolver`
+  must stay registered in both `sqlite/index.ts` and `postgresdb/index.ts`.
+- **`OidcService` constructor** — adding/removing/reordering the six
+  fork-only dependencies (`OauthService`, `CredentialsRepository`,
+  `EventService`, `DynamicCredentialResolverRepository`,
+  `WorkflowRepository`, `GraphTokenExchanger`) requires updating the
+  matching `new OidcService(...)` in `oidc.service.ee.test.ts:beforeEach`.
+  Keep them at the **end** of the parameter list so upstream parameter-order
+  changes don't shift our slots.
+- **Scope-string assembly** — if upstream rewrites `generateLoginUrl()` /
+  `generateTestLoginUrl()` to build the scope string differently (e.g.
+  via an options object), re-thread `buildAuthorizationScope()` into the
+  new shape and keep the parity tests
+  `oidc.service.ee.test.ts:'does NOT append Graph scopes to the authorization URL ...'`
+  and `... 'preserves the upstream provisioning-scope path ...'` passing.
+  The whole point of these tests is to guard against accidentally
+  re-introducing the `AADSTS70011` collision that v1 of this feature
+  shipped with.
+- **Workflow `settings.credentialResolverId` JSON contract** —
+  `discoverWorkflowLevelCandidates` assumes (a) `workflow.settings` is a
+  `JsonColumn` that may contain `credentialResolverId?: string`, and
+  (b) each `workflow.nodes[i].credentials` value is shaped as
+  `Record<string, { id: string; name: string }>`. Both come from upstream
+  `IWorkflowSettings` and `INodeCredentials` in
+  `packages/workflow/src/interfaces.ts`. If upstream renames either field
+  or changes the credentials shape (e.g. inlines tokens), update the
+  walker in `discoverWorkflowLevelCandidates` and the workflow-discovery
+  tests in `oidc.service.ee.test.ts`. Symptom of silent breakage: the
+  `info`-level `OIDC Graph auto-seed: credential populated for user`
+  log disappears for UI-bound credentials after a rebase even though
+  workflows still target an opted-in resolver.
+- **OBO token endpoint** — `GraphTokenExchanger.exchange()` (extracted
+  in Phase 2a from `OidcService.exchangeForGraphToken`) receives the
+  token endpoint via an injected `resolveTokenEndpoint` callable rather
+  than reading it directly from openid-client. `OidcService` provides
+  the callable as
+  `async () => (await this.getOidcConfiguration()).serverMetadata().token_endpoint`.
+  If upstream changes how the openid-client `Configuration` exposes
+  server metadata, only the `OidcService` adapter needs to change — the
+  exchanger and its 14 unit tests stay untouched. If proxy support ever
+  needs to flow through this path (the OBO call uses plain `global.fetch`
+  and intentionally bypasses the `EnvHttpProxyAgent` to keep the surgery
+  small), the modification lives in
+  `graph-token-exchanger.service.ts` and its dedicated test file
+  `services/__tests__/graph-token-exchanger.service.test.ts`.
+- **Resolver-edit modal** — if upstream renames or refactors
+  `CredentialResolverEditModal.vue` (e.g. splits into separate components
+  per resolver type), re-home the `oidcSeedSource` select. The i18n keys
+  live under `credentialResolverEdit.oidcSeedSource.*` in `@n8n/i18n/en.json`.
+- **Env-var deprecation removal** — `N8N_SSO_OIDC_GRAPH_SEED_RESOLVER_IDS`
+  was removed in Phase 2d. `resolveSeedableResolverIds()` is now a single
+  DB query against `oidcSeedSource = 'oidc'`; the back-compat tests in
+  `oidc.service.ee.test.ts` were dropped. Any upstream rename of the env
+  var declaration site (`sso.config.ts`) needs no special handling for
+  this field — it no longer exists in the fork.
+- **`microsoftGraphAppOnlyOAuth2Api` accept-lists** — when ready to wire
+  into native nodes (Phase 2, see below), the change is mechanical: add
+  `'microsoftGraphAppOnlyOAuth2Api'` to the `credentials` array on each
+  `*OAuth2Api`-using node descriptor (~10 nodes for Outlook / Teams /
+  OneDrive / SharePoint / Excel / Graph Security / Entra). No new fork
+  surface beyond the entries themselves.
+- **Conditional Access / MFA on the auth code grant** — Conditional Access
+  policies that require step-up MFA at token-request time can make the
+  IdP refuse `offline_access`. Symptom: `oidc-graph-token-skipped` events
+  with `reason: 'no_refresh_token'`. Documented in
+  `Credential-Seeding-Guide.md` troubleshooting; nothing to fix on the
+  fork side.
+- **OBO disabled on the App Registration** — If the n8n App Registration
+  has not had delegated Graph permissions added (or admin consent has
+  not been granted), every OBO call fails with `AADSTS65001` /
+  `invalid_grant`. Symptom: `oidc-graph-token-skipped` events with
+  `reason: 'obo_exchange_failed'` immediately after every login. The
+  fix is operator-side (Entra portal, "API permissions" →
+  "Add a permission" → Microsoft Graph → Delegated → grant admin
+  consent). The fail-open default ensures login still succeeds.
+
+**Verification**
+- With `N8N_SSO_OIDC_GRAPH_AUTO_SEED_ENABLED=false` (default), the existing
+  `oidc.service.ee.test.ts` suite passes byte-identically — no behavior
+  drift versus upstream.
+- With `N8N_SSO_OIDC_GRAPH_AUTO_SEED_ENABLED=true` + a resolver
+  pre-registered and a Graph credential linked to it, a successful OIDC
+  login populates that credential's `oauthTokenData` (`DynamicCredentialEntry`
+  row visible in DB), and the existing native Outlook node sends mail
+  using the seeded token without any extra configuration.
+- The new `MicrosoftGraphAppOnlyOAuth2Api` credential successfully calls
+  `GET https://graph.microsoft.com/v1.0/users` from an HTTP Request node
+  (an app-only-permission-required endpoint), confirming the client
+  credentials grant works end-to-end.
+
+**What we are explicitly NOT doing in v1**
+- Net-new `OidcUserGraphTokens` entity / `GraphTokenBroker` service —
+  superseded by reusing §9 infrastructure. If we ever need user-tied tokens
+  outside the credential system (e.g. for direct Graph calls in the audit
+  pipeline) revisit this decision.
+- Adding `microsoftGraphAppOnlyOAuth2Api` to native node accept-lists
+  (Outlook / Teams / etc.) — Phase 2; would touch ~10 node files.
+- Re-auth UX in the editor ("Your Microsoft connection: [Reconnect]") —
+  Phase 3; v1 surfaces failures via warn logs + audit events.
+- Per-user offboarding cleanup — deleting an n8n user leaves orphan
+  `DynamicCredentialUserEntry` rows. §9 has the same gap; defer to a
+  dedicated cleanup task.
+
+#### Phase 2 — Webhook lazy-seed (off by default)
+
+**What & why.** v1/v2a only seed credentials at OIDC login time. That covers
+the human-in-the-loop case (editor builds a workflow then runs it) but not
+the headless one: a third-party service hitting an n8n webhook with its own
+bearer for the n8n App Registration would receive
+`CredentialResolverDataNotFoundError` until its bearer's `sub` was matched
+by a prior login. Phase 2 closes the gap with a **webhook lazy-seed** path
+that catches that one specific resolver miss, runs the same OBO exchange v3
+runs at login, and retries resolution exactly once. Disabled by default to
+preserve byte-identical upstream behavior for deployments that don't want
+to widen the seed surface.
+
+Design and full file inventory live in
+[`.claude/specs/oidc-lazy-seed-on-webhook.md`](.claude/specs/oidc-lazy-seed-on-webhook.md);
+this subsection is the upstream-rebase reference.
+
+**Trust boundary shift.** Enabling lazy-seed shifts the "who can mint
+Graph tokens via n8n" question from "anyone who can complete the OIDC
+login (interactive)" to "anyone who can present a valid bearer for the
+n8n App Registration (programmatic)". Operators MUST review the
+audit-event stream (`oidc-graph-token-lazy-*`) and the
+`N8N_SSO_OIDC_GRAPH_LAZY_SEED_PROVISION_USER` toggle before exposing
+webhooks outside trusted networks.
+
+**Entry points / key files**
+- `packages/cli/src/credentials/lazy-seed-provider.interface.ts` *(new)* —
+  `ILazySeedProvider` + `LazySeedResult`/`LazySeedSkipReason` types.
+  Lives in the upstream `credentials/` folder (not under `sso-oidc/`)
+  because the consumer (`DynamicCredentialService`) is the seam, not the
+  producer. Implementations are pluggable — the OIDC seeder is the only
+  one today, but a future SAML/external provider could register itself.
+- `packages/cli/src/modules/sso-oidc/services/oidc-webhook-seeder.service.ts`
+  *(new)* — `OidcWebhookSeederService implements ILazySeedProvider`. Owns
+  bearer JWT decode (no signature verification — the resolver already
+  validated it on the read path), audience/issuer pinning against the
+  n8n App Registration + IdP discovery, resolver-opt-in gating via
+  `OidcService.getOptedInResolverIds()`, singleflight + negative cache
+  keyed by `(subject, credentialId)`, JIT user provisioning (mirrors
+  `OidcService.loginUser` lines 359–432), and OBO via the shared
+  `GraphTokenExchanger`. Persists via `OauthService.saveDynamicCredential`
+  with `source: 'oidc-webhook-lazy-seed'` so seeded rows are
+  distinguishable from `'oidc-self-seed'` (login-time) and `'seed'`
+  (§9 controller).
+- `packages/cli/src/modules/sso-oidc/oidc.service.ee.ts` — three new
+  public accessors expose state to the seeder without leaking internals:
+  - `getOptedInResolverIds()` — thin wrapper around the existing private
+    `resolveSeedableResolverIds()` (DB `oidcSeedSource='oidc'` + deprecated
+    env-var union).
+  - `getLazySeedRuntimeConfig()` — returns `{ clientId, clientSecret }`
+    only. Audience and issuer pinning are derived from these.
+  - `getLazySeedTokenEndpoint()` / `getLazySeedExpectedIssuer()` —
+    discovery-backed (via the existing `getOidcConfiguration()` cache;
+    1-hour TTL) helpers. Both swallow discovery failures and return
+    `undefined` so the seeder skips with a structured reason instead of
+    bubbling.
+- `packages/cli/src/modules/dynamic-credentials.ee/services/dynamic-credential.service.ts`
+  — adds `setLazySeedProvider(provider | undefined)` and a new private
+  `invokeResolverWithLazySeed()` that wraps `resolver.getSecret()` with
+  a bounded one-shot retry on `CredentialResolverDataNotFoundError`. The
+  retry is gated on (a) a provider being registered, (b) `provider.isEnabled()`,
+  (c) `provider.isCandidate(...)`. If the provider throws (contract
+  violation), the original miss is surfaced and a warn is logged. With
+  no provider registered, behavior is byte-identical to upstream.
+- `packages/cli/src/modules/sso-oidc/sso-oidc.module.ts` — module
+  bootstrap registers the seeder against `DynamicCredentialService`
+  under `process.env.N8N_ENV_FEAT_DYNAMIC_CREDENTIALS === 'true'`. The
+  registration is wrapped in `try/catch` so a missing module import
+  degrades to a warn (resolver misses still surface as upstream).
+- `packages/@n8n/config/src/configs/sso.config.ts` — three new
+  `N8N_SSO_OIDC_GRAPH_LAZY_SEED_*` env vars (see table below). Master
+  switch defaults to `false`.
+- `packages/cli/src/events/maps/relay.event-map.ts` — three new event
+  types: `oidc-graph-token-lazy-seeded`,
+  `oidc-graph-token-lazy-seed-failed`, `oidc-graph-token-lazy-seed-skipped`.
+  Same audit-only payload contract as Phase 1 events (ids + reasons,
+  never token material).
+- `packages/cli/src/events/relays/log-streaming.event-relay.ts` — three
+  matching handlers map onto
+  `n8n.audit.user.graph-token.{lazy-seeded,lazy-seed-failed,lazy-seed-skipped}`.
+- `packages/cli/src/eventbus/event-message-classes/index.ts` — three new
+  `eventNamesAudit` entries.
+- `packages/cli/src/metrics/prometheus-metrics.service.ts` — new
+  `n8n_oidc_lazy_seed_attempts_total{result, reason}` counter,
+  initialized in `initOidcLazySeedMetrics()` and incremented via three
+  `eventService.on(...)` listeners (`lazy-seeded` → `result=seeded`,
+  `lazy-seed-skipped` → `result=skipped, reason=<skip-reason>`,
+  `lazy-seed-failed` → `result=failed, reason=obo_or_persist_error`).
+  Mirrors the `tokenExchangeRequestsTotal` event-driven pattern so the
+  seeder stays decoupled from the metrics service. The
+  `prometheus-metrics.service.test.ts` counter/listener-count assertions
+  bumped from 6 to 7 (counter) and 6 to 9 (listeners).
+- `packages/cli/src/modules/sso-oidc/services/__tests__/oidc-webhook-seeder.service.test.ts`
+  *(new)* — 16 cases covering the full lifecycle: feature gate,
+  isEnabled/isCandidate, opaque vs JWT bearers, audience mismatch,
+  `api://<clientId>` alias, issuer mismatch, resolver opt-in gate, JIT
+  off/on/email-collision/transaction-failure paths, OBO null response,
+  OBO persistence failure, singleflight coalescing, and negative-cache
+  short-circuit.
+- `packages/cli/src/modules/dynamic-credentials.ee/services/__tests__/dynamic-credential.service.test.ts`
+  — 5 new cases on the lazy-seed seam: upstream parity (no provider),
+  successful seed + retry, `seeded=false` skips retry, `isEnabled=false`
+  skips lazy-seed entirely, and provider-throws is swallowed.
+
+**Runtime contract (Phase 2)**
+
+| Env var                                              | Default            | Notes                                                                                                                              |
+|------------------------------------------------------|--------------------|------------------------------------------------------------------------------------------------------------------------------------|
+| `N8N_SSO_OIDC_GRAPH_LAZY_SEED_ENABLED`               | `false`            | Master switch for the webhook lazy-seed path. With `false` (default) the resolver miss on a webhook bearer behaves byte-identically to upstream (`CredentialResolverDataNotFoundError` propagates). |
+| `N8N_SSO_OIDC_GRAPH_LAZY_SEED_PROVISION_USER`        | `true`             | When `true`, an inbound bearer whose `sub` does not match any `auth_identity` row triggers JIT user creation (mirrors the OIDC-login JIT path). When `false`, the seed is skipped with `lazy_seed_user_not_provisioned`. |
+| `N8N_SSO_OIDC_GRAPH_LAZY_SEED_NEGATIVE_CACHE_TTL_MS` | `60000`            | Negative-cache TTL (ms) for `(subject, credentialId)` pairs whose most recent lazy-seed attempt did not succeed. Production should keep at least 30s; development may lower for faster iteration. |
+
+The lazy-seed path reuses the **same per-resolver opt-in** as Phase 1
+(`oidcSeedSource = 'oidc'` on the `DynamicCredentialResolver` row). An
+opted-out resolver returns `lazy_seed_resolver_not_opted_in` and the
+original miss surfaces unchanged. There is no separate Phase 2 allowlist.
+
+**Audit events emitted (Phase 2)**
+
+| Event name (audit)                                    | Trigger                                                                                                                                | Payload extras                                                                                       |
+|-------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
+| `n8n.audit.user.graph-token.lazy-seeded`              | A webhook bearer triggered a successful OBO + persist. One event per credential seeded.                                                | `userId`, `subject`, `resolverId`, `credentialId`, `credentialType`, `userProvisioned` (boolean).    |
+| `n8n.audit.user.graph-token.lazy-seed-failed`         | The OBO exchange returned null, persistence threw, JIT provisioning threw, or the credential row vanished between miss and seed.        | `userId?` (omitted when JIT failed before user resolved), `subject`, `resolverId`, `credentialId`, `errorMessage`. |
+| `n8n.audit.user.graph-token.lazy-seed-skipped`        | Lazy-seed bailed before OBO for a structured reason. The `reason` discriminator lets operators answer "why didn't this webhook seed?". | `subject?`, `userId?`, `resolverId`, `credentialId`, `reason: 'lazy_seed_disabled' \| 'lazy_seed_resolver_not_opted_in' \| 'lazy_seed_token_audience_mismatch' \| 'lazy_seed_token_issuer_mismatch' \| 'lazy_seed_negative_cache_hit' \| 'lazy_seed_user_not_provisioned'`. |
+
+**Storage path.** Identical to Phase 1 — `OauthService.saveDynamicCredential`
+→ `DynamicCredentialsProxy.storeIfNeeded` → `DynamicCredentialEntry` /
+`DynamicCredentialUserEntry`. The metadata `source` field is the only
+distinguishing signal: `'oidc-webhook-lazy-seed'` for Phase 2 vs
+`'oidc-self-seed'` (Phase 1) vs `'seed'` (§9). Use that field if you need
+to split lazy-seeded rows out of downstream reporting.
+
+**Upgrade checklist (Phase 2 additions)**
+- **`OidcWebhookSeederService` dependency count** — the seeder takes 10
+  injected dependencies (`GlobalConfig`, `GraphTokenExchanger`,
+  `OauthService`, `CredentialsRepository`, `AuthIdentityRepository`,
+  `UserRepository`, `EventService`, `Logger`, `OidcService`). The
+  `OidcService` injection enables runtime config + discovery access; if
+  upstream refactors any of those repositories or the JIT user-creation
+  helpers (`createUserWithProject`, `manager.transaction`), update both
+  the seeder and its 16 unit tests.
+- **`DynamicCredentialService.setLazySeedProvider` seam** — the upstream
+  resolver-miss path is `try { resolver.getSecret(...) } catch { ... }`.
+  Phase 2 wraps the `try` with `invokeResolverWithLazySeed()`. If
+  upstream rewrites `resolveIfNeeded()` (e.g. moves the resolver call
+  into a strategy class), preserve the seam — the lazy-seed provider
+  MUST be invoked **only** for `CredentialResolverDataNotFoundError`,
+  and the retry MUST be bounded to a single re-call of `getSecret()`.
+  The five seam tests in `dynamic-credential.service.test.ts`
+  (`lazy-seed seam`) assert this contract.
+- **JIT mirroring** — `OidcWebhookSeederService.resolveOrProvisionUser`
+  mirrors `OidcService.loginUser` lines 359–432 (existing identity →
+  email collision → JIT). If upstream changes that flow (e.g. adds a
+  required `authProviderType` check, swaps the role default, or moves
+  the transaction wrapper), update both sites together. Symptom of
+  silent drift: lazy-seed succeeds at login but the JIT path emits
+  `lazy_seed_obo_failed` whenever it tries to provision.
+- **`prometheus-metrics.service.test.ts` counter/listener-count
+  assertions** — anchored at counter=7 and listeners=9 to include the
+  Phase 2 lazy-seed counter + 3 listeners. Future fork metrics (Phase 3
+  / 4) must bump these assertions, not split the test file.
+- **Discovery + clientId reads in the hot path** — every webhook
+  triggers `oidcService.getLazySeedExpectedIssuer()` and
+  `oidcService.getOptedInResolverIds()` before OBO. Both are cached
+  (discovery: 1-hour TTL via `getOidcConfiguration()`; resolver-ids:
+  re-queried each call — fast enough today but if the table grows past
+  a few hundred opted-in resolvers, add a cache here). If upstream
+  changes the `openid-client` server-metadata accessor name, only the
+  three `getLazySeed*` helpers on `OidcService` need updating.
+- **OIDC module bootstrap order** — `sso-oidc.module.ts.init()` calls
+  `OidcService.init()` THEN registers the seeder. If upstream
+  reorders module loading such that `dynamic-credentials.ee` is no
+  longer guaranteed loaded by the time `sso-oidc.init()` runs, the
+  `Container.get(DynamicCredentialService)` will throw — which the
+  `try/catch` already swallows, but the result is silent loss of
+  lazy-seed. Add an explicit "dynamic-credentials module not yet
+  registered" log if you see this in your environment.
+
+**Verification (Phase 2)**
+- With `N8N_SSO_OIDC_GRAPH_LAZY_SEED_ENABLED=false` (default), all 32
+  `dynamic-credential.service.test.ts` cases pass — the lazy-seed seam
+  is a no-op without a registered provider.
+- With `N8N_SSO_OIDC_GRAPH_LAZY_SEED_ENABLED=true`, a webhook hit by a
+  bearer for an unseen `(subject, credentialId)` pair triggers exactly
+  one OBO + one `saveDynamicCredential` call. The second hit for the
+  same pair within the negative-cache TTL is short-circuited and emits
+  `lazy_seed_negative_cache_hit`. Verifiable via `/metrics`:
+  `n8n_oidc_lazy_seed_attempts_total{result="seeded"}` and
+  `n8n_oidc_lazy_seed_attempts_total{result="skipped",reason="lazy_seed_negative_cache_hit"}`.
+- JIT-on (default): an unknown subject + bearer with email/preferred_username
+  results in a new `user` + `auth_identity` row and the lazy-seeded
+  event carries `userProvisioned: true`.
+- JIT-off: same scenario emits
+  `lazy_seed_skipped{reason: lazy_seed_user_not_provisioned}` and the
+  original resolver miss propagates.
+
+#### Phase 2c — Local JWT-claim identifier for api-audience tokens
+
+**Why.** Phase 1/2 rely on `OAuthCredentialResolver` to introspect the
+inbound bearer and derive a `sub` for storage keying. Upstream ships two
+identifier strategies — `oauth2-userinfo` and `oauth2-introspection` —
+both of which require an outbound IdP call. Neither works for **Entra
+api-audience tokens** (`aud: <client-id>`, `scp: "access <api>"`):
+- `/userinfo` rejects the token with `401 WWW-Authenticate` because the
+  required `openid` scope is absent (Entra's userinfo only accepts tokens
+  intended for it, not for an arbitrary `api://<client>/...` audience).
+- RFC 7662 `/introspect` is not implemented by Entra at all — the
+  discovery document does not include `introspection_endpoint`, so the
+  resolver's metadata Zod parse fails before the call.
+
+The blocker surfaces as `Failed to resolve dynamic credentials …
+UserInfo query failed`. This is a CredentialResolutionError, NOT a
+`CredentialResolverDataNotFoundError`, so the Phase 2 lazy-seed seam
+intentionally does not intercept it (auto-seeding on an arbitrary
+identifier failure would mask real signature or audience failures and
+violate the trust boundary).
+
+Phase 2c adds a third strategy that validates the JWT entirely locally
+against the IdP's JWKS — the same chain of trust the Webhook node's
+built-in **JWT Auth** mode uses, minus the manual static-key config.
+
+**Entry points / key files**
+- `packages/cli/src/modules/dynamic-credentials.ee/credential-resolvers/identifiers/oauth2-jwt-claim-identifier.ts`
+  *(new)* — `OAuth2JwtClaimIdentifier implements ITokenIdentifier`. Uses
+  `jose` (already a direct dep) for `jwtVerify` against
+  `createLocalJWKSet`. JWKS is fetched via `axios` (not `jose`'s built-in
+  `createRemoteJWKSet`) so corporate proxy env vars (`HTTP_PROXY` /
+  `HTTPS_PROXY` / `NO_PROXY`) are respected — same posture as the OIDC
+  client. JWKS document cached for 1h, subject cache scoped per
+  `(issuer, audience, sha256(token))`. The `classifyJoseError()` helper
+  maps the most useful `jose` subclasses (`JWTExpired`,
+  `JWTClaimValidationFailed`, `JWSSignatureVerificationFailed`,
+  `JWKSNoMatchingKey`, `JWSInvalid`, `JWTInvalid`) to short reason
+  tokens so the operator-visible message is structured
+  (`JWT verification failed: token_expired`,
+  `JWT verification failed: claim_mismatch:aud`, …).
+- `packages/cli/src/modules/dynamic-credentials.ee/credential-resolvers/oauth-credential-resolver.ts`
+  — extends the discriminated `OAuthCredentialResolverOptionsSchema`
+  with a third member (`OAuth2JwtClaimOptionsSchema`), injects the new
+  identifier as the 4th constructor arg, adds a 3rd UI option to
+  **Validation Method** (`JWT Claim (Local Verification)`) plus a
+  conditional **Audience** field shown only for `oauth2-jwt-claim`, and
+  branches `getIdentifier()` on the new discriminator value.
+- `packages/cli/src/modules/dynamic-credentials.ee/credential-resolvers/identifiers/__tests__/oauth2-jwt-claim-identifier.test.ts`
+  *(new)* — 20 cases. Signs real RS256 JWTs with `jose.generateKeyPair`
+  + `SignJWT` and verifies against the matching JWKS so the assertions
+  exercise the real verification pipeline. Covers happy path, custom
+  subject claim, cache hit, audience-scoped cache key, validation gates
+  (missing audience, empty audience, malformed metadata, unreachable
+  IdP), expiration / wrong-aud / wrong-iss / unknown-kid /
+  forged-signature / malformed-JWT failures, missing subject claim, JWKS
+  HTTP errors, malformed JWKS document, and TTL clamping.
+- `packages/cli/src/modules/dynamic-credentials.ee/credential-resolvers/__tests__/oauth-credential-resolver.test.ts`
+  — both `new OAuthCredentialResolver(...)` instantiations now pass the
+  4th `mockIdentifierJwtClaim` arg. Pure mock-plumbing change — no
+  behavioral test affected.
+- `packages/cli/src/modules/sso-oidc/services/__tests__/oidc-webhook-seeder.service.test.ts`
+  — drive-by typing fix on the lets (`MockProxy<T>` from
+  `jest-mock-extended`) so jest-mock methods are visible to the
+  typechecker after `OidcService.d.ts` regen. No assertion changes.
+
+**Runtime contract (Phase 2c)**
+
+No new env vars. Per-resolver UI options:
+
+| Option           | Required when                       | Notes                                                                                                                                                                                |
+|------------------|-------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `validation`     | always                              | Now three values: `oauth2-introspection` (upstream), `oauth2-userinfo` (upstream), `oauth2-jwt-claim` (new).                                                                         |
+| `metadataUri`    | always                              | Same as before. The new identifier only needs `issuer` + `jwks_uri` from the discovery document; `userinfo_endpoint` / `introspection_endpoint` are ignored when in JWT-claim mode.  |
+| `audience`       | `validation === 'oauth2-jwt-claim'` | Exact value the JWT's `aud` claim must equal (e.g. the n8n App Registration's client id `<guid>`, or `api://<guid>`). Whitespace-trimmed, non-empty enforced by Zod.                  |
+| `subjectClaim`   | always (defaults to `sub`)          | The verified payload key whose stringified value becomes the storage key. Use `oid` if you want a stable Entra Object ID rather than the per-client opaque `sub`.                    |
+| `clientId`       | `validation === 'oauth2-introspection'` | Hidden in the UI for the other two strategies.                                                                                                                                       |
+| `clientSecret`   | `validation === 'oauth2-introspection'` | Hidden in the UI for the other two strategies.                                                                                                                                       |
+
+**Trust boundary.** A bearer is accepted as identity for the resolver
+iff:
+1. its signature chains to a key in `metadata.jwks_uri`, AND
+2. its `aud` exactly matches the configured `audience`, AND
+3. its `iss` exactly matches `metadata.issuer`, AND
+4. `exp > now` and `nbf <= now`.
+
+Setting `audience` to a value that the IdP would also accept for *other*
+apps in the same tenant (e.g. a public-resource scope) widens the
+acceptance set — keep it pinned to the n8n App Registration's own
+identifier. The Phase 2 trust-boundary note still applies on top: even
+with valid JWT validation, `N8N_SSO_OIDC_GRAPH_LAZY_SEED_ENABLED=true`
+turns a valid bearer into a Graph token via OBO, so review who can
+present these JWTs at your edge before flipping the master switch.
+
+**Upgrade checklist (Phase 2c additions)**
+- **`OAuthCredentialResolver` constructor arity** — bumped from 5 deps
+  to 6 (`oAuth2JwtClaimIdentifier` inserted as the 4th positional arg,
+  between `oAuth2UserInfoIdentifier` and `storage`). Any upstream
+  refactor of this constructor or any test that hand-instantiates the
+  resolver must update both the resolver-contract test setup and the
+  OAuth-specific behavior test in `oauth-credential-resolver.test.ts`
+  (two call sites).
+- **`OAuthCredentialResolverOptionsSchema` discriminated union** —
+  upstream may add more strategies. Preserve the discriminator on
+  `validation` and keep the new `oauth2-jwt-claim` variant **last** so
+  the strategy lookup `if (validation === 'oauth2-introspection') …
+  else if (validation === 'oauth2-jwt-claim') …` keeps the upstream
+  `else` as the `oauth2-userinfo` default.
+- **`jose` major version pin** — the identifier imports
+  `createLocalJWKSet`, `jwtVerify`, `errors`, and the `JSONWebKeySet` /
+  `JWTPayload` types. `jose@^6` is the current pin (already a direct
+  dep). If upstream bumps to a future `jose@7+`, double-check the
+  `errors.*` class names — Phase 2c's `classifyJoseError()` matches on
+  six of them and silently degrades to `unknown_error` on any name
+  change (still safe, but the operator log loses fidelity).
+- **JWKS via axios, not jose's remote set** — the deliberate choice to
+  fetch JWKS through `axios` (so corporate proxy env vars apply) means
+  the identifier does NOT benefit from `jose`'s built-in
+  per-key cooldown / refresh-on-unknown-kid behavior. The 1-hour cache
+  TTL is the only mitigation. If the IdP rotates a key mid-hour, the
+  next lazy-seed for that subject fails once with `unknown_kid` and
+  succeeds after the cache expires. If this becomes a problem, add an
+  explicit "on `unknown_kid`, evict + retry once" branch in
+  `resolveBasedOnJwtClaims()`.
+
+**Verification (Phase 2c)**
+- 20/20 new cases pass in
+  `oauth2-jwt-claim-identifier.test.ts`. Real JWT signing/verification
+  (no jose mocks).
+- 65/65 existing OAuth-resolver + identifier tests still pass with the
+  constructor-arity change. No upstream test was rewritten.
+- `pnpm --filter n8n typecheck` passes (the drive-by `MockProxy<T>` fix
+  on the seeder test also resolves the pre-existing strict-mode lints).
+- Operator-side: switch a resolver's **Validation Method** to *JWT
+  Claim* and set **Audience** to the n8n App Registration's
+  `aud`. Re-call the webhook with an api-audience bearer — log line
+  sequence becomes `Dynamic credential resolution failed …
+  CredentialResolverDataNotFoundError` (first miss) → `OIDC Graph
+  lazy-seed: credential populated via webhook` → `Successfully resolved
+  dynamic credentials`. One row appears in
+  `dynamic_credential_user_entry`. Subsequent calls only emit the final
+  `Successfully resolved` line.
+
+#### Phase 2d — Hotfixes shipped after first live trial (2026-06-07)
+
+Three small, unplanned changes that were forced by issues only visible
+once Outlook/Teams nodes were exercising the lazy-seed end-to-end in a
+real deployment. Each one is small enough that it would have been a
+single-PR follow-up upstream; bundling them here keeps the fork's
+Phase 2 story complete.
+
+**1. Seeder bug: passing the wrong token to the persistence layer**
+
+  - **Symptom (logs).** Every webhook call ended with
+    `OIDC Graph lazy-seed: failed to persist seeded credential`
+    immediately after a green `OIDC Graph OBO: exchanged successfully`.
+    The wrapped error message was `Failed to store dynamic credentials
+    data for "X"` with no inner detail.
+  - **Root cause.** `oidc-webhook-seeder.service.ts` was passing
+    `graphTokens.access_token` (a Microsoft-signed, **Graph-audience**
+    JWT) as the `authHeader` to `OauthService.saveDynamicCredential`.
+    The OAuth resolver's identifier on the *write* path then tried to
+    verify that token against the **n8n-app** JWKS — which of course
+    fails (`bad_signature`). The lazy-seed result was silently
+    aborted; no row ever appeared in `dynamic_credential_user_entry`.
+  - **Fix.** One-line change: pass the *inbound* user bearer
+    (`bearer`, the original webhook JWT) so the identifier derives the
+    same subject on read and write. The Graph access/refresh tokens
+    still go into `oauthTokenData` exactly as before — only the
+    `authHeader` slot was wrong.
+  - **Regression guard.** New Jest case in
+    `oidc-webhook-seeder.service.test.ts` asserts the 3rd positional
+    argument is the inbound bearer and *not* the OBO access token
+    (`'passes the inbound bearer (not the Graph access token) as
+    authHeader to saveDynamicCredential'`).
+
+**2. Diagnostic blind spot: `failed to persist` swallowed the inner cause**
+
+  - **Symptom.** Even after fix #1 above, the next class of failures
+    (UserInfo errors, identifier rejects, DB conflicts) all logged
+    the same generic wrapper message — operators had to re-instrument
+    the running container to see why.
+  - **Fix.** `unwrapErrorMessage()` helper on the seeder walks an
+    error's `cause` chain up to 5 levels and joins messages with `→`.
+    Applied at the `failed to persist seeded credential` warn site
+    *and* the matching `oidc-graph-token-lazy-seed-failed` event so
+    Prometheus/audit consumers see the same root cause.
+  - **Regression guard.** New Jest case asserts a wrapped error with
+    inner `cause` reaches the emitted event's `errorMessage`
+    (`'surfaces nested cause chain in the lazy-seed-failed event when
+    persistence wraps an inner error'`).
+
+**3. Log redaction: raw bearer JWT was logged at debug level**
+
+  - **Symptom.** `dynamic-credential.service.ts`'s `Successfully
+    resolved dynamic credentials` and `dynamic-credential-storage
+    .service.ts`'s `Successfully stored dynamic credentials` log
+    lines both emitted `identity: <full bearer JWT>` at `debug`
+    level. With log-streaming destinations enabled (Elasticsearch,
+    Datadog, etc.) the bearer left the n8n process boundary in
+    cleartext, where it could be replayed as an OBO assertion to
+    mint Graph-audience tokens for every consented scope.
+  - **Fix.** New `fingerprintIdentity(value)` helper in
+    `dynamic-credentials.ee/utils/identity-fingerprint.ts` returns
+    the first 12 hex chars of `sha256(value)`. Both log sites now
+    emit `identityFingerprint` instead of `identity`. The
+    fingerprint is:
+    - **Deterministic** — same bearer → same 12-char string, so
+      operators can correlate log lines across requests.
+    - **Cryptographically non-reversible** — the bearer cannot be
+      recovered from the fingerprint, and the fingerprint cannot be
+      replayed against Microsoft Graph.
+    - **Reproducible from support input** — given a known-good
+      bearer the operator can compute the same fingerprint locally
+      (`echo -n "$BEARER" | sha256sum | cut -c1-12`).
+  - **Regression guards.**
+    - `identity-fingerprint.test.ts` (new, 5 cases): empty input
+      returns `undefined`, same input is stable, different inputs
+      differ, fingerprint does not appear in the original token,
+      large inputs handled.
+    - Existing `dynamic-credential.service.test.ts` and
+      `dynamic-credential-storage.service.test.ts` assertions
+      updated to require `identityFingerprint: stringMatching(/^[0-9a-f]{12}$/)`
+      **and** to fail if `identity:` ever reappears on those log
+      lines (negative-assertion).
+  - **Scope.** Audited every `logger.{debug,info,warn,error}` call
+    in `sso-oidc/services/*`, `dynamic-credentials.ee/services/*`,
+    `dynamic-credentials.ee/credential-resolvers/identifiers/*`, and
+    `graph-token-exchanger.service.ts`. The two sites above were
+    the only ones logging the raw bearer; everything else was
+    already logging just `userId` / `subject` / `errorMessage`.
+
+### Operator recipe — DB-direct resolver patch (when changing Validation Method)
+
+Moved to the operator handbook to keep CUSTOMS as a customization
+ledger rather than a runbook. See
+[`Credential-Seeding-Guide.md` → Operator recipe — DB-direct resolver patch](./Credential-Seeding-Guide.md#operator-recipe--db-direct-resolver-patch)
+for the full SQL + decrypt/patch/re-encrypt walkthrough.
+
+### Supported vs not supported (as of v2 image)
+
+This is the operator-visible truth table for what works end-to-end on
+`n8nio/n8n:oidc-obo-wfdiscovery-phase2c-v2`. Anything not listed
+explicitly is **out of scope for the current implementation** —
+don't extrapolate, file a follow-up and we'll spec it.
+
+**Supported and verified live**
+
+| Flow | Verified by |
+| --- | --- |
+| User logs into n8n via Entra OIDC → dynamic credentials bound to that user's resolver get auto-seeded with Graph tokens | Live run + `oidc-graph-token.captured` audit event |
+| External user posts a webhook with their api-audience bearer → Outlook node "Get many messages" works on first call | Live run + `oidc-graph-token.lazy-seeded` audit event |
+| Same as above → Teams node "Send chat message" (personal chat) works after `ChatMessage.Send` is admin-consented | Live run (2026-06-07) |
+| JIT user provisioning on first webhook from unseen `sub` (when `…_PROVISION_USER=true`) | Lazy-seeder Jest + observed `JIT-provisioned new user` log |
+| Concurrent calls coalesced into one OBO + one persistence write | Singleflight Jest case |
+| Failed OBO short-circuits subsequent calls for `negative_cache_ttl_ms` | Negative-cache Jest case |
+| Bearer JWT does **not** appear in any log line (debug, info, warn, error) | Negative-assertion Jest cases + image-level grep verification |
+
+**Built but not end-to-end tested in production**
+
+| Flow | Why it should work | Why it's not verified |
+| --- | --- | --- |
+| OneDrive / Excel / SharePoint Graph nodes | Same OBO pipeline as Outlook/Teams, just different consented scopes | No live workflow exercised these nodes after Phase 2 landed |
+| Other IdPs (Auth0, Okta, Keycloak) via JWT-claim identifier | `OAuth2JwtClaimIdentifier` is IdP-agnostic — verifies against `metadata.jwks_uri` | Only Entra was tested |
+| Phase 1 (login-time seed) **and** Phase 2 (webhook lazy-seed) on the same resolver | Both paths share `GraphTokenExchanger` and write to the same `dynamic_credential_entry` row | Not stress-tested under concurrent login + webhook for the same user |
+| Fresh-DB install: `oidcSeedSource` column on empty Postgres | Migration code exists in `dynamic-credentials.ee/database/migrations/` | Never run against an empty schema; all live envs migrated incrementally |
+
+**Explicitly not supported (by design or by deferred work)**
+
+| Flow | Why |
+| --- | --- |
+| App-only (client-credentials) flow for unattended workflows | OBO requires a user assertion; the lazy-seeder rejects bearers without a `sub` claim. Documented as a placeholder in the seeding guide; needs a separate code path |
+| Cross-tenant federation (bearer issued by a different Entra tenant than n8n's discovery resolves to) | Lazy-seeder rejects with `lazy_seed_token_issuer_mismatch`. There is no per-app cross-tenant trust here — intentional |
+| Opaque (non-JWT) bearers via the JWT-claim identifier | Local validation requires a parseable JWT. For opaque tokens, use UserInfo or Token-Introspection validation methods instead |
+| Webhook nodes without `BearerTokenExtractor` configured | Dynamic credentials silently bypass to the static credential. The Webhook node config must extract the bearer into the credential context — there is no implicit extractor |
+| Canvas-only execution (clicking *Execute node* / *Execute workflow* with no incoming HTTP) | The resolver gate at `credentials-helper.ts:398-400` is `additionalData.executionContext?.credentials !== undefined \|\| !(effectiveMode === 'manual' \|\| effectiveMode === 'internal')` (where `effectiveMode = additionalData.rootExecutionMode ?? mode`). With no incoming bearer there's no context, so the resolver is bypassed and the static credential body is used. Manual mode itself is **not** a blocker — test-URL hits with a bearer DO resolve dynamically |
+| Retroactive widening of an already-seeded token after Entra consent changes | No n8n-side handler. `saveDynamicCredential` is write-only; the lazy-seeder only fires on missing rows. The OAuth refresh path (`client-oauth2-token.ts:80-115`) sends `grant_type=refresh_token` with **no `scope` parameter** — for `.default`-issued tokens Entra *may* widen to current consent on refresh (empirically unverified in this fork; for explicit-scope OBO it definitely does not widen). Within the access-token TTL (≤1h) no widening can occur regardless. Operator must `DELETE FROM dynamic_credential_entry WHERE "credentialId"=... AND "subjectId"=...` to force immediate re-OBO. **Planned Phase 2e:** reactive re-OBO on Graph 403 `insufficient_scope` |
+
+### Env-var audit (cleanup candidates)
+
+This is the operator-facing knob inventory across Phase 1 + 2 with cleanup
+recommendations. None of these are blocking, but the next minor bump is a
+clean time to address them.
+
+| Env var | Status | Action |
+| --- | --- | --- |
+| `N8N_SSO_OIDC_GRAPH_SEED_RESOLVER_IDS` | **Removed in Phase 2d.** The per-resolver `oidcSeedSource` DB column is the single source of truth. Pre-flight `grep` across all `docker-compose*` and `.env*` files confirmed no live deployment used it before removal | Done. `@Env` declaration deleted from `sso.config.ts`, `resolveSeedableResolverIds()` simplified to a single DB query, back-compat tests dropped from `oidc.service.ee.test.ts` |
+| `N8N_SSO_OIDC_GRAPH_AUTO_SEED_ENABLED` | Ambiguous name — gates the *login-time* seed path | **Rename** → `N8N_SSO_OIDC_GRAPH_LOGIN_SEED_ENABLED`. Keep the old name as a deprecated alias for one release with a warn |
+| `N8N_SSO_OIDC_GRAPH_LAZY_SEED_ENABLED` | Ambiguous name — gates the *webhook-time* seed path (wider attack surface) | **Rename** → `N8N_SSO_OIDC_GRAPH_WEBHOOK_SEED_ENABLED`. Apply the same rename to `LAZY_SEED_PROVISION_USER` and `LAZY_SEED_NEGATIVE_CACHE_TTL_MS` |
+| `N8N_SSO_OIDC_GRAPH_SCOPES` | Kept for least-privilege overrides; empty default = `.default` | **Keep** — rare-use knob, removing it loses the only way to request narrower-than-consent scopes |
+| `N8N_SSO_OIDC_GRAPH_SEED_FAIL_OPEN` | Standard safety toggle | **Keep** |
+
+The two enable flags (`AUTO_SEED` and `LAZY_SEED`) are **not redundant** —
+they gate code paths with genuinely different threat models (an
+authenticated UI user vs. any caller with a valid bearer for the n8n App
+Registration). Keep both, just rename for honesty.
+
+### Phase 2e — planned (not yet implemented)
+
+**Reactive consent-widening handler.** When a node call returns Graph 403
+`InvalidAuthenticationToken` / `insufficient_scope`, the OAuth resolver
+should:
+1. Invalidate the `dynamic_credential_entry` row for `(subject, credentialId)`.
+2. Emit a new audit event `oidc-graph-token.scope-stale` with the missing scope.
+3. Surface a retryable error to the caller.
+
+The next webhook from the same caller then hits the lazy-seeder, runs a
+fresh OBO, and gets a token containing the newly-consented scopes — no
+operator SQL required. Cost is one wasted Graph call per consent change.
+Tracked separately; not in any current image.
+
 ## Upgrade procedure (repeatable)
 
 This is the workflow we actually followed for 2.15.1 → 2.17.5 → 2.17.7 and
@@ -953,6 +1833,21 @@ flowchart TD
    node scripts/dockerize-n8n.mjs --tag X.Y.Z --platform linux/arm64 > docker-build.log 2>&1
    docker tag n8nio/n8n:local n8nio/n8n:X.Y.Z
    ```
+
+   **Gotcha — stale `compiled/` dir.** `dockerize-n8n.mjs` packages
+   the contents of `./compiled/` into the docker build context as-is.
+   It does **not** rebuild from source. `pnpm build` alone only
+   refreshes `packages/cli/dist/`; it does **not** touch `./compiled/`.
+   So a quick-iteration loop of `pnpm --filter n8n build` →
+   `dockerize-n8n.mjs` will ship an image with *stale* `dist/`
+   contents from the previous full build. This bit us during the
+   Phase 2d work (the freshly redacted log lines didn't appear in
+   the v1 image, because `compiled/` still held pre-redaction code).
+   Always run `node scripts/build-n8n.mjs` before `dockerize-n8n.mjs`
+   in the full pipeline. For tactical iteration on a hot container,
+   `docker cp packages/cli/dist/<path> n8n:/usr/lib/node_modules/n8n/dist/<path>`
+   + `docker restart n8n` is a valid fast-path — just don't forget
+   to re-bake the image once changes are verified.
 10. **Recreate the running container.**
     ```bash
     cd /path/to/compose

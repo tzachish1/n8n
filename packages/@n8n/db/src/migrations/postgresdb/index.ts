@@ -185,6 +185,7 @@ import { DropAgentExecutionWorkingMemory1784000000002 } from '../common/17840000
 import { AddInsightsRawTimestampIdIndex1784000000004 } from '../common/1784000000004-AddInsightsRawTimestampIdIndex';
 import { CreateMcpRegistryServerTable1784000000005 } from '../common/1784000000005-CreateMcpRegistryServerTable';
 import { AddNodeGroupsColumnToWorkflowAndHistory1784000000006 } from '../common/1784000000006-AddNodeGroupsColumnToWorkflowAndHistory';
+import { AddOidcSeedSourceToCredentialResolver1784000000007 } from '../common/1784000000007-AddOidcSeedSourceToCredentialResolver';
 import type { Migration } from '../migration-types';
 
 export const postgresMigrations: Migration[] = [
@@ -375,4 +376,5 @@ export const postgresMigrations: Migration[] = [
 	AddInsightsRawTimestampIdIndex1784000000004,
 	CreateMcpRegistryServerTable1784000000005,
 	AddNodeGroupsColumnToWorkflowAndHistory1784000000006,
+	AddOidcSeedSourceToCredentialResolver1784000000007,
 ];

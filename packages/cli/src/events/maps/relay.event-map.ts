@@ -265,6 +265,102 @@ export type RelayEventMap = {
 		reason?: string;
 	};
 
+	// #region OIDC Graph token auto-seed (fork §10 — see CUSTOMS.md)
+
+	/**
+	 * Emitted from `OidcService.loginUser` after a successful auto-seed of a
+	 * dynamic OAuth2 credential with the user's OIDC tokens. One event per
+	 * credential seeded — emitted at info level by the relay below.
+	 */
+	'oidc-graph-token-captured': {
+		userId: string;
+		resolverId: string;
+		credentialId: string;
+		credentialType: string;
+	};
+
+	/**
+	 * Emitted when an auto-seed attempt fails (resolver introspection error,
+	 * credential storage failure, DB error). Carries no token material.
+	 */
+	'oidc-graph-token-seed-failed': {
+		userId: string;
+		resolverId: string;
+		credentialId?: string;
+		errorMessage: string;
+	};
+
+	/**
+	 * Emitted when auto-seed is bypassed for a reason that's worth surfacing to
+	 * operators (no `offline_access`, feature disabled, no resolver targets
+	 * configured). Helps diagnose "why isn't the user's credential populated?"
+	 * without enabling debug logging.
+	 */
+	'oidc-graph-token-skipped': {
+		userId: string;
+		reason:
+			| 'no_refresh_token'
+			| 'auto_seed_disabled'
+			| 'no_resolvers_configured'
+			| 'no_user_access_token'
+			| 'obo_exchange_failed';
+	};
+
+	/**
+	 * Fork §10 Phase 2 — emitted when an inbound webhook request triggers a
+	 * successful On-Behalf-Of seed for a credential that previously had no row
+	 * for the caller's subject. Carries ids + subject only; never token
+	 * material. `userId` is the n8n user whose `auth_identity` matched the
+	 * bearer's `sub` (existing or JIT-provisioned). `subject` is the raw
+	 * `sub`/`oid` claim used as the resolver canonical subject.
+	 */
+	'oidc-graph-token-lazy-seeded': {
+		userId: string;
+		subject: string;
+		resolverId: string;
+		credentialId: string;
+		credentialType: string;
+		/** True when the user was JIT-provisioned during this attempt. */
+		userProvisioned: boolean;
+	};
+
+	/**
+	 * Fork §10 Phase 2 — emitted when the lazy-seed pipeline ran but the OBO
+	 * exchange or persistence failed. Never carries token material. `subject`
+	 * is included for log correlation when the user could not be resolved
+	 * (then `userId` is omitted).
+	 */
+	'oidc-graph-token-lazy-seed-failed': {
+		userId?: string;
+		subject: string;
+		resolverId: string;
+		credentialId: string;
+		errorMessage: string;
+	};
+
+	/**
+	 * Fork §10 Phase 2 — emitted when a lazy-seed attempt was bypassed for a
+	 * structured reason (feature disabled, resolver not opted in, audience or
+	 * issuer mismatch, negative-cache hit, JIT disabled with unknown subject).
+	 * Lets operators answer "why didn't this webhook seed?" without inspecting
+	 * the bearer.
+	 */
+	'oidc-graph-token-lazy-seed-skipped': {
+		subject?: string;
+		userId?: string;
+		resolverId: string;
+		credentialId: string;
+		reason:
+			| 'lazy_seed_disabled'
+			| 'lazy_seed_resolver_not_opted_in'
+			| 'lazy_seed_token_audience_mismatch'
+			| 'lazy_seed_token_issuer_mismatch'
+			| 'lazy_seed_negative_cache_hit'
+			| 'lazy_seed_user_not_provisioned';
+	};
+
+	// #endregion
+
 	'user-changed-role': {
 		userId: string;
 		targetUserId: string;

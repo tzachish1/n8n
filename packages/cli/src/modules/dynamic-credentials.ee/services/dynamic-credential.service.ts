@@ -1,21 +1,24 @@
 import { Logger } from '@n8n/backend-common';
-import { CredentialResolverError } from '@n8n/decorators';
+import { CredentialResolverDataNotFoundError, CredentialResolverError } from '@n8n/decorators';
 import { Service } from '@n8n/di';
 import type { NextFunction, Response } from 'express';
 import { Cipher } from 'n8n-core';
 import type {
+	ICredentialContext,
 	ICredentialDataDecryptedObject,
 	IExecutionContext,
 	IWorkflowSettings,
 } from 'n8n-workflow';
 import { jsonParse, toCredentialContext } from 'n8n-workflow';
 
+import type { ILazySeedProvider } from '@/credentials/lazy-seed-provider.interface';
 import { LoadNodesAndCredentials } from '@/load-nodes-and-credentials';
 import { StaticAuthService } from '@/services/static-auth-service';
 
 import { DynamicCredentialResolverRegistry } from './credential-resolver-registry.service';
 import { ResolverConfigExpressionService } from './resolver-config-expression.service';
 import { extractSharedFields } from './shared-fields';
+import { fingerprintIdentity } from '../utils/identity-fingerprint';
 import type {
 	CredentialResolutionResult,
 	CredentialResolveMetadata,
@@ -35,6 +38,14 @@ import { AuthenticatedRequest } from '@n8n/db';
  */
 @Service()
 export class DynamicCredentialService implements ICredentialResolutionProvider {
+	/**
+	 * Fork §10 Phase 2 — optional webhook lazy-seed seam. Registered by the
+	 * `sso-oidc` module bootstrap when the lazy-seed feature is wired in. Stays
+	 * `undefined` for upstream-compatible deployments; in that case the
+	 * `CredentialResolverDataNotFoundError` path is byte-identical to upstream.
+	 */
+	private lazySeedProvider?: ILazySeedProvider;
+
 	constructor(
 		private readonly dynamicCredentialConfig: DynamicCredentialsConfig,
 		private readonly resolverRegistry: DynamicCredentialResolverRegistry,
@@ -44,6 +55,14 @@ export class DynamicCredentialService implements ICredentialResolutionProvider {
 		private readonly logger: Logger,
 		private readonly expressionService: ResolverConfigExpressionService,
 	) {}
+
+	/**
+	 * Fork §10 Phase 2 — register (or clear) the webhook lazy-seed provider.
+	 * Idempotent; calling with the same instance twice is a no-op.
+	 */
+	setLazySeedProvider(provider: ILazySeedProvider | undefined) {
+		this.lazySeedProvider = provider;
+	}
 
 	/**
 	 * Resolves credentials dynamically if configured, otherwise returns static data.
@@ -111,22 +130,24 @@ export class DynamicCredentialService implements ICredentialResolutionProvider {
 			// Resolve expressions in resolver configuration using global data only
 			const resolverConfig = await this.expressionService.resolve(parsedConfig);
 
-			// Attempt dynamic resolution
-			const dynamicData = await resolver.getSecret(
-				credentialsResolveMetadata.id,
+			// Attempt dynamic resolution. Fork §10 Phase 2: on first miss for a
+			// resolvable credential, optionally invoke the registered lazy-seed
+			// provider once and retry the resolver call. Upstream-compatible when
+			// `lazySeedProvider` is unset — the catch block re-throws the original
+			// `CredentialResolverDataNotFoundError`, mirroring pre-fork behavior.
+			const dynamicData = await this.invokeResolverWithLazySeed({
+				resolver,
 				credentialContext,
-				{
-					resolverId: resolverEntity.id,
-					resolverName: resolverEntity.type,
-					configuration: resolverConfig,
-				},
-			);
+				credentialsResolveMetadata,
+				resolverEntity,
+				resolverConfig,
+			});
 
 			this.logger.debug('Successfully resolved dynamic credentials', {
 				credentialId: credentialsResolveMetadata.id,
 				resolverId,
 				resolverSource: credentialsResolveMetadata.resolverId ? 'credential' : 'workflow',
-				identity: credentialContext.identity,
+				identityFingerprint: fingerprintIdentity(credentialContext.identity),
 			});
 
 			// Remove shared fields from dynamic data to avoid conflicts
@@ -140,6 +161,87 @@ export class DynamicCredentialService implements ICredentialResolutionProvider {
 			return { data: { ...staticData, ...dynamicData }, isDynamic: true };
 		} catch (error) {
 			return this.handleResolutionError(credentialsResolveMetadata, error, resolverId);
+		}
+	}
+
+	/**
+	 * Fork §10 Phase 2 — wraps the resolver's `getSecret` with at most one
+	 * lazy-seed retry on `CredentialResolverDataNotFoundError`. Behavior:
+	 *
+	 *  1. Call `resolver.getSecret(...)`. If it returns, return its result.
+	 *  2. If it throws a different error, propagate immediately.
+	 *  3. On `CredentialResolverDataNotFoundError`, if a lazy-seed provider is
+	 *     registered, enabled, and considers this request a candidate, invoke
+	 *     `tryLazySeed(...)` once. On `{ seeded: true }`, retry `getSecret`
+	 *     exactly once and return its result (any error on retry propagates).
+	 *  4. Any other path re-throws the original miss.
+	 *
+	 * The retry is bounded so a malformed provider cannot loop the resolver
+	 * indefinitely. When no provider is registered the upstream miss flow is
+	 * preserved byte-for-byte.
+	 */
+	private async invokeResolverWithLazySeed(args: {
+		// Loose typing on `resolver` matches the existing `getSecret` call site —
+		// the registry returns an instance whose static types are intentionally
+		// minimal so EE resolvers stay loosely coupled.
+		resolver: { getSecret: (...args: unknown[]) => Promise<ICredentialDataDecryptedObject> };
+		credentialContext: ICredentialContext;
+		credentialsResolveMetadata: CredentialResolveMetadata;
+		resolverEntity: { id: string; type: string };
+		resolverConfig: Record<string, unknown>;
+	}): Promise<ICredentialDataDecryptedObject> {
+		const {
+			resolver,
+			credentialContext,
+			credentialsResolveMetadata,
+			resolverEntity,
+			resolverConfig,
+		} = args;
+
+		const invoke = async () =>
+			await resolver.getSecret(credentialsResolveMetadata.id, credentialContext, {
+				resolverId: resolverEntity.id,
+				resolverName: resolverEntity.type,
+				configuration: resolverConfig,
+			});
+
+		try {
+			return await invoke();
+		} catch (error) {
+			if (!(error instanceof CredentialResolverDataNotFoundError)) throw error;
+
+			const provider = this.lazySeedProvider;
+			if (!provider) throw error;
+
+			const request = {
+				context: credentialContext,
+				credentialsResolveMetadata,
+				resolverId: resolverEntity.id,
+			};
+
+			if (!provider.isEnabled() || !provider.isCandidate(request)) throw error;
+
+			let seedResult;
+			try {
+				seedResult = await provider.tryLazySeed(request);
+			} catch (seedError) {
+				// Provider violated its contract (must never throw). Treat as a
+				// failed seed and surface the original miss to the caller.
+				this.logger.warn('Lazy-seed provider threw — surfacing original resolver miss', {
+					credentialId: credentialsResolveMetadata.id,
+					resolverId: resolverEntity.id,
+					error: seedError instanceof Error ? seedError.message : String(seedError),
+				});
+				throw error;
+			}
+
+			if (!seedResult.seeded) throw error;
+
+			this.logger.debug('Lazy-seed succeeded; retrying resolver once', {
+				credentialId: credentialsResolveMetadata.id,
+				resolverId: resolverEntity.id,
+			});
+			return await invoke();
 		}
 	}
 

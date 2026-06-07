@@ -147,12 +147,44 @@ describe('DynamicCredentialResolverService', () => {
 				name: 'Test Resolver',
 				type: 'test.resolver',
 				config: 'encrypted-config-data',
+				oidcSeedSource: null,
 			});
 			expect(mockRepository.save).toHaveBeenCalledWith(savedEntity);
 			expect(mockLogger.debug).toHaveBeenCalledWith(
 				expect.stringContaining('Created credential resolver'),
 			);
 			expect(result).toBeDefined();
+		});
+
+		it('should persist oidcSeedSource when provided', async () => {
+			// Fork §10 — admin opts the resolver in for OIDC self-seeding by setting
+			// `oidcSeedSource = 'oidc'` in the UI. The service must persist that flag
+			// verbatim so the OIDC login path discovers it.
+			const config: CredentialResolverConfiguration = { prefix: 'test-prefix' };
+			const savedEntity = createMockEntity({ oidcSeedSource: 'oidc' });
+			const mockUser = createMockUser();
+
+			mockRegistry.getResolverByTypename.mockReturnValue(mockResolverImplementation);
+			mockResolverImplementation.validateOptions.mockResolvedValue(undefined);
+			mockCipher.encryptV2.mockResolvedValue('encrypted-config-data');
+			mockRepository.create.mockReturnValue(savedEntity);
+			mockRepository.save.mockResolvedValue(savedEntity);
+			mockCipher.decryptV2.mockResolvedValue(JSON.stringify(config));
+
+			await service.create({
+				name: 'Test Resolver',
+				type: 'test.resolver',
+				config,
+				oidcSeedSource: 'oidc',
+				user: mockUser,
+			});
+
+			expect(mockRepository.create).toHaveBeenCalledWith({
+				name: 'Test Resolver',
+				type: 'test.resolver',
+				config: 'encrypted-config-data',
+				oidcSeedSource: 'oidc',
+			});
 		});
 
 		it('should throw CredentialResolverValidationError for unknown resolver type', async () => {
@@ -279,6 +311,56 @@ describe('DynamicCredentialResolverService', () => {
 				expect.stringContaining('Updated credential resolver'),
 			);
 			expect(result.name).toBe('Updated Name');
+		});
+
+		it('should set oidcSeedSource when explicitly provided', async () => {
+			const entity = createMockEntity({ oidcSeedSource: null });
+			const updatedEntity = createMockEntity({ oidcSeedSource: 'oidc' });
+			const mockUser = createMockUser();
+
+			mockRepository.findOneBy.mockResolvedValue(entity);
+			mockRepository.save.mockResolvedValue(updatedEntity);
+			mockCipher.decryptV2.mockResolvedValue(JSON.stringify({ prefix: 'test' }));
+
+			await service.update('resolver-id-123', {
+				oidcSeedSource: 'oidc',
+				user: mockUser,
+			});
+
+			expect(entity.oidcSeedSource).toBe('oidc');
+			expect(mockRepository.save).toHaveBeenCalledWith(entity);
+		});
+
+		it('should clear oidcSeedSource when explicitly set to null', async () => {
+			const entity = createMockEntity({ oidcSeedSource: 'oidc' });
+			const updatedEntity = createMockEntity({ oidcSeedSource: null });
+			const mockUser = createMockUser();
+
+			mockRepository.findOneBy.mockResolvedValue(entity);
+			mockRepository.save.mockResolvedValue(updatedEntity);
+			mockCipher.decryptV2.mockResolvedValue(JSON.stringify({ prefix: 'test' }));
+
+			await service.update('resolver-id-123', {
+				oidcSeedSource: null,
+				user: mockUser,
+			});
+
+			expect(entity.oidcSeedSource).toBeNull();
+			expect(mockRepository.save).toHaveBeenCalledWith(entity);
+		});
+
+		it('should leave oidcSeedSource untouched when undefined in update payload', async () => {
+			const entity = createMockEntity({ oidcSeedSource: 'oidc' });
+			const updatedEntity = createMockEntity({ oidcSeedSource: 'oidc', name: 'Renamed' });
+			const mockUser = createMockUser();
+
+			mockRepository.findOneBy.mockResolvedValue(entity);
+			mockRepository.save.mockResolvedValue(updatedEntity);
+			mockCipher.decryptV2.mockResolvedValue(JSON.stringify({ prefix: 'test' }));
+
+			await service.update('resolver-id-123', { name: 'Renamed', user: mockUser });
+
+			expect(entity.oidcSeedSource).toBe('oidc');
 		});
 
 		it('should update resolver config with encryption and validation', async () => {

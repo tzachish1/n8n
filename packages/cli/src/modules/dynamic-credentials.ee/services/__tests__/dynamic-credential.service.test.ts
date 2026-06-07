@@ -507,8 +507,14 @@ describe('DynamicCredentialService', () => {
 					expect.objectContaining({
 						credentialId: 'cred-123',
 						resolverId: 'resolver-456',
-						identity: 'user-123',
+						// Fork §10 Phase 2 — raw `identity` was a confidentiality regression.
+						// Logs now carry a sha256-prefix fingerprint instead of the bearer.
+						identityFingerprint: expect.stringMatching(/^[0-9a-f]{12}$/),
 					}),
+				);
+				expect(mockLogger.debug).not.toHaveBeenCalledWith(
+					'Successfully resolved dynamic credentials',
+					expect.objectContaining({ identity: expect.anything() }),
 				);
 			});
 
@@ -583,7 +589,7 @@ describe('DynamicCredentialService', () => {
 				expect(mockLogger.debug).toHaveBeenCalledWith(
 					'Successfully resolved dynamic credentials',
 					expect.objectContaining({
-						identity: 'user-456',
+						identityFingerprint: expect.stringMatching(/^[0-9a-f]{12}$/),
 					}),
 				);
 			});
@@ -969,6 +975,132 @@ describe('DynamicCredentialService', () => {
 						executionId: '={{$execution.id}}', // Expression NOT resolved
 					},
 				});
+			});
+		});
+
+		// Fork §10 Phase 2 — webhook lazy-seed seam exercised on the
+		// `CredentialResolverDataNotFoundError` path. Validates upstream-
+		// compatible behavior when no provider is registered, and the bounded
+		// one-shot retry semantics when one is.
+		describe('lazy-seed seam', () => {
+			const credentialsEntity = createMockCredentialsMetadata();
+			const resolverEntity = createMockResolverEntity();
+			const executionContext = createMockExecutionContext('encrypted-credentials');
+			const decryptedCredentialContext = JSON.stringify(createMockCredentialContext());
+
+			const arrangeResolverMiss = (resolver: jest.Mocked<ICredentialResolver>) => {
+				mockResolverRepository.findOneBy.mockResolvedValue(resolverEntity);
+				mockResolverRegistry.getResolverByTypename.mockReturnValue(resolver);
+				mockCipher.decryptV2.mockImplementation(async (value: string) => {
+					if (value === 'encrypted-credentials') return decryptedCredentialContext;
+					if (value === 'encrypted-resolver-config') return '{}';
+					return '{}';
+				});
+			};
+
+			it('without a lazy-seed provider, behaves byte-identically to upstream (re-throws miss)', async () => {
+				const resolver = createMockResolver(false, true);
+				arrangeResolverMiss(resolver);
+
+				await expect(
+					service.resolveIfNeeded(credentialsEntity, staticData, executionContext, undefined),
+				).rejects.toThrow(CredentialResolutionError);
+
+				expect(resolver.getSecret).toHaveBeenCalledTimes(1);
+			});
+
+			it('with provider enabled + seed success, retries `getSecret` exactly once and returns dynamic data', async () => {
+				const dynamicPayload = { token: 'dynamic-from-retry' };
+				let invocations = 0;
+				const resolver = createMockResolver();
+				resolver.getSecret.mockImplementation(async () => {
+					invocations++;
+					if (invocations === 1) throw new CredentialResolverDataNotFoundError();
+					return dynamicPayload;
+				});
+				arrangeResolverMiss(resolver);
+
+				const provider = {
+					isEnabled: jest.fn().mockReturnValue(true),
+					isCandidate: jest.fn().mockReturnValue(true),
+					tryLazySeed: jest.fn().mockResolvedValue({ seeded: true }),
+				};
+				service.setLazySeedProvider(provider);
+
+				const result = await service.resolveIfNeeded(
+					credentialsEntity,
+					staticData,
+					executionContext,
+					undefined,
+				);
+
+				expect(result.isDynamic).toBe(true);
+				expect(result.data).toMatchObject(dynamicPayload);
+				expect(resolver.getSecret).toHaveBeenCalledTimes(2);
+				expect(provider.tryLazySeed).toHaveBeenCalledTimes(1);
+			});
+
+			it('with provider enabled but seed returning seeded=false, re-throws the original miss without retry', async () => {
+				const resolver = createMockResolver(false, true);
+				arrangeResolverMiss(resolver);
+
+				const provider = {
+					isEnabled: jest.fn().mockReturnValue(true),
+					isCandidate: jest.fn().mockReturnValue(true),
+					tryLazySeed: jest.fn().mockResolvedValue({ seeded: false, reason: 'lazy_seed_disabled' }),
+				};
+				service.setLazySeedProvider(provider);
+
+				await expect(
+					service.resolveIfNeeded(credentialsEntity, staticData, executionContext, undefined),
+				).rejects.toThrow(CredentialResolutionError);
+
+				expect(resolver.getSecret).toHaveBeenCalledTimes(1);
+				expect(provider.tryLazySeed).toHaveBeenCalledTimes(1);
+			});
+
+			it('with provider whose isEnabled returns false, skips lazy-seed and re-throws miss', async () => {
+				const resolver = createMockResolver(false, true);
+				arrangeResolverMiss(resolver);
+
+				const provider = {
+					isEnabled: jest.fn().mockReturnValue(false),
+					isCandidate: jest.fn().mockReturnValue(true),
+					tryLazySeed: jest.fn(),
+				};
+				service.setLazySeedProvider(provider);
+
+				await expect(
+					service.resolveIfNeeded(credentialsEntity, staticData, executionContext, undefined),
+				).rejects.toThrow(CredentialResolutionError);
+
+				expect(provider.tryLazySeed).not.toHaveBeenCalled();
+			});
+
+			it('with a provider that throws inside tryLazySeed, swallows the throw and re-throws the original miss', async () => {
+				const resolver = createMockResolver(false, true);
+				arrangeResolverMiss(resolver);
+
+				const provider = {
+					isEnabled: jest.fn().mockReturnValue(true),
+					isCandidate: jest.fn().mockReturnValue(true),
+					tryLazySeed: jest.fn().mockRejectedValue(new Error('provider blew up')),
+				};
+				service.setLazySeedProvider(provider);
+
+				await expect(
+					service.resolveIfNeeded(credentialsEntity, staticData, executionContext, undefined),
+				).rejects.toThrow(CredentialResolutionError);
+
+				expect(resolver.getSecret).toHaveBeenCalledTimes(1);
+				expect(provider.tryLazySeed).toHaveBeenCalledTimes(1);
+				expect(mockLogger.warn).toHaveBeenCalledWith(
+					'Lazy-seed provider threw — surfacing original resolver miss',
+					expect.objectContaining({
+						credentialId: 'cred-123',
+						resolverId: 'resolver-456',
+					}),
+				);
 			});
 		});
 

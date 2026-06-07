@@ -12,6 +12,7 @@ import { DynamicCredentialResolverRegistry } from './credential-resolver-registr
 import { extractSharedFields } from './shared-fields';
 import { DynamicCredentialResolverRepository } from '../database/repositories/credential-resolver.repository';
 import { CredentialStorageError } from '../errors/credential-storage.error';
+import { fingerprintIdentity } from '../utils/identity-fingerprint';
 
 import type {
 	CredentialStoreMetadata,
@@ -98,7 +99,7 @@ export class DynamicCredentialStorageService implements IDynamicCredentialStorag
 				credentialId: credentialStoreMetadata.id,
 				resolverId,
 				resolverSource: credentialStoreMetadata.resolverId ? 'credential' : 'workflow',
-				identity: credentialContext.identity,
+				identityFingerprint: fingerprintIdentity(credentialContext.identity),
 			});
 		} catch (error) {
 			throw new CredentialStorageError(

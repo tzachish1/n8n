@@ -54,6 +54,15 @@ const isSaving = ref(false);
 const resolverName = ref('');
 const resolverType = ref('');
 const resolverConfig = ref<Record<string, unknown>>({});
+// Fork §10 — sentinel string for the dropdown ('' = "do not auto-seed",
+// `'oidc'` = "capture tokens from the n8n OIDC IdP and populate every resolvable
+// credential pointing at this resolver"). The empty string sentinel is needed
+// because N8nOption rejects `null` as a value type; we convert back to `null`
+// at the API boundary in `save()` below.
+const OIDC_SEED_SOURCE_NONE = '' as const;
+const OIDC_SEED_SOURCE_OIDC = 'oidc' as const;
+type OidcSeedSourceUi = typeof OIDC_SEED_SOURCE_NONE | typeof OIDC_SEED_SOURCE_OIDC;
+const oidcSeedSource = ref<OidcSeedSourceUi>(OIDC_SEED_SOURCE_NONE);
 const clearCredentials = ref<boolean | null>(null);
 const hasUnsavedChanges = ref(false);
 const errorMessage = ref<string>('');
@@ -225,6 +234,8 @@ const loadResolver = async () => {
 		resolverName.value = resolver.name;
 		resolverType.value = resolver.type;
 		resolverConfig.value = resolver.decryptedConfig || {};
+		oidcSeedSource.value =
+			resolver.oidcSeedSource === 'oidc' ? OIDC_SEED_SOURCE_OIDC : OIDC_SEED_SOURCE_NONE;
 
 		// Store original values for change detection
 		originalResolverName.value = resolver.name;
@@ -270,10 +281,12 @@ const save = async () => {
 			type: string;
 			config: Record<string, unknown>;
 			clearCredentials?: boolean;
+			oidcSeedSource: 'oidc' | null;
 		} = {
 			name: resolverName.value.trim(),
 			type: resolverType.value,
 			config: resolverConfig.value,
+			oidcSeedSource: oidcSeedSource.value === OIDC_SEED_SOURCE_OIDC ? OIDC_SEED_SOURCE_OIDC : null,
 		};
 
 		// Include clearCredentials if non-name fields changed, otherwise default to false
@@ -517,6 +530,37 @@ onMounted(async () => {
 							>
 							</N8nOption>
 						</N8nSelect>
+					</div>
+
+					<div :class="$style.formGroup">
+						<label :class="$style.label">
+							{{ i18n.baseText('credentialResolverEdit.oidcSeedSource.label') }}
+						</label>
+						<N8nSelect
+							v-model="oidcSeedSource"
+							:placeholder="i18n.baseText('credentialResolverEdit.oidcSeedSource.placeholder')"
+							data-test-id="credential-resolver-oidc-seed-source-select"
+							@update:model-value="
+								() => {
+									hasUnsavedChanges = true;
+									errorMessage = '';
+								}
+							"
+						>
+							<N8nOption
+								:label="i18n.baseText('credentialResolverEdit.oidcSeedSource.none')"
+								:value="OIDC_SEED_SOURCE_NONE"
+							>
+							</N8nOption>
+							<N8nOption
+								:label="i18n.baseText('credentialResolverEdit.oidcSeedSource.oidc')"
+								:value="OIDC_SEED_SOURCE_OIDC"
+							>
+							</N8nOption>
+						</N8nSelect>
+						<N8nText size="small" color="text-light">
+							{{ i18n.baseText('credentialResolverEdit.oidcSeedSource.help') }}
+						</N8nText>
 					</div>
 
 					<div v-if="resolverProperties.length > 0" :class="$style.configSection">

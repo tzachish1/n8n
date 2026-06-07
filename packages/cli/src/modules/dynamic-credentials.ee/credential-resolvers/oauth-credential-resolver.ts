@@ -17,6 +17,10 @@ import {
 	OAuth2TokenIntrospectionIdentifier,
 } from './identifiers/oauth2-introspection-identifier';
 import {
+	OAuth2JwtClaimIdentifier,
+	OAuth2JwtClaimOptionsSchema,
+} from './identifiers/oauth2-jwt-claim-identifier';
+import {
 	OAuth2UserInfoIdentifier,
 	OAuth2UserInfoOptionsSchema,
 } from './identifiers/oauth2-userinfo-identifier';
@@ -25,6 +29,7 @@ import { DynamicCredentialEntryStorage } from './storage/dynamic-credential-entr
 const OAuthCredentialResolverOptionsSchema = z.discriminatedUnion('validation', [
 	OAuth2IntrospectionOptionsSchema,
 	OAuth2UserInfoOptionsSchema,
+	OAuth2JwtClaimOptionsSchema,
 ]);
 
 type OAuthCredentialResolverOptions = z.infer<typeof OAuthCredentialResolverOptionsSchema>;
@@ -40,6 +45,7 @@ export class OAuthCredentialResolver implements ICredentialResolver {
 		private readonly logger: Logger,
 		private readonly oAuth2TokenIntrospectionIdentifier: OAuth2TokenIntrospectionIdentifier,
 		private readonly oAuth2UserInfoIdentifier: OAuth2UserInfoIdentifier,
+		private readonly oAuth2JwtClaimIdentifier: OAuth2JwtClaimIdentifier,
 		private readonly storage: DynamicCredentialEntryStorage,
 		private readonly cipher: Cipher,
 	) {}
@@ -73,6 +79,12 @@ export class OAuthCredentialResolver implements ICredentialResolver {
 						value: 'oauth2-userinfo',
 						description: 'Validate token via OAuth2 UserInfo Endpoint',
 					},
+					{
+						name: 'JWT Claim (Local Verification)',
+						value: 'oauth2-jwt-claim',
+						description:
+							'Verify JWT signature against JWKS from discovery and read the subject claim locally — no /userinfo or /introspect roundtrip. Use this for api-audience tokens (e.g. Entra `api://<client>/...` access tokens) where the IdP rejects /userinfo and does not implement introspection.',
+					},
 				],
 				default: 'oauth2-introspection',
 				description: 'Validation method to use for token validation',
@@ -84,9 +96,6 @@ export class OAuthCredentialResolver implements ICredentialResolver {
 				default: '',
 				description: 'OAuth2 client ID for introspection',
 				displayOptions: {
-					hide: {
-						validation: ['oauth2-userinfo'],
-					},
 					show: {
 						validation: ['oauth2-introspection'],
 					},
@@ -100,11 +109,21 @@ export class OAuthCredentialResolver implements ICredentialResolver {
 				typeOptions: { password: true },
 				description: 'OAuth2 client secret for introspection',
 				displayOptions: {
-					hide: {
-						validation: ['oauth2-userinfo'],
-					},
 					show: {
 						validation: ['oauth2-introspection'],
+					},
+				},
+			},
+			{
+				displayName: 'Audience',
+				name: 'audience',
+				type: 'string' as const,
+				default: '',
+				description:
+					"Expected `aud` claim value the JWT must carry (e.g. the n8n App Registration's client ID, or `api://<clientId>`). Required for local JWT verification.",
+				displayOptions: {
+					show: {
+						validation: ['oauth2-jwt-claim'],
 					},
 				},
 			},
@@ -210,9 +229,11 @@ export class OAuthCredentialResolver implements ICredentialResolver {
 		const parsedOptions = await this.parseOptions(options);
 		if (parsedOptions.validation === 'oauth2-introspection') {
 			return [this.oAuth2TokenIntrospectionIdentifier, parsedOptions];
-		} else {
-			return [this.oAuth2UserInfoIdentifier, parsedOptions];
 		}
+		if (parsedOptions.validation === 'oauth2-jwt-claim') {
+			return [this.oAuth2JwtClaimIdentifier, parsedOptions];
+		}
+		return [this.oAuth2UserInfoIdentifier, parsedOptions];
 	}
 
 	private async resolveIdentifier(

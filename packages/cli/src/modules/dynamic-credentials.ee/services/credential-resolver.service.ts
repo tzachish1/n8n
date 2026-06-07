@@ -21,6 +21,8 @@ export interface CreateResolverParams {
 	name: string;
 	type: string;
 	config: CredentialResolverConfiguration;
+	/** Fork §10 — opt-in flag for OIDC self-seeding. See entity for valid values. */
+	oidcSeedSource?: string | null;
 	user: User;
 }
 
@@ -29,6 +31,11 @@ export interface UpdateResolverParams {
 	type?: string;
 	config?: CredentialResolverConfiguration;
 	clearCredentials?: boolean;
+	/**
+	 * Fork §10 — opt-in flag for OIDC self-seeding. `undefined` leaves the
+	 * existing value untouched; `null` explicitly clears it.
+	 */
+	oidcSeedSource?: string | null;
 	user: User;
 }
 
@@ -66,6 +73,7 @@ export class DynamicCredentialResolverService {
 			name: params.name,
 			type: params.type,
 			config: encryptedConfig,
+			oidcSeedSource: params.oidcSeedSource ?? null,
 		});
 
 		const saved = await this.repository.save(resolver);
@@ -132,6 +140,10 @@ export class DynamicCredentialResolverService {
 
 		if (params.name !== undefined) {
 			existing.name = params.name;
+		}
+
+		if (params.oidcSeedSource !== undefined) {
+			existing.oidcSeedSource = params.oidcSeedSource;
 		}
 
 		if (params.clearCredentials === true) {

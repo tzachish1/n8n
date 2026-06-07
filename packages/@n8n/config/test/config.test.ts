@@ -470,6 +470,12 @@ describe('GlobalConfig', () => {
 			},
 			oidc: {
 				loginEnabled: false,
+				graphScopes: '',
+				graphAutoSeedEnabled: false,
+				graphSeedFailOpen: true,
+				graphLazySeedEnabled: false,
+				graphLazySeedProvisionUser: true,
+				graphLazySeedNegativeCacheTtlMs: 60_000,
 			},
 			ldap: {
 				loginEnabled: false,

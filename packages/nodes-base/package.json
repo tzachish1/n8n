@@ -243,6 +243,7 @@
       "dist/credentials/MicrosoftDynamicsOAuth2Api.credentials.js",
       "dist/credentials/MicrosoftEntraOAuth2Api.credentials.js",
       "dist/credentials/MicrosoftExcelOAuth2Api.credentials.js",
+      "dist/credentials/MicrosoftGraphAppOnlyOAuth2Api.credentials.js",
       "dist/credentials/MicrosoftGraphSecurityOAuth2Api.credentials.js",
       "dist/credentials/MicrosoftOAuth2Api.credentials.js",
       "dist/credentials/MicrosoftOneDriveOAuth2Api.credentials.js",

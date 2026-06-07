@@ -58,6 +58,16 @@ export const eventNamesExecution = [
 export const eventNamesAudit = [
 	'n8n.audit.user.login.success',
 	'n8n.audit.user.login.failed',
+	// Fork §10 — OIDC Graph token auto-seed. Payloads carry ids and reasons
+	// only; no token material ever lands in the audit stream.
+	'n8n.audit.user.graph-token.captured',
+	'n8n.audit.user.graph-token.seed-failed',
+	'n8n.audit.user.graph-token.skipped',
+	// Fork §10 Phase 2 — webhook lazy-seed lifecycle events. Same payload
+	// shape contract as the login-time events above: ids + reasons only.
+	'n8n.audit.user.graph-token.lazy-seeded',
+	'n8n.audit.user.graph-token.lazy-seed-failed',
+	'n8n.audit.user.graph-token.lazy-seed-skipped',
 	'n8n.audit.user.signedup',
 	'n8n.audit.user.updated',
 	'n8n.audit.user.deleted',

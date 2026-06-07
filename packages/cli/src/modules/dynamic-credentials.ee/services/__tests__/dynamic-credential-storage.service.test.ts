@@ -216,8 +216,15 @@ describe('DynamicCredentialStorageService', () => {
 					expect.objectContaining({
 						credentialId: 'cred-123',
 						resolverId: 'resolver-456',
-						identity: 'user-123',
+						// Fork §10 Phase 2 — `identity` (raw bearer JWT) was a confidentiality
+						// regression in logs. It is now redacted to a sha256-prefix fingerprint
+						// so operators can correlate without exfiltrating the token itself.
+						identityFingerprint: expect.stringMatching(/^[0-9a-f]{12}$/),
 					}),
+				);
+				expect(mockLogger.debug).not.toHaveBeenCalledWith(
+					'Successfully stored dynamic credentials',
+					expect.objectContaining({ identity: expect.anything() }),
 				);
 			});
 

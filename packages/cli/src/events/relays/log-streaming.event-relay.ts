@@ -62,6 +62,12 @@ export class LogStreamingEventRelay extends EventRelay {
 			'user-signed-up': (event) => this.userSignedUp(event),
 			'user-logged-in': (event) => this.userLoggedIn(event),
 			'user-login-failed': (event) => this.userLoginFailed(event),
+			'oidc-graph-token-captured': (event) => this.oidcGraphTokenCaptured(event),
+			'oidc-graph-token-seed-failed': (event) => this.oidcGraphTokenSeedFailed(event),
+			'oidc-graph-token-skipped': (event) => this.oidcGraphTokenSkipped(event),
+			'oidc-graph-token-lazy-seeded': (event) => this.oidcGraphTokenLazySeeded(event),
+			'oidc-graph-token-lazy-seed-failed': (event) => this.oidcGraphTokenLazySeedFailed(event),
+			'oidc-graph-token-lazy-seed-skipped': (event) => this.oidcGraphTokenLazySeedSkipped(event),
 			'user-invite-email-click': (event) => this.userInviteEmailClick(event),
 			'user-password-reset-email-click': (event) => this.userPasswordResetEmailClick(event),
 			'user-password-reset-request-click': (event) => this.userPasswordResetRequestClick(event),
@@ -531,6 +537,54 @@ export class LogStreamingEventRelay extends EventRelay {
 	) {
 		void this.eventBus.sendAuditEvent({
 			eventName: 'n8n.audit.user.login.failed',
+			payload: event,
+		});
+	}
+
+	// Fork §10 — OIDC Graph token auto-seed events. No token material is ever
+	// emitted; only ids, types, and reasons. See CUSTOMS.md §10.
+	private oidcGraphTokenCaptured(event: RelayEventMap['oidc-graph-token-captured']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.user.graph-token.captured',
+			payload: event,
+		});
+	}
+
+	private oidcGraphTokenSeedFailed(event: RelayEventMap['oidc-graph-token-seed-failed']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.user.graph-token.seed-failed',
+			payload: event,
+		});
+	}
+
+	private oidcGraphTokenSkipped(event: RelayEventMap['oidc-graph-token-skipped']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.user.graph-token.skipped',
+			payload: event,
+		});
+	}
+
+	// Fork §10 Phase 2 — webhook lazy-seed lifecycle. Same audit-only payload
+	// contract as the login-time events above; never carries token material.
+	private oidcGraphTokenLazySeeded(event: RelayEventMap['oidc-graph-token-lazy-seeded']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.user.graph-token.lazy-seeded',
+			payload: event,
+		});
+	}
+
+	private oidcGraphTokenLazySeedFailed(event: RelayEventMap['oidc-graph-token-lazy-seed-failed']) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.user.graph-token.lazy-seed-failed',
+			payload: event,
+		});
+	}
+
+	private oidcGraphTokenLazySeedSkipped(
+		event: RelayEventMap['oidc-graph-token-lazy-seed-skipped'],
+	) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.user.graph-token.lazy-seed-skipped',
 			payload: event,
 		});
 	}

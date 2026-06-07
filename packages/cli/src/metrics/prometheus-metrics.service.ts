@@ -37,6 +37,8 @@ export class PrometheusMetricsService {
 
 	private tokenExchangeListenersRegistered = false;
 
+	private oidcLazySeedListenersRegistered = false;
+
 	private readonly gauges: Record<string, Gauge<string>> = {};
 
 	private readonly histograms: Record<string, Histogram<string>> = {};
@@ -93,6 +95,7 @@ export class PrometheusMetricsService {
 		this.initActiveWorkflowCountMetric();
 		this.initWorkflowStatisticsMetrics();
 		this.initTokenExchangeMetrics();
+		this.initOidcLazySeedMetrics();
 		this.mountMetricsEndpoint(app);
 	}
 
@@ -754,6 +757,43 @@ export class PrometheusMetricsService {
 
 		this.eventService.on('token-exchange-identity-linked', () => {
 			this.counters.tokenExchangeIdentityLinkedTotal?.inc(1);
+		});
+	}
+
+	/**
+	 * Fork §10 Phase 2 — webhook lazy-seed counter.
+	 *
+	 * `n8n_oidc_lazy_seed_attempts_total{result, reason}` increments once per
+	 * `OidcWebhookSeederService.tryLazySeed` outcome. `result` is `seeded`,
+	 * `skipped`, or `failed`; `reason` carries the structured skip/fail code
+	 * (or `success` when the seed completed). Mirrors the event-driven
+	 * pattern used by `tokenExchangeRequestsTotal` so the seeder service stays
+	 * decoupled from `PrometheusMetricsService`.
+	 */
+	private initOidcLazySeedMetrics() {
+		this.counters.oidcLazySeedAttemptsTotal = new promClient.Counter({
+			name: this.prefix + 'oidc_lazy_seed_attempts_total',
+			help: 'Total number of OIDC webhook lazy-seed attempts, labelled by outcome.',
+			labelNames: ['result', 'reason'],
+		});
+		this.counters.oidcLazySeedAttemptsTotal.inc({ result: 'seeded', reason: 'success' }, 0);
+
+		if (this.oidcLazySeedListenersRegistered) return;
+		this.oidcLazySeedListenersRegistered = true;
+
+		this.eventService.on('oidc-graph-token-lazy-seeded', () => {
+			this.counters.oidcLazySeedAttemptsTotal?.inc({ result: 'seeded', reason: 'success' }, 1);
+		});
+
+		this.eventService.on('oidc-graph-token-lazy-seed-skipped', ({ reason }) => {
+			this.counters.oidcLazySeedAttemptsTotal?.inc({ result: 'skipped', reason }, 1);
+		});
+
+		this.eventService.on('oidc-graph-token-lazy-seed-failed', () => {
+			this.counters.oidcLazySeedAttemptsTotal?.inc(
+				{ result: 'failed', reason: 'obo_or_persist_error' },
+				1,
+			);
 		});
 	}
 }
