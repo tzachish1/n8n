@@ -85,6 +85,7 @@ export class CredentialResolversController {
 				name: dto.name,
 				type: dto.type,
 				config: dto.config,
+				oidcSeedSource: dto.oidcSeedSource,
 				user: req.user,
 			});
 			return credentialResolverSchema.parse(createdResolver);
@@ -161,6 +162,7 @@ export class CredentialResolversController {
 					name: dto.name,
 					config: dto.config,
 					clearCredentials: dto.clearCredentials,
+					oidcSeedSource: dto.oidcSeedSource,
 					user: req.user,
 				}),
 			);
