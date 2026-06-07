@@ -260,8 +260,8 @@ describe('PrometheusMetricsService', () => {
 			await prometheusMetricsService.init(app);
 
 			expect(promClient.Gauge).toHaveBeenCalledTimes(3); // version metric + active workflow count metric + instance role metric
-			expect(promClient.Counter).toHaveBeenCalledTimes(6); // token exchange metrics (always registered)
-			expect(eventService.on).toHaveBeenCalledTimes(6); // token exchange event listeners
+			expect(promClient.Counter).toHaveBeenCalledTimes(7); // token exchange metrics (always registered) + Fork §10 Phase 2 lazy-seed counter
+			expect(eventService.on).toHaveBeenCalledTimes(9); // token exchange event listeners + 3 Fork §10 Phase 2 lazy-seed listeners
 		});
 
 		it('should not set up queue metrics if enabled and on scaling mode but instance is not main', async () => {
@@ -273,8 +273,8 @@ describe('PrometheusMetricsService', () => {
 			await prometheusMetricsService.init(app);
 
 			expect(promClient.Gauge).toHaveBeenCalledTimes(2); // version metric + active workflow count metric
-			expect(promClient.Counter).toHaveBeenCalledTimes(6); // token exchange metrics (always registered)
-			expect(eventService.on).toHaveBeenCalledTimes(6); // token exchange event listeners
+			expect(promClient.Counter).toHaveBeenCalledTimes(7); // token exchange metrics (always registered) + Fork §10 Phase 2 lazy-seed counter
+			expect(eventService.on).toHaveBeenCalledTimes(9); // token exchange event listeners + 3 Fork §10 Phase 2 lazy-seed listeners
 		});
 
 		it('should setup active workflow count metric', async () => {

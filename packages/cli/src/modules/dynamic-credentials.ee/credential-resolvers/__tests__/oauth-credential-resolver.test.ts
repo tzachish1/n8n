@@ -3,6 +3,7 @@ import type { Cipher } from 'n8n-core';
 
 import { testCredentialResolverContract, testHelpers } from './resolver-contract-tests';
 import type { OAuth2TokenIntrospectionIdentifier } from '../identifiers/oauth2-introspection-identifier';
+import type { OAuth2JwtClaimIdentifier } from '../identifiers/oauth2-jwt-claim-identifier';
 import type { OAuth2UserInfoIdentifier } from '../identifiers/oauth2-userinfo-identifier';
 import { OAuthCredentialResolver } from '../oauth-credential-resolver';
 import type { DynamicCredentialEntryStorage } from '../storage/dynamic-credential-entry-storage';
@@ -11,6 +12,7 @@ describe('OAuthCredentialResolver', () => {
 	let mockLogger: jest.Mocked<Logger>;
 	let mockIdentifier: jest.Mocked<OAuth2TokenIntrospectionIdentifier>;
 	let mockIdentifierUserInfo: jest.Mocked<OAuth2UserInfoIdentifier>;
+	let mockIdentifierJwtClaim: jest.Mocked<OAuth2JwtClaimIdentifier>;
 	let mockStorage: jest.Mocked<DynamicCredentialEntryStorage>;
 	let mockCipher: jest.Mocked<Cipher>;
 
@@ -39,6 +41,11 @@ describe('OAuthCredentialResolver', () => {
 			resolve: jest.fn(),
 			validateOptions: jest.fn(),
 		} as unknown as jest.Mocked<OAuth2UserInfoIdentifier>;
+
+		mockIdentifierJwtClaim = {
+			resolve: jest.fn(),
+			validateOptions: jest.fn(),
+		} as unknown as jest.Mocked<OAuth2JwtClaimIdentifier>;
 
 		mockStorage = {
 			getCredentialData: jest.fn(),
@@ -95,6 +102,7 @@ describe('OAuthCredentialResolver', () => {
 				mockLogger,
 				mockIdentifier,
 				mockIdentifierUserInfo,
+				mockIdentifierJwtClaim,
 				mockStorage,
 				mockCipher,
 			);
@@ -145,6 +153,7 @@ describe('OAuthCredentialResolver', () => {
 				mockLogger,
 				mockIdentifier,
 				mockIdentifierUserInfo,
+				mockIdentifierJwtClaim,
 				mockStorage,
 				mockCipher,
 			);
