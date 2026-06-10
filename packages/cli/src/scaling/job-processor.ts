@@ -152,6 +152,15 @@ export class JobProcessor {
 		});
 		additionalData.streamingEnabled = job.data.streamingEnabled;
 		additionalData.restartExecutionId = job.data.restartExecutionId;
+		// Re-attach the editor-built credential context that the main process
+		// captured (`buildManualExecutionCredentials`) so the worker's
+		// `establishExecutionContext` can populate `runtimeData.credentials` for
+		// manual runs. Required for dynamic credential resolution: without it
+		// the resolution gate in `credentials-helper.ts` short-circuits to
+		// static data, and `isResolvable=true` OAuth2 credentials throw
+		// `Unable to sign without access token` because their tokens live in
+		// `dynamic_credential_user_entry`, not in the credential row.
+		additionalData.encryptedRunnerIdentity = job.data.encryptedRunnerIdentity;
 
 		const { pushRef } = job.data;
 

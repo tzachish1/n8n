@@ -42,9 +42,26 @@ export const toExecutionContextEstablishmentHookParameter = (value: unknown) => 
 	if (value === null || value === undefined || typeof value !== 'object') {
 		return null;
 	}
-	// Quick check to avoid unnecessary parsing attempts
-	if (!('executionsHooksVersion' in value)) {
+
+	const valueRecord = value as Record<string, unknown>;
+	const hasVersion = 'executionsHooksVersion' in valueRecord;
+	const hasHookCollection = 'contextEstablishmentHooks' in valueRecord;
+
+	// Skip non-trigger node parameters where neither marker is present.
+	if (!hasVersion && !hasHookCollection) {
 		return null;
 	}
-	return ExecutionContextEstablishmentHookParameterSchema.safeParse(value);
+
+	// `executionsHooksVersion` is a `hidden` node property with `default: 1`
+	// (see `load-nodes-and-credentials.ts`). n8n's workflow serializer omits
+	// parameters whose value matches the descriptor default, so a legitimate
+	// hook config is persisted as `{ contextEstablishmentHooks: { hooks: [...] } }`
+	// — without the version discriminator. Treat that shape as v1 (the only
+	// schema currently defined) so the publish-time validator and the runtime
+	// hook executor can still parse it. Explicit values are left untouched.
+	const valueToParse: unknown = hasVersion
+		? value
+		: { executionsHooksVersion: 1, ...valueRecord };
+
+	return ExecutionContextEstablishmentHookParameterSchema.safeParse(valueToParse);
 };

@@ -13,9 +13,11 @@ import type {
 	NodeParameterValueType,
 } from 'n8n-workflow';
 
+import type { AuthService } from '@/auth/auth.service';
 import { DynamicNodeParametersController } from '@/controllers/dynamic-node-parameters.controller';
+import * as EditorExecutionContext from '@/credentials/editor-execution-context';
 import type { DynamicNodeParametersService } from '@/services/dynamic-node-parameters.service';
-import * as AdditionalData from '@/workflow-execute-additional-data';
+import type { ExecutionContextService } from 'n8n-core';
 
 describe('DynamicNodeParametersController', () => {
 	let service: jest.Mocked<DynamicNodeParametersService>;
@@ -25,12 +27,18 @@ describe('DynamicNodeParametersController', () => {
 
 	beforeEach(() => {
 		service = mock<DynamicNodeParametersService>();
-		controller = new DynamicNodeParametersController(service);
+		controller = new DynamicNodeParametersController(
+			service,
+			mock<AuthService>(),
+			mock<ExecutionContextService>(),
+		);
 
 		mockUser = { id: 'user123' };
 		baseAdditionalData = mock<IWorkflowExecuteAdditionalData>();
 
-		jest.spyOn(AdditionalData, 'getBase').mockResolvedValue(baseAdditionalData);
+		jest
+			.spyOn(EditorExecutionContext, 'getEditorAdditionalData')
+			.mockResolvedValue(baseAdditionalData);
 	});
 
 	describe('getOptions', () => {

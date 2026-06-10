@@ -10,6 +10,7 @@ const makeContext = (overrides: Partial<RedactionContext> = {}): RedactionContex
 	redactExecutionData: undefined,
 	userCanReveal: false,
 	hasDynamicCredentials: false,
+	isSelfManualReveal: false,
 	memo: new Map(),
 	...overrides,
 });

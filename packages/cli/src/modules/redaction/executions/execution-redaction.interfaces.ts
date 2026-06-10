@@ -14,6 +14,17 @@ export interface RedactionContext {
 	readonly userCanReveal: boolean;
 	/** True when the execution used dynamic credential resolution. */
 	readonly hasDynamicCredentials: boolean;
+	/**
+	 * True when the execution ran in manual mode and was triggered by the same
+	 * user that is currently requesting the data. The strict no-reveal rule for
+	 * dynamic-credential executions is relaxed in this case because the data is
+	 * the requesting user's own (no cross-tenant exposure): a per-user dynamic
+	 * credential by definition resolves against the triggering user's identity,
+	 * so showing them the result is equivalent to running the workflow live in
+	 * their own browser. Production runs (cron / webhook / scheduled) and runs
+	 * triggered by a different user are unaffected.
+	 */
+	readonly isSelfManualReveal: boolean;
 	/** Generic memo store — strategies may cache intermediate results here
 	 *  to avoid redundant computation across requiresRedaction/apply calls.
 	 *  Keyed by strategy name. */

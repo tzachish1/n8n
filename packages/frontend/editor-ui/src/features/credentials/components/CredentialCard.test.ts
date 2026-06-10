@@ -355,9 +355,17 @@ describe('CredentialCard', () => {
 			expect(queryByTestId('credential-card-not-connected')).not.toBeInTheDocument();
 		});
 
-		it('should hide the Connect button when the user lacks update permission', () => {
-			const { queryByTestId } = renderComponent({
+		it('should show the Connect button for read-only sharees on resolvable credentials', () => {
+			const { getByTestId } = renderComponent({
 				props: { data: privateUnconnectedData({ scopes: ['credential:read'] }) },
+			});
+
+			expect(getByTestId('credential-card-connect')).toBeInTheDocument();
+		});
+
+		it('should hide the Connect button when the user lacks read and update permission', () => {
+			const { queryByTestId } = renderComponent({
+				props: { data: privateUnconnectedData({ scopes: [] }) },
 			});
 
 			expect(queryByTestId('credential-card-connect')).not.toBeInTheDocument();

@@ -131,7 +131,7 @@ describe('OAuth1 API', () => {
 				.reply(200, 'oauth_token=request_token&oauth_token_secret=request_secret');
 		};
 
-		it('should reject auth start for a sharee with credential:user role', async () => {
+		it('should reject auth start for a sharee with credential:user role on a static credential', async () => {
 			const sharee = await createMember();
 			await shareCredentialWithUsers(credential, [sharee]);
 
@@ -142,6 +142,32 @@ describe('OAuth1 API', () => {
 
 			expect(response.statusCode).toBe(404);
 			await expectNoCsrfStateOnCredential(credential.id);
+		});
+
+		it('should allow auth start for a sharee with credential:user role on a resolvable credential', async () => {
+			const sharee = await createMember();
+			const resolvableCredential = await saveCredential(
+				{
+					name: 'Shared resolvable OAuth1 credential',
+					type: 'testOAuth1Api',
+					data: credentialData,
+					isResolvable: true,
+				},
+				{
+					user: owner,
+					role: 'credential:owner',
+				},
+			);
+			await shareCredentialWithUsers(resolvableCredential, [sharee]);
+
+			mockRequestTokenEndpoint();
+
+			const response = await testServer
+				.authAgentFor(sharee)
+				.get('/oauth1-credential/auth')
+				.query({ id: resolvableCredential.id });
+
+			expect(response.statusCode).toBe(200);
 		});
 
 		it('should reject auth start for a project viewer on a project-shared credential', async () => {

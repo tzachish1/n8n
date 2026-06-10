@@ -487,6 +487,37 @@ function hookFunctionsFinalizeExecutionStatus(hooks: ExecutionLifecycleHooks) {
 	});
 }
 
+/**
+ * Stamps `fullRunData.data.manualData.userId` for manual executions before save.
+ *
+ * Why: the execution-redaction service relaxes the dynamic-credentials
+ * "never reveal" rule for the user that triggered a manual run. That
+ * exemption matches on `execution.data.manualData.userId === requester.id`,
+ * so the user id has to be on the persisted IRunExecutionData by save time.
+ *
+ * In queue + offload mode `workflow-execution.service.ts` already pre-builds
+ * `data.executionData` with `manualData.userId` (so the worker has everything
+ * it needs). For all other manual paths — single-process / regular main /
+ * scaling main with offload disabled — `runExecutionData` is constructed
+ * inside `WorkflowExecute` with no userId, so we stamp it here right before
+ * save. Production / cron / webhook modes never enter this branch.
+ */
+function hookFunctionsStampManualUser(
+	hooks: ExecutionLifecycleHooks,
+	executionMode: WorkflowExecuteMode,
+	userId?: string,
+) {
+	if (executionMode !== 'manual' || !userId) return;
+
+	hooks.addHandler('workflowExecuteAfter', (fullRunData) => {
+		const existing = fullRunData.data.manualData;
+		fullRunData.data.manualData = {
+			...(existing ?? {}),
+			userId,
+		};
+	});
+}
+
 function hookFunctionsStatistics(hooks: ExecutionLifecycleHooks) {
 	const workflowStatisticsService = Container.get(WorkflowStatisticsService);
 	hooks.addHandler('nodeFetchedData', (workflowId, node) => {
@@ -744,6 +775,11 @@ export function getLifecycleHooksForScalingWorker(
 	const optionalParameters = { pushRef, retryOf: retryOf ?? undefined, saveSettings };
 	hookFunctionsNodeEvents(hooks);
 	hookFunctionsFinalizeExecutionStatus(hooks);
+	// Idempotent: queue + offload mode pre-stamps `manualData.userId` upstream
+	// (`workflow-execution.service.ts`), but we still re-apply here so any
+	// other worker-side path (retry, restart, scaling-worker without offload)
+	// also lands the userId on the persisted IRunExecutionData.
+	hookFunctionsStampManualUser(hooks, executionMode, data.userId);
 	hookFunctionsSaveWorker(hooks, optionalParameters);
 	hookFunctionsSaveProgress(hooks, optionalParameters);
 	hookFunctionsStatistics(hooks);
@@ -791,6 +827,11 @@ export function getLifecycleHooksForScalingMain(
 	hookFunctionsSaveProgress(hooks, optionalParameters);
 	hookFunctionsExternalHooks(hooks);
 	hookFunctionsFinalizeExecutionStatus(hooks);
+	// Stamp the manual triggerer's userId before any save handler runs, so the
+	// redaction service's self-manual-reveal exemption can match on the
+	// persisted execution row even on the scaling-main path (queue mode
+	// without `OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS=true`).
+	hookFunctionsStampManualUser(hooks, executionMode, userId);
 
 	hooks.addHandler('workflowExecuteAfter', async function (fullRunData) {
 		// Only process executions that have reached a terminal status.
@@ -875,6 +916,10 @@ export function getLifecycleHooksForRegularMain(
 	hookFunctionsWorkflowEvents(hooks, userId, projectId, projectName, source, telemetryMetadata);
 	hookFunctionsNodeEvents(hooks);
 	hookFunctionsFinalizeExecutionStatus(hooks);
+	// Must run before `hookFunctionsSave` so the userId lands on the
+	// persisted IRunExecutionData and the redaction service can grant the
+	// triggering user reveal access for their own manual runs.
+	hookFunctionsStampManualUser(hooks, executionMode, userId);
 	hookFunctionsSave(hooks, optionalParameters);
 	hookFunctionsPush(hooks, optionalParameters, userId, source);
 	hookFunctionsSaveProgress(hooks, optionalParameters);

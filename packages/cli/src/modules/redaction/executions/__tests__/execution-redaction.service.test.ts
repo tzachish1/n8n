@@ -56,6 +56,10 @@ describe('ExecutionRedactionService', () => {
 			workflowSettingsPolicy?: 'none' | 'all' | 'non-manual';
 			withRuntimeData?: boolean;
 			withDynamicCredentials?: boolean;
+			/** When set, the execution carries `manualData.userId` — required to
+			 *  exercise the self-manual-reveal exemption for dynamic-credential
+			 *  executions. */
+			manualUserId?: string;
 		} = {},
 	): RedactableExecution => {
 		const {
@@ -65,6 +69,7 @@ describe('ExecutionRedactionService', () => {
 			workflowSettingsPolicy,
 			withRuntimeData = true,
 			withDynamicCredentials = false,
+			manualUserId,
 		} = overrides;
 
 		const executionData: IRunExecutionData['executionData'] = {
@@ -106,6 +111,7 @@ describe('ExecutionRedactionService', () => {
 				version: 1,
 				resultData: { runData },
 				executionData,
+				...(manualUserId ? { manualData: { userId: manualUserId } } : {}),
 			},
 			workflowData: {
 				settings: workflowSettingsPolicy ? { redactionPolicy: workflowSettingsPolicy } : {},
@@ -654,6 +660,93 @@ describe('ExecutionRedactionService', () => {
 
 			// policy=none, no dynamic creds → no FullItemRedactionStrategy
 			expect(fullItemRedactionStrategy.apply).not.toHaveBeenCalled();
+		});
+
+		it('exempts the triggering user from forced redaction on their own manual run', async () => {
+			// Per-user dynamic credentials resolve against the triggering user's
+			// identity, so the resulting data is by definition that user's own.
+			// Showing it back to them is no different from running the workflow
+			// live in their browser. Cross-tenant exposure is impossible because
+			// other users still hit the strict no-reveal branch (covered in the
+			// next test).
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				manualUserId: mockUser.id,
+			});
+			await service.processExecution(execution, { user: mockUser });
+
+			expect(fullItemRedactionStrategy.apply).not.toHaveBeenCalled();
+		});
+
+		it('still force-redacts when a different user requests data from a manual run', async () => {
+			// User who triggered ≠ user who is requesting → the data is NOT the
+			// requester's own; the strict no-reveal rule still applies.
+			const otherUser = { id: 'someone-else', email: 'other@example.com' } as typeof mockUser;
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				manualUserId: mockUser.id,
+			});
+			await service.processExecution(execution, { user: otherUser });
+
+			expect(fullItemRedactionStrategy.apply).toHaveBeenCalledTimes(1);
+			const [, context] = fullItemRedactionStrategy.apply.mock.calls[0];
+			expect(context.userCanReveal).toBe(false);
+			expect(context.isSelfManualReveal).toBe(false);
+		});
+
+		it('still force-redacts non-manual (production / webhook / cron) executions even for the same user', async () => {
+			// Production execution paths have no `manualData.userId`, so the
+			// exemption never matches them. Even a same-user request gets the
+			// strict redaction — which is the original cross-tenant guarantee.
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'webhook',
+				withDynamicCredentials: true,
+				manualUserId: mockUser.id, // mode is webhook → exemption gate fails first
+			});
+			await service.processExecution(execution, { user: mockUser });
+
+			expect(fullItemRedactionStrategy.apply).toHaveBeenCalledTimes(1);
+		});
+
+		it('allows the explicit reveal endpoint for the triggering user on their own manual run', async () => {
+			// Mirror of the auto-redact exemption: the explicit `redactExecutionData=false`
+			// endpoint must allow the same user to reveal their own data, instead of
+			// throwing ForbiddenError unconditionally.
+			workflowFinderService.findWorkflowIdsWithScopeForUser.mockResolvedValue(
+				new Set(['workflow-123']),
+			);
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				manualUserId: mockUser.id,
+			});
+
+			await expect(
+				service.processExecution(execution, { user: mockUser, redactExecutionData: false }),
+			).resolves.toBeDefined();
+		});
+
+		it('still throws ForbiddenError on the reveal endpoint for a different user', async () => {
+			workflowFinderService.findWorkflowIdsWithScopeForUser.mockResolvedValue(
+				new Set(['workflow-123']),
+			);
+			const otherUser = { id: 'someone-else', email: 'other@example.com' } as typeof mockUser;
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				manualUserId: mockUser.id,
+			});
+
+			await expect(
+				service.processExecution(execution, { user: otherUser, redactExecutionData: false }),
+			).rejects.toThrow(ForbiddenError);
 		});
 
 		it('scrubs runtimeData.credentials from the execution data', async () => {

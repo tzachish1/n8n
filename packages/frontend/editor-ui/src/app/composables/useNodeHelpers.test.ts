@@ -808,6 +808,18 @@ describe('useNodeHelpers()', () => {
 		const MANUAL_TRIGGER = 'n8n-nodes-base.manualTrigger';
 		const MANUAL_CHAT_TRIGGER = '@n8n/n8n-nodes-langchain.manualChatTrigger';
 		const WEBHOOK_TRIGGER = 'n8n-nodes-base.webhook';
+		const CHAT_TRIGGER = '@n8n/n8n-nodes-langchain.chatTrigger';
+		const triggerWithIdentityHook = (overrides: Partial<INodeUi> = {}): INodeUi =>
+			createTestNode({
+				type: WEBHOOK_TRIGGER,
+				parameters: {
+					executionsHooksVersion: 1,
+					contextEstablishmentHooks: {
+						hooks: [{ hookName: 'HttpHeaderExtractor' }],
+					},
+				},
+				...overrides,
+			});
 
 		const notionNodeType: INodeTypeDescription = {
 			displayName: 'Notion',
@@ -1051,20 +1063,100 @@ describe('useNodeHelpers()', () => {
 				expect(result).toBeNull();
 			});
 
-			it('warns when any trigger in a multi-trigger workflow is non-manual', () => {
-				mockConnectedPrivateCred(true);
-				mockDocumentStore.workflowTriggerNodes = [
-					buildTriggerNode(MANUAL_TRIGGER),
-					buildTriggerNode(WEBHOOK_TRIGGER),
-				];
+		it('warns when any trigger in a multi-trigger workflow is non-manual', () => {
+			mockConnectedPrivateCred(true);
+			mockDocumentStore.workflowTriggerNodes = [
+				buildTriggerNode(MANUAL_TRIGGER),
+				buildTriggerNode(WEBHOOK_TRIGGER),
+			];
 
-				const { getNodeCredentialIssues } = useNodeHelpers();
-				const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
+			const { getNodeCredentialIssues } = useNodeHelpers();
+			const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
 
-				expect(result?.credentials?.[NOTION_API]?.[0]).toContain(
-					'Private credentials only work in manually triggered workflows',
-				);
-			});
+			expect(result?.credentials?.[NOTION_API]?.[0]).toContain(
+				'Private credentials only work in manually triggered workflows',
+			);
+		});
+
+		it('does not warn when a webhook trigger has a context-establishment hook (runtime identity)', () => {
+			mockConnectedPrivateCred(true);
+			mockDocumentStore.workflowTriggerNodes = [triggerWithIdentityHook()];
+
+			const { getNodeCredentialIssues } = useNodeHelpers();
+			const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
+
+			expect(result).toBeNull();
+		});
+
+		it('does not warn even when the author has not connected the cred, if the trigger supplies identity at runtime', () => {
+			const cred = makePrivateCred({ connectedByMe: false });
+			const credentialsStore = mockedStore(useCredentialsStore);
+			credentialsStore.getCredentialById = vi.fn().mockReturnValue(cred);
+			credentialsStore.getCredentialsByType = vi.fn().mockReturnValue([cred]);
+			credentialsStore.getCredentialTypeByName = vi
+				.fn()
+				.mockReturnValue({ name: NOTION_API, displayName: 'Notion API' });
+			mockDocumentStore.workflowTriggerNodes = [triggerWithIdentityHook()];
+
+			const { getNodeCredentialIssues } = useNodeHelpers();
+			const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
+
+			expect(result).toBeNull();
+		});
+
+		it('does not warn when a Chat Trigger with availableInChat:true is the only trigger', () => {
+			mockConnectedPrivateCred(true);
+			mockDocumentStore.workflowTriggerNodes = [
+				buildTriggerNode(CHAT_TRIGGER, { parameters: { availableInChat: true } }),
+			];
+
+			const { getNodeCredentialIssues } = useNodeHelpers();
+			const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
+
+			expect(result).toBeNull();
+		});
+
+		it('still warns when a Chat Trigger has availableInChat:false and no extractor hooks', () => {
+			mockConnectedPrivateCred(true);
+			mockDocumentStore.workflowTriggerNodes = [
+				buildTriggerNode(CHAT_TRIGGER, { parameters: { availableInChat: false } }),
+			];
+
+			const { getNodeCredentialIssues } = useNodeHelpers();
+			const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
+
+			expect(result?.credentials?.[NOTION_API]?.[0]).toContain(
+				'Private credentials only work in manually triggered workflows',
+			);
+		});
+
+		it('does not warn in a multi-trigger workflow as long as one trigger supplies runtime identity', () => {
+			mockConnectedPrivateCred(true);
+			mockDocumentStore.workflowTriggerNodes = [
+				triggerWithIdentityHook(),
+				buildTriggerNode(WEBHOOK_TRIGGER),
+			];
+
+			const { getNodeCredentialIssues } = useNodeHelpers();
+			const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
+
+			expect(result).toBeNull();
+		});
+
+		it('ignores a disabled identity-providing trigger', () => {
+			mockConnectedPrivateCred(true);
+			mockDocumentStore.workflowTriggerNodes = [
+				triggerWithIdentityHook({ disabled: true }),
+				buildTriggerNode(WEBHOOK_TRIGGER),
+			];
+
+			const { getNodeCredentialIssues } = useNodeHelpers();
+			const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
+
+			expect(result?.credentials?.[NOTION_API]?.[0]).toContain(
+				'Private credentials only work in manually triggered workflows',
+			);
+		});
 
 			it('does not warn when dynamic credentials feature is disabled', () => {
 				mockedUseDynamicCredentials.mockReturnValue({
