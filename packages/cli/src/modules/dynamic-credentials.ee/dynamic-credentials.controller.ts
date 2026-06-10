@@ -7,6 +7,7 @@ import { Request, Response } from 'express';
 import { Cipher } from 'n8n-core';
 import { jsonParse } from 'n8n-workflow';
 
+import { findCredentialForOAuthConnect } from '@/credentials/credential-oauth-access';
 import { CredentialsFinderService } from '@/credentials/credentials-finder.service';
 import { EnterpriseCredentialsService } from '@/credentials/credentials.service.ee';
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
@@ -42,13 +43,16 @@ export class DynamicCredentialsController {
 		credentialId: string,
 		user?: User,
 		scope?: Scope,
+		options?: { allowReadOnlyOAuthConnect?: boolean },
 	): Promise<CredentialsEntity> {
 		// External (static-token) callers have no n8n user; their identity is
 		// validated by the resolver, so we resolve the credential by id. When the
 		// request carries an n8n session user, enforce that user's access instead.
 		const credential =
 			user && scope
-				? await this.credentialsFinderService.findCredentialForUser(credentialId, user, [scope])
+				? options?.allowReadOnlyOAuthConnect
+					? await findCredentialForOAuthConnect(this.credentialsFinderService, credentialId, user)
+					: await this.credentialsFinderService.findCredentialForUser(credentialId, user, [scope])
 				: await this.enterpriseCredentialsService.getOne(credentialId);
 
 		if (!credential) {
@@ -150,7 +154,9 @@ export class DynamicCredentialsController {
 		this.dynamicCredentialCorsService.applyCorsHeadersIfEnabled(req, res, ['post', 'options']);
 		const credentialContext = this.dynamicCredentialWebService.getCredentialContextFromRequest(req);
 		const user = isAuthenticatedRequest(req) ? req.user : undefined;
-		const credential = await this.findCredentialToUse(req.params.id, user, 'credential:update');
+		const credential = await this.findCredentialToUse(req.params.id, user, 'credential:update', {
+			allowReadOnlyOAuthConnect: true,
+		});
 
 		const resolverId = req.query.resolverId as string | undefined;
 		const { resolver, resolverEntity } = await this.getResolverInstance(resolverId);

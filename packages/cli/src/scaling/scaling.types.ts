@@ -25,6 +25,19 @@ export type JobData = {
 	projectId?: string;
 	projectName?: string;
 
+	/**
+	 * Encrypted credential context (n8n auth cookie + `manual-execution` source
+	 * marker) for editor-triggered manual runs. Populated only when manual
+	 * execution offload is enabled (`OFFLOAD_MANUAL_EXECUTIONS_TO_WORKERS=true`)
+	 * so the worker can rebuild the runtime credential context that drives
+	 * dynamic credential resolution. Without this, `establishExecutionContext`
+	 * on the worker has no `encryptedRunnerIdentity` and runs fall back to
+	 * static credential data — which for `isResolvable=true` OAuth2 credentials
+	 * has no `oauthTokenData.access_token`, surfacing as
+	 * `Unable to sign without access token` at the first signed request.
+	 */
+	encryptedRunnerIdentity?: string;
+
 	// MCP-specific fields for queue mode support
 	/** Whether this execution was triggered by an MCP tool call. */
 	isMcpExecution?: boolean;

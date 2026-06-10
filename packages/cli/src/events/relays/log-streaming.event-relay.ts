@@ -81,6 +81,7 @@ export class LogStreamingEventRelay extends EventRelay {
 			'oidc-graph-token-lazy-seeded': (event) => this.oidcGraphTokenLazySeeded(event),
 			'oidc-graph-token-lazy-seed-failed': (event) => this.oidcGraphTokenLazySeedFailed(event),
 			'oidc-graph-token-lazy-seed-skipped': (event) => this.oidcGraphTokenLazySeedSkipped(event),
+			'dynamic-credential-fallback-used': (event) => this.dynamicCredentialFallbackUsed(event),
 			'user-invite-email-click': (event) => this.userInviteEmailClick(event),
 			'user-password-reset-email-click': (event) => this.userPasswordResetEmailClick(event),
 			'user-password-reset-request-click': (event) => this.userPasswordResetRequestClick(event),
@@ -602,6 +603,18 @@ export class LogStreamingEventRelay extends EventRelay {
 	) {
 		void this.eventBus.sendAuditEvent({
 			eventName: 'n8n.audit.user.graph-token.lazy-seed-skipped',
+			payload: event,
+		});
+	}
+
+	// Fork §11 — emitted when the OAuth credential resolver returns data from
+	// the configured fallback (shared) credential because the per-user lookup
+	// missed. Carries no token material; only ids and an optional subject.
+	private dynamicCredentialFallbackUsed(
+		event: RelayEventMap['dynamic-credential-fallback-used'],
+	) {
+		void this.eventBus.sendAuditEvent({
+			eventName: 'n8n.audit.dynamic-credential.fallback-used',
 			payload: event,
 		});
 	}

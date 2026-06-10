@@ -11,6 +11,8 @@ import {
 	NodeConnectionTypes,
 	MANUAL_TRIGGER_NODE_TYPES,
 	nodeIssuesToString,
+	CHAT_TRIGGER_NODE_TYPE,
+	toExecutionContextEstablishmentHookParameter,
 } from 'n8n-workflow';
 import type {
 	INodeProperties,
@@ -426,11 +428,43 @@ export function useNodeHelpers() {
 		);
 	}
 
+	// Mirrors the backend's `validateDynamicCredentials` (workflow-validation.service.ts):
+	// a trigger supplies runtime identity if it has at least one
+	// `contextEstablishmentHooks` hook configured, or if it is a Chat Trigger
+	// with `availableInChat: true` (identity injected by Chat Hub).
+	function workflowHasIdentityProvidingTrigger(): boolean {
+		const triggers = workflowDocumentStore.value.workflowTriggerNodes;
+		return triggers.some((trigger) => {
+			if (trigger.disabled) return false;
+
+			if (
+				trigger.type === CHAT_TRIGGER_NODE_TYPE &&
+				trigger.parameters?.availableInChat === true
+			) {
+				return true;
+			}
+
+			const parsed = toExecutionContextEstablishmentHookParameter(trigger.parameters);
+			return (
+				parsed !== null &&
+				parsed.success &&
+				parsed.data.contextEstablishmentHooks.hooks.length > 0
+			);
+		});
+	}
+
 	function collectPrivateCredentialIssues(
 		node: INodeUi,
 		foundIssues: INodeIssueObjectProperty,
 	): void {
 		if (!isDynamicCredentialsEnabled.value) return;
+
+		// When at least one trigger provides identity at runtime, dynamic
+		// credentials resolve per-execution from the inbound request — no
+		// dependency on the workflow author's personal connection. Match the
+		// backend's publish-time rule so the UI doesn't gate publishing on a
+		// condition the server doesn't enforce.
+		if (workflowHasIdentityProvidingTrigger()) return;
 
 		const incompatibleTrigger = workflowHasIncompatibleTrigger();
 

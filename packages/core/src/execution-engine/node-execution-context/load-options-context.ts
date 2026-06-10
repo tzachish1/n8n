@@ -69,4 +69,11 @@ export class LoadOptionsContext extends NodeExecutionContext implements ILoadOpt
 	getCurrentNodeParameters() {
 		return this.additionalData.currentNodeParameters;
 	}
+
+	getExecutionContext() {
+		if (this.additionalData.executionContext?.version === 1) {
+			return this.additionalData.executionContext;
+		}
+		return super.getExecutionContext();
+	}
 }

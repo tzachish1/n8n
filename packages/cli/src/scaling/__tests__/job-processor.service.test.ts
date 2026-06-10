@@ -282,6 +282,43 @@ describe('JobProcessor', () => {
 		expect(additionalData.restartExecutionId).toBe(restartExecutionId);
 	});
 
+	it('should propagate encryptedRunnerIdentity from job data to additionalData', async () => {
+		const executionRepository = mock<ExecutionRepository>();
+		const execution = mock<IExecutionResponse>({
+			mode: 'manual',
+			workflowData: { id: 'workflow-id', nodes: [] },
+			data: mock<IRunExecutionData>({
+				resultData: { runData: {} },
+				executionData: undefined,
+			}),
+		});
+		executionRepository.findSingleExecution.mockResolvedValue(execution);
+
+		const additionalData = mock<IWorkflowExecuteAdditionalData>();
+		jest.spyOn(WorkflowExecuteAdditionalData, 'getBase').mockResolvedValue(additionalData);
+
+		const manualExecutionService = mock<ManualExecutionService>();
+		const jobProcessor = new JobProcessor(
+			logger,
+			executionRepository,
+			mock(),
+			mock(),
+			mock(),
+			manualExecutionService,
+			executionsConfig,
+			mock(),
+		);
+
+		const encryptedRunnerIdentity = 'encrypted-runner-identity-blob';
+		await jobProcessor.processJob(
+			mock<Job>({
+				data: { executionId: 'execution-id', loadStaticData: false, encryptedRunnerIdentity },
+			}),
+		);
+
+		expect(additionalData.encryptedRunnerIdentity).toBe(encryptedRunnerIdentity);
+	});
+
 	it.each(['manual', 'evaluation', 'trigger'] satisfies WorkflowExecuteMode[])(
 		'should use workflowExecute to process a job with mode %p with execution data',
 		async (mode) => {

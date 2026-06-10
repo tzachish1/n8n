@@ -172,7 +172,7 @@ describe('OauthService', () => {
 			);
 		});
 
-		it('should return credential when found', async () => {
+		it('should return credential when found with credential:update', async () => {
 			const mockCredential = mock<CredentialsEntity>({ id: 'credential-id' });
 			const req = mock<OAuthRequest.OAuth2Credential.Auth>({
 				query: { id: 'credential-id' },
@@ -188,6 +188,28 @@ describe('OauthService', () => {
 				'credential-id',
 				req.user,
 				['credential:update'],
+			);
+		});
+
+		it('should return resolvable credential for read-only sharee', async () => {
+			const mockCredential = mock<CredentialsEntity>({ id: 'credential-id', isResolvable: true });
+			const req = mock<OAuthRequest.OAuth2Credential.Auth>({
+				query: { id: 'credential-id' },
+				user: mock<User>({ id: '123' }),
+			});
+
+			credentialsFinderService.findCredentialForUser
+				.mockResolvedValueOnce(null)
+				.mockResolvedValueOnce(mockCredential);
+
+			const result = await service.getCredentialForUpdate(req);
+
+			expect(result).toBe(mockCredential);
+			expect(credentialsFinderService.findCredentialForUser).toHaveBeenNthCalledWith(
+				2,
+				'credential-id',
+				req.user,
+				['credential:read'],
 			);
 		});
 	});

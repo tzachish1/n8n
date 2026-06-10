@@ -102,8 +102,20 @@ describe('LoadOptionsContext', () => {
 	});
 
 	describe('getExecutionContext', () => {
-		it('should return undefined', () => {
+		it('should return undefined when no editor execution context is set', () => {
 			expect(loadOptionsContext.getExecutionContext()).toBeUndefined();
+		});
+
+		it('should return the editor execution context from additionalData', () => {
+			const editorExecutionContext = {
+				version: 1 as const,
+				establishedAt: Date.now(),
+				source: 'internal' as const,
+				credentials: 'encrypted-editor-context',
+			};
+			additionalData.executionContext = editorExecutionContext;
+
+			expect(loadOptionsContext.getExecutionContext()).toEqual(editorExecutionContext);
 		});
 	});
 });

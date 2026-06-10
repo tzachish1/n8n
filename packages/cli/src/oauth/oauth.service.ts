@@ -14,6 +14,7 @@ import {
 	RESPONSE_ERROR_MESSAGES,
 } from '@/constants';
 import { AuthService } from '@/auth/auth.service';
+import { findCredentialForOAuthConnect } from '@/credentials/credential-oauth-access';
 import { CredentialsFinderService } from '@/credentials/credentials-finder.service';
 import { CredentialsHelper } from '@/credentials-helper';
 import { AuthError } from '@/errors/response-errors/auth.error';
@@ -128,10 +129,10 @@ export class OauthService {
 			throw new BadRequestError('Required credential ID is missing');
 		}
 
-		const credential = await this.credentialsFinderService.findCredentialForUser(
+		const credential = await findCredentialForOAuthConnect(
+			this.credentialsFinderService,
 			credentialId,
 			req.user,
-			['credential:update'],
 		);
 
 		if (!credential) {

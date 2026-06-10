@@ -18,6 +18,7 @@ import { useI18n } from '@n8n/i18n';
 import { ResourceType } from '@/features/collaboration/projects/projects.utils';
 import type { CredentialsResource } from '@/Interface';
 import { useDynamicCredentials } from '@/features/resolvers/composables/useDynamicCredentials';
+import { canConnectResolvableCredential } from '../credential-permissions.utils';
 import { useCredentialOAuth } from '../composables/useCredentialOAuth';
 
 import {
@@ -76,7 +77,7 @@ const isPrivateUnconnected = computed(
 		isDynamicCredentialsEnabled.value &&
 		props.data.isResolvable === true &&
 		props.data.connectedByMe === false &&
-		credentialPermissions.value.update === true,
+		canConnectResolvableCredential(credentialPermissions.value, props.data.isResolvable),
 );
 
 const actions = computed(() => {

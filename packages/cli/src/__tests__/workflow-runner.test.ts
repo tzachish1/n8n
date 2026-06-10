@@ -413,6 +413,38 @@ describe('enqueueExecution', () => {
 			expect.any(Object),
 		);
 	});
+
+	it('should include encryptedRunnerIdentity in job data when provided', async () => {
+		const activeExecutions = Container.get(ActiveExecutions);
+		jest.spyOn(activeExecutions, 'attachWorkflowExecution').mockReturnValue();
+		jest.spyOn(runner, 'processError').mockResolvedValue();
+
+		const encryptedRunnerIdentity = 'encrypted-runner-identity-blob';
+		const data = mock<IWorkflowExecutionDataProcess>({
+			workflowData: { nodes: [] },
+			executionData: undefined,
+			encryptedRunnerIdentity,
+		});
+		const error = new Error('stop for test purposes');
+
+		// mock a rejection to stop execution flow before we create the PCancelable promise,
+		// so that Jest does not move on to tear down the suite until the PCancelable settles
+		addJob.mockRejectedValueOnce(error);
+
+		await expect(
+			// @ts-expect-error Private method
+			runner.enqueueExecution('1', 'workflow-xyz', data),
+		).rejects.toThrowError(error);
+
+		expect(addJob).toHaveBeenCalledWith(
+			expect.objectContaining({
+				workflowId: 'workflow-xyz',
+				executionId: '1',
+				encryptedRunnerIdentity,
+			}),
+			expect.any(Object),
+		);
+	});
 });
 
 describe('workflow timeout with startedAt', () => {

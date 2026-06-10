@@ -1,5 +1,8 @@
 import type { Logger } from '@n8n/backend-common';
+import type { CredentialsRepository } from '@n8n/db';
 import type { Cipher } from 'n8n-core';
+
+import type { EventService } from '@/events/event.service';
 
 import { testCredentialResolverContract, testHelpers } from './resolver-contract-tests';
 import type { OAuth2TokenIntrospectionIdentifier } from '../identifiers/oauth2-introspection-identifier';
@@ -15,6 +18,8 @@ describe('OAuthCredentialResolver', () => {
 	let mockIdentifierJwtClaim: jest.Mocked<OAuth2JwtClaimIdentifier>;
 	let mockStorage: jest.Mocked<DynamicCredentialEntryStorage>;
 	let mockCipher: jest.Mocked<Cipher>;
+	let mockCredentialsRepository: jest.Mocked<CredentialsRepository>;
+	let mockEventService: jest.Mocked<EventService>;
 
 	const validOptions = {
 		metadataUri: 'https://auth.example.com/.well-known/openid-configuration',
@@ -59,6 +64,14 @@ describe('OAuthCredentialResolver', () => {
 			encryptV2: jest.fn(),
 			decryptV2: jest.fn(),
 		} as unknown as jest.Mocked<Cipher>;
+
+		mockCredentialsRepository = {
+			findOneBy: jest.fn(),
+		} as unknown as jest.Mocked<CredentialsRepository>;
+
+		mockEventService = {
+			emit: jest.fn(),
+		} as unknown as jest.Mocked<EventService>;
 	});
 
 	// Run the standard contract tests
@@ -105,6 +118,8 @@ describe('OAuthCredentialResolver', () => {
 				mockIdentifierJwtClaim,
 				mockStorage,
 				mockCipher,
+				mockCredentialsRepository,
+				mockEventService,
 			);
 		},
 		validationTests: {
@@ -156,6 +171,8 @@ describe('OAuthCredentialResolver', () => {
 				mockIdentifierJwtClaim,
 				mockStorage,
 				mockCipher,
+				mockCredentialsRepository,
+				mockEventService,
 			);
 		});
 
@@ -276,6 +293,167 @@ describe('OAuthCredentialResolver', () => {
 				mockIdentifier.validateOptions.mockRejectedValue(new Error('Invalid metadata'));
 
 				await expect(resolver.validateOptions(validOptions)).rejects.toThrow('Invalid metadata');
+			});
+		});
+
+		describe('fork §11 hybrid fallback', () => {
+			const fallbackId = 'fallback-cred-id';
+			const optionsWithFallback = { ...validOptions, fallbackCredentialId: fallbackId };
+
+			it('returns per-user data and does NOT emit fallback event on hit', async () => {
+				const handle = testHelpers.createHandle(optionsWithFallback);
+				mockIdentifier.resolve.mockResolvedValue('subject-alice');
+				mockStorage.getCredentialData.mockResolvedValue('encrypted-user-data');
+				mockCipher.decryptV2.mockResolvedValue('{"accessToken":"alice-token"}');
+
+				const result = await resolver.getSecret(
+					'cred-1',
+					testHelpers.createContext('alice-jwt'),
+					handle,
+				);
+
+				expect(result).toEqual({ accessToken: 'alice-token' });
+				expect(mockCredentialsRepository.findOneBy).not.toHaveBeenCalled();
+				expect(mockEventService.emit).not.toHaveBeenCalled();
+			});
+
+			it('throws when per-user miss AND no fallback is configured (back-compat)', async () => {
+				const handle = testHelpers.createHandle(validOptions);
+				mockIdentifier.resolve.mockResolvedValue('subject-bob');
+				mockStorage.getCredentialData.mockResolvedValue(null);
+
+				await expect(
+					resolver.getSecret('cred-1', testHelpers.createContext('bob-jwt'), handle),
+				).rejects.toThrow();
+
+				expect(mockCredentialsRepository.findOneBy).not.toHaveBeenCalled();
+				expect(mockEventService.emit).not.toHaveBeenCalled();
+			});
+
+			it('falls back to static credential data and emits audit event on per-user miss', async () => {
+				const handle = testHelpers.createHandle(optionsWithFallback);
+				mockIdentifier.resolve.mockResolvedValue('subject-bob');
+				mockStorage.getCredentialData.mockResolvedValue(null);
+				mockCredentialsRepository.findOneBy.mockResolvedValue({
+					id: fallbackId,
+					data: 'encrypted-fallback-blob',
+				} as unknown as Awaited<ReturnType<typeof mockCredentialsRepository.findOneBy>>);
+				mockCipher.decryptV2.mockResolvedValue('{"accessToken":"service-account-token"}');
+
+				const result = await resolver.getSecret(
+					'cred-1',
+					testHelpers.createContext('bob-jwt'),
+					handle,
+				);
+
+				expect(result).toEqual({ accessToken: 'service-account-token' });
+				expect(mockCredentialsRepository.findOneBy).toHaveBeenCalledWith({ id: fallbackId });
+				expect(mockEventService.emit).toHaveBeenCalledWith(
+					'dynamic-credential-fallback-used',
+					expect.objectContaining({
+						credentialId: 'cred-1',
+						resolverId: 'test-resolver-id',
+						fallbackCredentialId: fallbackId,
+						subject: 'subject-bob',
+					}),
+				);
+			});
+
+			it('falls back when identifier itself fails (e.g. no inbound JWT) and fallback is configured', async () => {
+				const handle = testHelpers.createHandle(optionsWithFallback);
+				mockIdentifier.resolve.mockRejectedValue(new Error('No identity in context'));
+				mockCredentialsRepository.findOneBy.mockResolvedValue({
+					id: fallbackId,
+					data: 'encrypted-fallback-blob',
+				} as unknown as Awaited<ReturnType<typeof mockCredentialsRepository.findOneBy>>);
+				mockCipher.decryptV2.mockResolvedValue('{"accessToken":"service-account-token"}');
+
+				const result = await resolver.getSecret(
+					'cred-1',
+					testHelpers.createContext(''),
+					handle,
+				);
+
+				expect(result).toEqual({ accessToken: 'service-account-token' });
+				expect(mockStorage.getCredentialData).not.toHaveBeenCalled();
+				expect(mockEventService.emit).toHaveBeenCalledWith(
+					'dynamic-credential-fallback-used',
+					expect.objectContaining({
+						credentialId: 'cred-1',
+						resolverId: 'test-resolver-id',
+						fallbackCredentialId: fallbackId,
+						subject: undefined,
+					}),
+				);
+			});
+
+			it('propagates identifier error when fallback is NOT configured', async () => {
+				const handle = testHelpers.createHandle(validOptions);
+				mockIdentifier.resolve.mockRejectedValue(new Error('No identity in context'));
+
+				await expect(
+					resolver.getSecret('cred-1', testHelpers.createContext(''), handle),
+				).rejects.toThrow('No identity in context');
+				expect(mockEventService.emit).not.toHaveBeenCalled();
+			});
+
+			it('throws CredentialResolverDataNotFoundError when fallback credential row is missing', async () => {
+				const handle = testHelpers.createHandle(optionsWithFallback);
+				mockIdentifier.resolve.mockResolvedValue('subject-bob');
+				mockStorage.getCredentialData.mockResolvedValue(null);
+				mockCredentialsRepository.findOneBy.mockResolvedValue(null);
+
+				await expect(
+					resolver.getSecret('cred-1', testHelpers.createContext('bob-jwt'), handle),
+				).rejects.toThrow();
+
+				expect(mockEventService.emit).not.toHaveBeenCalled();
+				expect(mockLogger.error).toHaveBeenCalledWith(
+					'OAuth resolver fallback credential not found or empty',
+					expect.any(Object),
+				);
+			});
+
+			it('throws when fallback credential decryption fails', async () => {
+				const handle = testHelpers.createHandle(optionsWithFallback);
+				mockIdentifier.resolve.mockResolvedValue('subject-bob');
+				mockStorage.getCredentialData.mockResolvedValue(null);
+				mockCredentialsRepository.findOneBy.mockResolvedValue({
+					id: fallbackId,
+					data: 'encrypted-fallback-blob',
+				} as unknown as Awaited<ReturnType<typeof mockCredentialsRepository.findOneBy>>);
+				mockCipher.decryptV2.mockRejectedValue(new Error('decrypt failed'));
+
+				await expect(
+					resolver.getSecret('cred-1', testHelpers.createContext('bob-jwt'), handle),
+				).rejects.toThrow();
+				expect(mockEventService.emit).not.toHaveBeenCalled();
+			});
+
+			it('falls back when per-user data is corrupted (unparseable JSON) and fallback is configured', async () => {
+				const handle = testHelpers.createHandle(optionsWithFallback);
+				mockIdentifier.resolve.mockResolvedValue('subject-bob');
+				mockStorage.getCredentialData.mockResolvedValue('encrypted-corrupted');
+				mockCredentialsRepository.findOneBy.mockResolvedValue({
+					id: fallbackId,
+					data: 'encrypted-fallback-blob',
+				} as unknown as Awaited<ReturnType<typeof mockCredentialsRepository.findOneBy>>);
+				// First decrypt returns invalid JSON; second decrypt (fallback) returns valid
+				mockCipher.decryptV2
+					.mockResolvedValueOnce('not-json{{{')
+					.mockResolvedValueOnce('{"accessToken":"fallback-token"}');
+
+				const result = await resolver.getSecret(
+					'cred-1',
+					testHelpers.createContext('bob-jwt'),
+					handle,
+				);
+
+				expect(result).toEqual({ accessToken: 'fallback-token' });
+				expect(mockEventService.emit).toHaveBeenCalledWith(
+					'dynamic-credential-fallback-used',
+					expect.any(Object),
+				);
 			});
 		});
 

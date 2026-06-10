@@ -1421,6 +1421,129 @@ describe('OidcService', () => {
 			});
 		});
 
+		it('passes the n8n-audience access token (not the Graph token) for oauth2-jwt-claim resolvers', async () => {
+			// `oauth2-jwt-claim` resolvers verify the inbound bearer locally
+			// against the n8n-app JWKS/audience. Feeding them the OBO Graph
+			// token fails with `bad_signature` because Graph-audience tokens
+			// are not signed for the n8n-app key set; the seed never lands.
+			// The fix: pass the original OIDC `tokens.access_token` (audience
+			// `api://<n8n-app>`) so the resolver can verify it. The credential
+			// body still stores the Graph token as `oauthTokenData.access_token`
+			// — that is what workflow nodes use to call Graph APIs.
+			enableAutoSeed();
+			setupLoginMocks();
+			const credential = mockResolvableCredential();
+			credentialsRepository.find = jest.fn().mockResolvedValue([credential]);
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			resolverRepository.findOneBy = jest
+				.fn()
+				.mockResolvedValue({ id: 'resolver-a', config: 'encrypted-config-blob' });
+			(cipher.decryptV2 as jest.Mock).mockResolvedValue(
+				JSON.stringify({ validation: 'oauth2-jwt-claim' }),
+			);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			const [, seededData, authHeader] = (oauthService.saveDynamicCredential as jest.Mock).mock
+				.calls[0];
+			expect(authHeader).toBe('user-api-access-token');
+			// Body still stores the Graph token — the picker only changes the
+			// resolver-side identity argument, not the credential payload.
+			expect(seededData).toEqual({
+				oauthTokenData: {
+					access_token: 'graph-access-token',
+					refresh_token: 'graph-refresh-token',
+					token_type: 'Bearer',
+					expires_in: 3599,
+				},
+			});
+		});
+
+		it('keeps passing the OBO Graph token for non-jwt-claim resolvers (userinfo/introspection)', async () => {
+			// Userinfo and introspection resolvers verify the bearer by calling
+			// Microsoft (or whichever IdP); those endpoints expect a token they
+			// issued for the resource (Graph-audience). Switching them to the
+			// n8n-audience token would break validation, so the picker only
+			// switches when validation is `oauth2-jwt-claim`.
+			enableAutoSeed();
+			setupLoginMocks();
+			const credential = mockResolvableCredential();
+			credentialsRepository.find = jest.fn().mockResolvedValue([credential]);
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			resolverRepository.findOneBy = jest
+				.fn()
+				.mockResolvedValue({ id: 'resolver-a', config: 'encrypted-config-blob' });
+			(cipher.decryptV2 as jest.Mock).mockResolvedValue(
+				JSON.stringify({ validation: 'oauth2-userinfo' }),
+			);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			const [, , authHeader] = (oauthService.saveDynamicCredential as jest.Mock).mock.calls[0];
+			expect(authHeader).toBe('graph-access-token');
+		});
+
+		it('falls back to the OBO Graph token when the resolver config cannot be loaded or decrypted', async () => {
+			// Picker is best-effort: a missing resolver row, decrypt error, or
+			// malformed config must not block the seed. We log a warn and
+			// preserve prior behavior (use the OBO Graph token).
+			enableAutoSeed();
+			setupLoginMocks();
+			const credential = mockResolvableCredential();
+			credentialsRepository.find = jest.fn().mockResolvedValue([credential]);
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			resolverRepository.findOneBy = jest
+				.fn()
+				.mockRejectedValue(new Error('resolver table unavailable'));
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			const [, , authHeader] = (oauthService.saveDynamicCredential as jest.Mock).mock.calls[0];
+			expect(authHeader).toBe('graph-access-token');
+			expect(logger.warn).toHaveBeenCalledWith(
+				expect.stringContaining(
+					'OIDC Graph auto-seed: failed to load resolver config for token-audience selection',
+				),
+				expect.objectContaining({ resolverId: 'resolver-a' }),
+			);
+		});
+
+		it('caches the resolver config per call to avoid re-decrypting for repeated resolverIds', async () => {
+			// Two candidates pointing at the same resolverId must cause exactly
+			// one DB lookup + one decrypt — keeps the picker O(unique resolvers)
+			// rather than O(candidates) and avoids hammering the cipher proxy.
+			enableAutoSeed();
+			setupLoginMocks();
+			const credentialA = mockResolvableCredential({ id: 'cred-a' });
+			const credentialB = mockResolvableCredential({ id: 'cred-b' });
+			credentialsRepository.find = jest.fn().mockResolvedValue([credentialA, credentialB]);
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			resolverRepository.findOneBy = jest
+				.fn()
+				.mockResolvedValue({ id: 'resolver-a', config: 'encrypted-config-blob' });
+			(cipher.decryptV2 as jest.Mock).mockResolvedValue(
+				JSON.stringify({ validation: 'oauth2-jwt-claim' }),
+			);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(2);
+			expect(resolverRepository.findOneBy).toHaveBeenCalledTimes(1);
+			expect(cipher.decryptV2).toHaveBeenCalledTimes(1);
+		});
+
 		it('defaults the OBO scope to https://graph.microsoft.com/.default when graphScopes is empty', async () => {
 			enableAutoSeed({ graphScopes: '' });
 			setupLoginMocks();
