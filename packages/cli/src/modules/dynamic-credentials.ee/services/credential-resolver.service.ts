@@ -5,7 +5,7 @@ import {
 	CredentialResolverValidationError,
 	ICredentialResolver,
 } from '@n8n/decorators';
-import { Service } from '@n8n/di';
+import { Container, Service } from '@n8n/di';
 import { Not } from '@n8n/typeorm';
 import { Cipher } from 'n8n-core';
 import { jsonParse, UnexpectedError } from 'n8n-workflow';
@@ -190,6 +190,13 @@ export class DynamicCredentialResolverService {
 		const saved = await this.repository.save(existing);
 		this.logger.debug(`Updated credential resolver "${saved.name}" (${saved.id})`);
 
+		// Fork §11 perf hardening: invalidate the resolver-entity cache so the
+		// admin's edit takes effect on the very next execution (instead of
+		// waiting up to 60s for the TTL fallback). Lazy-resolved via Container
+		// to keep the dependency one-directional (DynamicCredentialService
+		// already depends on this service indirectly through proxies).
+		await this.invalidateResolverEntityCache(saved.id);
+
 		return await this.withDecryptedConfig(saved);
 	}
 
@@ -231,6 +238,11 @@ export class DynamicCredentialResolverService {
 		});
 
 		this.logger.debug(`Deleted credential resolver "${existing.name}" (${id})`);
+
+		// Fork §11 perf hardening: clear the resolver-entity cache so any
+		// in-flight callers fail-fast with a not-found instead of resolving
+		// against stale config for up to 60s.
+		await this.invalidateResolverEntityCache(id);
 
 		// Reactivate affected active workflows sequentially so they pick up the cleared settings
 		for (const workflowId of affectedWorkflows) {
@@ -285,6 +297,27 @@ export class DynamicCredentialResolverService {
 	 */
 	private async encryptConfig(config: CredentialResolverConfiguration): Promise<string> {
 		return await this.cipher.encryptV2(config);
+	}
+
+	/**
+	 * Fork §11 perf hardening — invalidates the resolver-entity cache held
+	 * by `DynamicCredentialService`. Lazily resolved via the DI Container to
+	 * keep the dependency one-way (this service is consumed by the resolver
+	 * service through proxies; eager-importing it would form a cycle).
+	 * Silent best-effort: a cache miss or DI not-ready (during boot) is
+	 * safe because the loader falls back to a fresh DB read.
+	 */
+	private async invalidateResolverEntityCache(resolverId: string): Promise<void> {
+		try {
+			const { DynamicCredentialService } = await import('./dynamic-credential.service');
+			const svc = Container.get(DynamicCredentialService);
+			await svc.invalidateResolverEntityCache(resolverId);
+		} catch (error) {
+			this.logger.debug(
+				'Could not invalidate resolver entity cache (will expire via TTL within 60s)',
+				{ resolverId, error: error instanceof Error ? error.message : String(error) },
+			);
+		}
 	}
 
 	/**

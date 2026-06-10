@@ -1,4 +1,5 @@
 import { Logger } from '@n8n/backend-common';
+import { CredentialsRepository } from '@n8n/db';
 import {
 	CredentialResolver,
 	CredentialResolverConfiguration,
@@ -10,6 +11,8 @@ import {
 import { Cipher } from 'n8n-core';
 import { ICredentialContext, ICredentialDataDecryptedObject, jsonParse } from 'n8n-workflow';
 import z from 'zod';
+
+import { EventService } from '@/events/event.service';
 
 import type { ITokenIdentifier } from './identifiers/identifier-interface';
 import {
@@ -48,6 +51,8 @@ export class OAuthCredentialResolver implements ICredentialResolver {
 		private readonly oAuth2JwtClaimIdentifier: OAuth2JwtClaimIdentifier,
 		private readonly storage: DynamicCredentialEntryStorage,
 		private readonly cipher: Cipher,
+		private readonly credentialsRepository: CredentialsRepository,
+		private readonly eventService: EventService,
 	) {}
 
 	metadata = {
@@ -134,12 +139,37 @@ export class OAuthCredentialResolver implements ICredentialResolver {
 				default: 'sub',
 				description: 'Token claim to use as subject identifier',
 			},
+			{
+				displayName: 'Fallback Credential ID',
+				name: 'fallbackCredentialId',
+				type: 'string' as const,
+				default: '',
+				placeholder: 'id of a static credential of the same type',
+				description:
+					'Optional. When set, on a per-user lookup miss the resolver falls back to the decrypted data of this static credential (typically a shared service-account credential). Use for workflows triggered without per-user identity — machine webhooks, anonymous chats, cron jobs not owned by a connected user. Leave empty for strict per-user mode (miss returns an authorization URL).',
+			},
 		],
 	};
 
 	/**
 	 * Retrieves stored credential data for the given identity.
-	 * @throws {CredentialResolverDataNotFoundError} When no data exists for the key
+	 *
+	 * Fork §11 — two-step lookup:
+	 *  1. Try per-user lookup keyed by the identifier-resolved subject.
+	 *  2. On miss, if `fallbackCredentialId` is configured, return the
+	 *     decrypted data of that static credential and emit
+	 *     `dynamic-credential-fallback-used`.
+	 *  3. On miss with no fallback configured, throw — preserving the
+	 *     upstream behavior so the editor still surfaces an authorization URL
+	 *     via `CredentialCheckProxyService`.
+	 *
+	 * The fallback emission is the only place we audit shared-credential use,
+	 * so operators can answer "which workflows ran on the shared account vs
+	 * per-user tokens" purely from the event stream.
+	 *
+	 * @throws {CredentialResolverDataNotFoundError} When per-user data is
+	 *   missing AND no fallback is configured, OR when the configured
+	 *   fallback credential cannot be loaded/decrypted.
 	 */
 	async getSecret(
 		credentialId: string,
@@ -147,26 +177,117 @@ export class OAuthCredentialResolver implements ICredentialResolver {
 		handle: CredentialResolverHandle,
 	): Promise<ICredentialDataDecryptedObject> {
 		const parsedOptions = await this.parseOptions(handle.configuration);
-		const key = await this.resolveIdentifier(context, parsedOptions);
+
+		let subject: string | undefined;
+		try {
+			subject = await this.resolveIdentifier(context, parsedOptions);
+		} catch (identifierError) {
+			// When the identifier itself fails (e.g. no inbound JWT on an
+			// anonymous webhook) we still allow fallback to a shared credential
+			// if one is configured. Otherwise propagate the original error so
+			// callers see the precise reason.
+			if (!parsedOptions.fallbackCredentialId) throw identifierError;
+			return await this.loadFallbackOrThrow(
+				credentialId,
+				handle.resolverId,
+				parsedOptions.fallbackCredentialId,
+				subject,
+				identifierError,
+			);
+		}
 
 		const data = await this.storage.getCredentialData(
 			credentialId,
-			key,
+			subject,
 			handle.resolverId,
 			parsedOptions,
 		);
 
-		if (!data) {
+		if (data) {
+			const plaintext = await this.cipher.decryptV2(data);
+			try {
+				return jsonParse<ICredentialDataDecryptedObject>(plaintext);
+			} catch (error) {
+				this.logger.error('Failed to parse decrypted credential data', { error });
+				// Fall through to fallback if configured — corrupted per-user
+				// data shouldn't deadlock workflows that have a safety net.
+				if (!parsedOptions.fallbackCredentialId) {
+					throw new CredentialResolverDataNotFoundError();
+				}
+			}
+		}
+
+		if (!parsedOptions.fallbackCredentialId) {
 			throw new CredentialResolverDataNotFoundError();
 		}
-		const plaintext = await this.cipher.decryptV2(data);
+
+		return await this.loadFallbackOrThrow(
+			credentialId,
+			handle.resolverId,
+			parsedOptions.fallbackCredentialId,
+			subject,
+		);
+	}
+
+	/**
+	 * Loads, decrypts and returns the configured fallback credential's data.
+	 * Emits `dynamic-credential-fallback-used` on success. Throws
+	 * `CredentialResolverDataNotFoundError` if the fallback credential is
+	 * missing or its data is malformed — equivalent to a per-user miss from
+	 * the caller's perspective, so existing error handling paths still work.
+	 *
+	 * `originalError` is only used to enrich the log when the fallback itself
+	 * fails after the identifier already failed — surfacing both reasons makes
+	 * misconfiguration easier to diagnose.
+	 */
+	private async loadFallbackOrThrow(
+		credentialId: string,
+		resolverId: string,
+		fallbackCredentialId: string,
+		subject: string | undefined,
+		originalError?: unknown,
+	): Promise<ICredentialDataDecryptedObject> {
+		const fallback = await this.credentialsRepository.findOneBy({ id: fallbackCredentialId });
+		if (!fallback?.data) {
+			this.logger.error('OAuth resolver fallback credential not found or empty', {
+				credentialId,
+				resolverId,
+				fallbackCredentialId,
+				originalError:
+					originalError instanceof Error ? originalError.message : undefined,
+			});
+			throw new CredentialResolverDataNotFoundError();
+		}
+
+		let parsed: ICredentialDataDecryptedObject;
 		try {
-			const secret = jsonParse<ICredentialDataDecryptedObject>(plaintext);
-			return secret;
+			const plaintext = await this.cipher.decryptV2(fallback.data);
+			parsed = jsonParse<ICredentialDataDecryptedObject>(plaintext);
 		} catch (error) {
-			this.logger.error('Failed to parse decrypted credential data', { error });
+			this.logger.error('Failed to decrypt or parse fallback credential data', {
+				credentialId,
+				resolverId,
+				fallbackCredentialId,
+				error: error instanceof Error ? error.message : String(error),
+			});
 			throw new CredentialResolverDataNotFoundError();
 		}
+
+		this.eventService.emit('dynamic-credential-fallback-used', {
+			credentialId,
+			resolverId,
+			fallbackCredentialId,
+			subject,
+		});
+
+		this.logger.debug('OAuth resolver returned fallback credential data', {
+			credentialId,
+			resolverId,
+			fallbackCredentialId,
+			hasSubject: subject !== undefined,
+		});
+
+		return parsed;
 	}
 
 	/** Stores credential data for the given identity */

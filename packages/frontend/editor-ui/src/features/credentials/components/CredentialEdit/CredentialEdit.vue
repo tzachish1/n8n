@@ -67,6 +67,7 @@ import {
 import { setParameterValue } from '@/app/utils/parameterUtils';
 import get from 'lodash/get';
 import { useDynamicCredentials } from '@/features/resolvers/composables/useDynamicCredentials';
+import { canConnectResolvableCredential } from '../../credential-permissions.utils';
 import { useQuickConnect } from '../../quickConnect/composables/useQuickConnect';
 import type { CredentialModeOption } from './CredentialModeSelector.vue';
 
@@ -385,6 +386,10 @@ const credentialPermissions = computed(() => {
 	).credential;
 });
 
+const canConnectOwnOAuth = computed(() =>
+	canConnectResolvableCredential(credentialPermissions.value, isResolvable.value),
+);
+
 const sidebarItems = computed(() => {
 	const menuItems: IMenuItem[] = [
 		{
@@ -552,6 +557,16 @@ onMounted(async () => {
 				// sharees can't see properties, so this check would always fail for them
 				// if the credential contains required fields.
 				showValidationWarning.value = true;
+			} else if (
+				canConnectOwnOAuth.value &&
+				!credentialPermissions.value.update &&
+				isOAuthType.value
+			) {
+				// Read-only sharee on a resolvable OAuth credential: connection settings
+				// stay server-side; skip validation/test and surface Connect only.
+				authError.value = '';
+				testedSuccessfully.value = false;
+				showValidationWarning.value = false;
 			} else {
 				await retestCredential();
 			}
@@ -1238,8 +1253,22 @@ async function oAuthCredentialAuthorize() {
 	let url;
 
 	credentialsStore.pendingOAuthRefresh = true;
-	const credential = await saveCredential();
+
+	const canAuthorizeWithoutSave =
+		canConnectOwnOAuth.value && !credentialPermissions.value.update && !!credentialId.value;
+
+	let credential: ICredentialsResponse | null = null;
+	if (canAuthorizeWithoutSave) {
+		credential =
+			currentCredential.value ?? credentialsStore.getCredentialById(credentialId.value) ?? null;
+		authError.value = '';
+		showValidationWarning.value = false;
+	} else {
+		credential = await saveCredential();
+	}
+
 	if (!credential) {
+		credentialsStore.pendingOAuthRefresh = false;
 		return;
 	}
 

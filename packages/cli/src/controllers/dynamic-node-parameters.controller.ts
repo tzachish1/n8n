@@ -6,14 +6,37 @@ import {
 } from '@n8n/api-types';
 import { AuthenticatedRequest } from '@n8n/db';
 import { Post, RestController, Body } from '@n8n/decorators';
+import { ExecutionContextService } from 'n8n-core';
 import type { INodePropertyOptions, NodeParameterValueType } from 'n8n-workflow';
 
+import { AuthService } from '@/auth/auth.service';
+import { getEditorAdditionalData } from '@/credentials/editor-execution-context';
 import { DynamicNodeParametersService } from '@/services/dynamic-node-parameters.service';
-import { getBase } from '@/workflow-execute-additional-data';
 
 @RestController('/dynamic-node-parameters')
 export class DynamicNodeParametersController {
-	constructor(private readonly dynamicNodeParametersService: DynamicNodeParametersService) {}
+	constructor(
+		private readonly dynamicNodeParametersService: DynamicNodeParametersService,
+		private readonly authService: AuthService,
+		private readonly executionContextService: ExecutionContextService,
+	) {}
+
+	private async getAdditionalData(
+		req: AuthenticatedRequest,
+		projectId?: string,
+		currentNodeParameters?: OptionsRequestDto['currentNodeParameters'],
+	) {
+		const additionalData = await getEditorAdditionalData(
+			this.authService,
+			this.executionContextService,
+			req,
+			{ projectId, currentNodeParameters },
+		);
+		if (projectId) {
+			additionalData.dataTableProjectId = projectId;
+		}
+		return additionalData;
+	}
 
 	@Post('/options')
 	async getOptions(
@@ -33,12 +56,7 @@ export class DynamicNodeParametersController {
 			projectId,
 		} = payload;
 
-		const additionalData = await getBase({
-			userId: req.user.id,
-			projectId,
-			currentNodeParameters,
-		});
-		additionalData.dataTableProjectId = projectId;
+		const additionalData = await this.getAdditionalData(req, projectId, currentNodeParameters);
 
 		if (methodName) {
 			return await this.dynamicNodeParametersService.getOptionsViaMethodName(
@@ -83,12 +101,7 @@ export class DynamicNodeParametersController {
 			projectId,
 		} = payload;
 
-		const additionalData = await getBase({
-			userId: req.user.id,
-			projectId,
-			currentNodeParameters,
-		});
-		additionalData.dataTableProjectId = projectId;
+		const additionalData = await this.getAdditionalData(req, projectId, currentNodeParameters);
 
 		return await this.dynamicNodeParametersService.getResourceLocatorResults(
 			methodName,
@@ -113,12 +126,7 @@ export class DynamicNodeParametersController {
 		const { path, methodName, credentials, currentNodeParameters, nodeTypeAndVersion, projectId } =
 			payload;
 
-		const additionalData = await getBase({
-			userId: req.user.id,
-			projectId,
-			currentNodeParameters,
-		});
-		additionalData.dataTableProjectId = projectId;
+		const additionalData = await this.getAdditionalData(req, projectId, currentNodeParameters);
 
 		return await this.dynamicNodeParametersService.getResourceMappingFields(
 			methodName,
@@ -140,11 +148,7 @@ export class DynamicNodeParametersController {
 
 		const { path, methodName, currentNodeParameters, nodeTypeAndVersion, projectId } = payload;
 
-		const additionalData = await getBase({
-			userId: req.user.id,
-			currentNodeParameters,
-			projectId,
-		});
+		const additionalData = await this.getAdditionalData(req, projectId, currentNodeParameters);
 
 		return await this.dynamicNodeParametersService.getLocalResourceMappingFields(
 			methodName,
@@ -172,11 +176,7 @@ export class DynamicNodeParametersController {
 			projectId,
 		} = payload;
 
-		const additionalData = await getBase({
-			userId: req.user.id,
-			projectId,
-			currentNodeParameters,
-		});
+		const additionalData = await this.getAdditionalData(req, projectId, currentNodeParameters);
 
 		return await this.dynamicNodeParametersService.getActionResult(
 			handler,
