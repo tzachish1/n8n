@@ -68,9 +68,13 @@ vi.mock('@/features/credentials/credentials.store', () => ({
 	useCredentialsStore: vi.fn(() => ({})),
 }));
 
-vi.mock('@vueuse/core', () => ({
-	onClickOutside: vi.fn(),
-}));
+vi.mock('@vueuse/core', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('@vueuse/core')>();
+	return {
+		...actual,
+		onClickOutside: vi.fn(),
+	};
+});
 
 vi.mock('vue-router', () => ({
 	useRouter: vi.fn(() => ({})),

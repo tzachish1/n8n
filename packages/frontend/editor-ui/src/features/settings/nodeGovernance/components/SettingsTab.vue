@@ -27,7 +27,7 @@ const { governanceSettings } = storeToRefs(nodeGovernanceStore);
 const settingsLoading = ref(true);
 const saving = ref(false);
 
-const teamProjects = ref<Array<{ id: string; name: string }>>([]);
+const teamProjects = ref<Array<{ id: string; name: string | null }>>([]);
 const projectOverrides = ref<
 	Array<{ projectId: string; projectName: string; defaultBehavior: 'allow' | 'block' }>
 >([]);
