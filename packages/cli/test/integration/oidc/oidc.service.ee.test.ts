@@ -178,6 +178,8 @@ describe('OIDC service', () => {
 				expect.any(URL),
 				'test-client-id',
 				'test-client-secret',
+				undefined,
+				expect.any(Object),
 			);
 		});
 
@@ -1230,7 +1232,7 @@ describe('OIDC service', () => {
 				.catch((e) => e);
 
 			expect(error).toBeInstanceOf(BadRequestError);
-			expect(error.message).toBe('Invalid token');
+			expect(error.message).toBe('Invalid token - could not retrieve user info');
 			expect(fetchUserInfoMock).toHaveBeenCalledWith(
 				expect.any(Object), // configuration
 				'mock-access-token-userinfo-error',

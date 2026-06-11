@@ -18,6 +18,7 @@ import type {
 	CredentialResolveMetadata,
 	ICredentialResolutionProvider,
 } from '../../../../credentials/credential-resolution-provider.interface';
+import type { DynamicCredentialsProxy } from '../../../../credentials/dynamic-credentials-proxy';
 import type { LoadNodesAndCredentials } from '../../../../load-nodes-and-credentials';
 import type { CacheService } from '../../../../services/cache/cache.service';
 import type { DynamicCredentialResolverRegistry } from '../credential-resolver-registry.service';
@@ -40,6 +41,7 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 	let mockLoadNodesAndCredentials: jest.Mocked<LoadNodesAndCredentials>;
 	let mockLogger: jest.Mocked<Logger>;
 	let mockCacheService: jest.Mocked<CacheService>;
+	let mockDynamicCredentialsProxy: jest.Mocked<DynamicCredentialsProxy>;
 	let cacheStore: Map<string, unknown>;
 
 	const resolverEntityRow = {
@@ -124,6 +126,11 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 			endpointAuthToken: 'unused',
 		} as unknown as jest.Mocked<DynamicCredentialsConfig>;
 
+		mockDynamicCredentialsProxy = {
+			getSystemResolverId: jest.fn().mockReturnValue(null),
+			getEffectiveResolverId: jest.fn((settings) => settings?.credentialResolverId ?? null),
+		} as unknown as jest.Mocked<DynamicCredentialsProxy>;
+
 		service = new DynamicCredentialService(
 			mockDynamicCredentialConfig,
 			mockResolverRegistry,
@@ -132,6 +139,7 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 			mockCipher,
 			mockLogger,
 			mockExpressionService,
+			mockDynamicCredentialsProxy,
 			mockCacheService,
 			{ findOne: jest.fn().mockResolvedValue(null) } as never,
 			{ getCredentialData: jest.fn().mockResolvedValue(null) } as never,
@@ -174,9 +182,7 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 
 			await provider.resolveIfNeeded(metadata, staticData, buildExecutionContext());
 			expect(mockResolverRepository.findOneBy).toHaveBeenCalledTimes(2);
-			expect(mockCacheService.delete).toHaveBeenCalledWith(
-				expect.stringContaining(resolverId),
-			);
+			expect(mockCacheService.delete).toHaveBeenCalledWith(expect.stringContaining(resolverId));
 		});
 
 		it('caches separately per resolver id', async () => {
@@ -217,8 +223,12 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 			mockResolverRepository.findOneBy.mockResolvedValue(null);
 			const provider: ICredentialResolutionProvider = service;
 
-			await provider.resolveIfNeeded(metadata, staticData, buildExecutionContext());
-			await provider.resolveIfNeeded(metadata, staticData, buildExecutionContext());
+			await expect(
+				provider.resolveIfNeeded(metadata, staticData, buildExecutionContext()),
+			).rejects.toThrow(/not found/i);
+			await expect(
+				provider.resolveIfNeeded(metadata, staticData, buildExecutionContext()),
+			).rejects.toThrow(/not found/i);
 
 			// Each call re-queries (no negative cache entry) — operators expect
 			// add-then-retry to take effect immediately.
@@ -260,13 +270,17 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 		it('does NOT memoize when executionContext is undefined or lacks credentials', async () => {
 			const provider: ICredentialResolutionProvider = service;
 
-			await provider.resolveIfNeeded(metadata, staticData, undefined);
+			await expect(provider.resolveIfNeeded(metadata, staticData, undefined)).rejects.toThrow(
+				/execution context/i,
+			);
 			const ctxWithoutCreds: IExecutionContext = {
 				version: 1,
 				establishedAt: Date.now(),
 				source: 'webhook',
 			};
-			await provider.resolveIfNeeded(metadata, staticData, ctxWithoutCreds);
+			await expect(provider.resolveIfNeeded(metadata, staticData, ctxWithoutCreds)).rejects.toThrow(
+				/execution context/i,
+			);
 
 			// Both calls fall through to the "missing context" path; no decrypt.
 			const ctxDecryptCalls = mockCipher.decryptV2.mock.calls.filter(
@@ -286,7 +300,12 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 			// clean serializable record (used for queue mode, persistence).
 			const serialized = JSON.stringify(executionContext);
 			expect(serialized).not.toContain('user-jwt-token');
-			expect(Object.keys(executionContext)).toEqual(['credentials']);
+			expect(Object.keys(executionContext)).toEqual([
+				'version',
+				'establishedAt',
+				'source',
+				'credentials',
+			]);
 		});
 	});
 
@@ -299,9 +318,9 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 		await provider.resolveIfNeeded(metadata, staticData, executionContext);
 		await provider.resolveIfNeeded(metadata, staticData, executionContext);
 
-		const resolverInstance = mockResolverRegistry.getResolverByTypename(
-			'oauth2',
-		) as unknown as { getSecret: jest.Mock };
+		const resolverInstance = mockResolverRegistry.getResolverByTypename('oauth2') as unknown as {
+			getSecret: jest.Mock;
+		};
 
 		const [firstCallArgs, secondCallArgs] = resolverInstance.getSecret.mock.calls;
 		const firstContext = firstCallArgs[1] as ICredentialContext;

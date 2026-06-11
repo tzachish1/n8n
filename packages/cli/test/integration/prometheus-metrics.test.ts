@@ -44,6 +44,7 @@ globalConfig.endpoints.metrics = {
 	includeWorkflowStatistics: false,
 	workflowStatisticsInterval: 300,
 	includeExecutionDataMetrics: false,
+	includeProjectIdLabel: false,
 };
 
 const server = setupTestServer({ endpointGroups: ['metrics'] });
