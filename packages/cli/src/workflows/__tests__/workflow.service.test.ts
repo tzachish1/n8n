@@ -223,6 +223,7 @@ describe('WorkflowService', () => {
 					validateCredentialNodeRestrictions: () => ({ isValid: true }),
 				}), // workflowValidationService
 				mock(), // nodeTypes
+				mock(), // nodeGovernanceService
 				mock(), // webhookService
 				licenseStateMock, // licenseState
 				mock(), // projectRepository
@@ -799,6 +800,7 @@ describe('WorkflowService', () => {
 					validateCredentialNodeRestrictions: () => ({ isValid: true }),
 				}), // workflowValidationService
 				mock(), // nodeTypes
+				mock(), // nodeGovernanceService
 				mock(), // webhookService
 				mock(), // licenseState
 				mock(), // projectRepository

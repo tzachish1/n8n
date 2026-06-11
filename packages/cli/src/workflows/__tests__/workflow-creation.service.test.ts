@@ -62,6 +62,7 @@ describe('WorkflowCreationService', () => {
 			enterpriseWorkflowServiceMock,
 			mock<NodeTypes>(),
 			workflowValidationServiceMock,
+			mock(), // nodeGovernanceService
 		);
 	});
 
