@@ -1,5 +1,5 @@
 import { Logger } from '@n8n/backend-common';
-import { AuthIdentityRepository } from '@n8n/db';
+import { AuthIdentityRepository, AuthenticatedRequest } from '@n8n/db';
 import { CredentialResolverDataNotFoundError, CredentialResolverError } from '@n8n/decorators';
 import { Service } from '@n8n/di';
 import type { NextFunction, Response } from 'express';
@@ -35,7 +35,6 @@ import { CredentialResolutionError } from '../errors/credential-resolution.error
 import { CredentialResolverNotConfiguredError } from '../errors/credential-resolver-not-configured.error';
 import { CredentialResolverNotFoundError } from '../errors/credential-resolver-not-found.error';
 import { MissingExecutionContextError } from '../errors/missing-execution-context.error';
-import { AuthenticatedRequest } from '@n8n/db';
 
 /**
  * Fork §11 perf hardening (PE-1 + PE-2):
@@ -247,7 +246,11 @@ export class DynamicCredentialService implements ICredentialResolutionProvider {
 			// execution simply stays unattributed (redacted for everyone).
 			let resolvedUserId: string | undefined;
 			try {
-				resolvedUserId = await resolver.resolveOwningUserId?.(credentialContext, handle);
+				resolvedUserId = await resolver.resolveOwningUserId?.(credentialContext, {
+					resolverId: resolverEntity.id,
+					resolverName: resolverEntity.type,
+					configuration: resolverConfig,
+				});
 			} catch (error) {
 				this.logger.debug('Could not resolve owning user for dynamic credentials', {
 					credentialId: credentialsResolveMetadata.id,

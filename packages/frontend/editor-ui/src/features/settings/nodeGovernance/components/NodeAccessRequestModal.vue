@@ -24,7 +24,11 @@ const justification = ref('');
 const workflowName = ref('');
 
 const modalData = computed(
-	() => (uiStore.modalsById[NODE_ACCESS_REQUEST_MODAL_KEY]?.data ?? {}) as Record<string, any>,
+	() =>
+		(uiStore.modalsById[NODE_ACCESS_REQUEST_MODAL_KEY]?.data ?? {}) as {
+			nodeType?: string;
+			displayName?: string;
+		},
 );
 const nodeType = computed(() => (modalData.value.nodeType ?? '') as string);
 const displayName = computed(() => modalData.value.displayName ?? nodeType.value);

@@ -25,6 +25,7 @@ export class MicrosoftGraphAppOnlyOAuth2Api implements ICredentialType {
 
 	icon: Icon = 'file:icons/Microsoft.svg';
 
+	// eslint-disable-next-line n8n-nodes-base/cred-class-field-display-name-missing-oauth2
 	displayName = 'Microsoft Graph (App-Only / Client Credentials)';
 
 	documentationUrl = 'microsoft';

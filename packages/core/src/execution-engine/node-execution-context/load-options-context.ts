@@ -1,6 +1,7 @@
 import get from 'lodash/get';
 import type {
 	ICredentialDataDecryptedObject,
+	IExecutionContext,
 	IGetNodeParameterOptions,
 	INode,
 	ILoadOptionsFunctions,
@@ -70,10 +71,10 @@ export class LoadOptionsContext extends NodeExecutionContext implements ILoadOpt
 		return this.additionalData.currentNodeParameters;
 	}
 
-	getExecutionContext() {
+	getExecutionContext(fallback?: IExecutionContext) {
 		if (this.additionalData.executionContext?.version === 1) {
 			return this.additionalData.executionContext;
 		}
-		return super.getExecutionContext();
+		return super.getExecutionContext(fallback);
 	}
 }

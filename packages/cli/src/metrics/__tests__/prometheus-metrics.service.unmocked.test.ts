@@ -140,6 +140,7 @@ workflow_success_total{workflow_name="wf_1234",project_id="unknown"} 1"
 			instanceSettings,
 			workflowRepository,
 			mock<LicenseMetricsRepository>(),
+			storageConfig,
 		);
 
 		await prometheusMetricsService.init(app);
@@ -185,6 +186,7 @@ workflow_success_total{execution_mode="manual",project_id="unknown"} 1"
 			instanceSettings,
 			workflowRepository,
 			mock<LicenseMetricsRepository>(),
+			storageConfig,
 		);
 
 		await prometheusMetricsService.init(app);

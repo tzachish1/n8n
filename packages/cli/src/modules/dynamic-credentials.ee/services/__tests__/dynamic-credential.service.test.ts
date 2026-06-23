@@ -310,11 +310,19 @@ describe('DynamicCredentialService', () => {
 				mockResolverRepository.findOneBy.mockResolvedValue(null);
 
 				await expect(
-					service.resolveIfNeeded(credentialsEntity, staticData, undefined),
+					service.resolveIfNeeded(
+						credentialsEntity,
+						staticData,
+						createMockExecutionContext('encrypted-credentials'),
+					),
 				).rejects.toThrow(CredentialResolverNotFoundError);
 
 				await expect(
-					service.resolveIfNeeded(credentialsEntity, staticData, undefined),
+					service.resolveIfNeeded(
+						credentialsEntity,
+						staticData,
+						createMockExecutionContext('encrypted-credentials'),
+					),
 				).rejects.toThrow('Resolver "resolver-456" not found for credential "Test Credential"');
 			});
 
@@ -466,7 +474,11 @@ describe('DynamicCredentialService', () => {
 				});
 
 				await expect(
-					service.resolveIfNeeded(credentialsEntity, staticData, undefined),
+					service.resolveIfNeeded(
+						credentialsEntity,
+						staticData,
+						createMockExecutionContext('encrypted-credentials'),
+					),
 				).rejects.toThrow(CredentialResolverNotConfiguredError);
 			});
 
@@ -478,7 +490,11 @@ describe('DynamicCredentialService', () => {
 				mockResolverRegistry.getResolverByTypename.mockReturnValue(undefined);
 
 				await expect(
-					service.resolveIfNeeded(credentialsEntity, staticData, undefined),
+					service.resolveIfNeeded(
+						credentialsEntity,
+						staticData,
+						createMockExecutionContext('encrypted-credentials'),
+					),
 				).rejects.toThrow(CredentialResolverNotFoundError);
 			});
 

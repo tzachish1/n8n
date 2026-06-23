@@ -1283,7 +1283,7 @@ async function oAuthCredentialAuthorize() {
 	const canAuthorizeWithoutSave =
 		canConnectOwnOAuth.value && !credentialPermissions.value.update && !!credentialId.value;
 
-	let credential: ICredentialsResponse | null = null;
+	let credential: ICredentialsResponse | ICredentialsDecryptedResponse | null = null;
 	if (canAuthorizeWithoutSave) {
 		credential =
 			currentCredential.value ?? credentialsStore.getCredentialById(credentialId.value) ?? null;

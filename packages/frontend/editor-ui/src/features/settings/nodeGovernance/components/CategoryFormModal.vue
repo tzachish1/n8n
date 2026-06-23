@@ -7,6 +7,7 @@ import { useUIStore } from '@/app/stores/ui.store';
 import { N8nButton, N8nInput } from '@n8n/design-system';
 import Modal from '@/app/components/Modal.vue';
 import { useNodeGovernanceStore } from '../nodeGovernance.store';
+import type { NodeCategory } from '../nodeGovernance.api';
 import { CATEGORY_FORM_MODAL_KEY } from '../nodeGovernance.constants';
 
 const { showError, showMessage } = useToast();
@@ -23,7 +24,7 @@ const color = ref('#22C55E');
 
 const modalState = computed(() => uiStore.modalsById[CATEGORY_FORM_MODAL_KEY]);
 const isOpen = computed(() => modalState.value?.open ?? false);
-const modalData = computed(() => (modalState.value?.data ?? {}) as Record<string, any>);
+const modalData = computed(() => (modalState.value?.data ?? {}) as { category?: NodeCategory });
 const isEdit = computed(() => modalData.value.category !== undefined);
 const modalTitle = computed(() =>
 	i18n.baseText(

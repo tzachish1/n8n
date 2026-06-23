@@ -20,9 +20,11 @@ export class AddGovernanceDefaultBehavior1772850000000 implements ReversibleMigr
 				).then((rows) => rows.length > 0);
 
 		if (!columnExists) {
-			await addColumns('project', [
-				column('governanceDefaultBehavior').varchar(10).withEnumCheck(['allow', 'block']),
-			]);
+			await addColumns(
+				'project',
+				[column('governanceDefaultBehavior').varchar(10).withEnumCheck(['allow', 'block'])],
+				{ recreatesOnSqlite: true },
+			);
 		}
 
 		await runQuery(
@@ -32,7 +34,7 @@ export class AddGovernanceDefaultBehavior1772850000000 implements ReversibleMigr
 
 	async down({ schemaBuilder: { dropColumns }, runQuery, escape }: MigrationContext) {
 		const settingsTable = escape.tableName('settings');
-		await dropColumns('project', ['governanceDefaultBehavior']);
+		await dropColumns('project', ['governanceDefaultBehavior'], { recreatesOnSqlite: true });
 		await runQuery(
 			`DELETE FROM ${settingsTable} WHERE ${escape.columnName('key')} = 'governance.defaultBehavior'`,
 		);

@@ -9,6 +9,7 @@ import { storeToRefs } from 'pinia';
 import { N8nButton, N8nInput, N8nSelect, N8nOption, N8nText } from '@n8n/design-system';
 import Modal from '@/app/components/Modal.vue';
 import { useNodeGovernanceStore } from '../nodeGovernance.store';
+import type { NodeGovernancePolicy } from '../nodeGovernance.api';
 import { POLICY_FORM_MODAL_KEY } from '../nodeGovernance.constants';
 
 const { showError, showMessage } = useToast();
@@ -29,7 +30,9 @@ const projectIds = ref<string[]>([]);
 
 const modalState = computed(() => uiStore.modalsById[POLICY_FORM_MODAL_KEY]);
 const isOpen = computed(() => modalState.value?.open ?? false);
-const modalData = computed(() => (modalState.value?.data ?? {}) as Record<string, any>);
+const modalData = computed(
+	() => (modalState.value?.data ?? {}) as { policy?: NodeGovernancePolicy },
+);
 const isEdit = computed(() => modalData.value.policy !== undefined);
 const modalTitle = computed(() =>
 	isEdit.value

@@ -284,6 +284,7 @@ describe('JobProcessor', () => {
 
 	it('should propagate encryptedRunnerIdentity from job data to additionalData', async () => {
 		const executionRepository = mock<ExecutionRepository>();
+		const executionPersistence = mock<ExecutionPersistence>();
 		const execution = mock<IExecutionResponse>({
 			mode: 'manual',
 			workflowData: { id: 'workflow-id', nodes: [] },
@@ -292,7 +293,7 @@ describe('JobProcessor', () => {
 				executionData: undefined,
 			}),
 		});
-		executionRepository.findSingleExecution.mockResolvedValue(execution);
+		executionPersistence.findSingleExecution.mockResolvedValue(execution);
 
 		const additionalData = mock<IWorkflowExecuteAdditionalData>();
 		jest.spyOn(WorkflowExecuteAdditionalData, 'getBase').mockResolvedValue(additionalData);
@@ -301,6 +302,7 @@ describe('JobProcessor', () => {
 		const jobProcessor = new JobProcessor(
 			logger,
 			executionRepository,
+			executionPersistence,
 			mock(),
 			mock(),
 			mock(),

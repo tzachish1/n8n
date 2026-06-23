@@ -34,7 +34,7 @@ export class AddOidcSeedSourceToCredentialResolver1784000000029 implements Rever
 
 		if (table.findColumnByName(columnName)) return;
 
-		await addColumns(tableName, [column(columnName).varchar(64)]);
+		await addColumns(tableName, [column(columnName).varchar(64)], { recreatesOnSqlite: true });
 	}
 
 	async down({ queryRunner, schemaBuilder: { dropColumns }, tablePrefix }: MigrationContext) {
@@ -43,6 +43,6 @@ export class AddOidcSeedSourceToCredentialResolver1784000000029 implements Rever
 
 		if (!table.findColumnByName(columnName)) return;
 
-		await dropColumns(tableName, [columnName]);
+		await dropColumns(tableName, [columnName], { recreatesOnSqlite: true });
 	}
 }
