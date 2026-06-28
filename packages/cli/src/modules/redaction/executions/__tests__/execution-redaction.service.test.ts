@@ -58,6 +58,7 @@ describe('ExecutionRedactionService', () => {
 			withRuntimeData?: boolean;
 			withDynamicCredentials?: boolean;
 			executedByUserId?: string | null;
+			manualTriggerUserId?: string | null;
 		} = {},
 	): RedactableExecution => {
 		const {
@@ -69,6 +70,7 @@ describe('ExecutionRedactionService', () => {
 			withRuntimeData = true,
 			withDynamicCredentials = false,
 			executedByUserId = null,
+			manualTriggerUserId = null,
 		} = overrides;
 
 		const executionData: IRunExecutionData['executionData'] = {
@@ -126,6 +128,7 @@ describe('ExecutionRedactionService', () => {
 				version: 1,
 				resultData: { runData },
 				executionData,
+				...(manualTriggerUserId !== null ? { manualData: { userId: manualTriggerUserId } } : {}),
 			},
 			workflowData: {
 				settings: workflowSettingsPolicy ? { redactionPolicy: workflowSettingsPolicy } : {},
@@ -834,6 +837,50 @@ describe('ExecutionRedactionService', () => {
 			await service.processExecution(execution, { user: mockUser });
 
 			expect(execution.data.executionData?.runtimeData?.credentials).toBeUndefined();
+		});
+
+		it('skips force redaction for the user who triggered the manual run even when they are not the resolved user', async () => {
+			// e.g. a test webhook: the run is manual and started by mockUser, but
+			// the credential resolved to a different (or no) n8n user.
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				executedByUserId: null,
+				manualTriggerUserId: mockUser.id,
+			});
+
+			await service.processExecution(execution, { user: mockUser });
+
+			expect(fullItemRedactionStrategy.apply).not.toHaveBeenCalled();
+		});
+
+		it('allows the user who triggered the manual run to reveal their data', async () => {
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				executedByUserId: 'another-user-id',
+				manualTriggerUserId: mockUser.id,
+			});
+
+			await expect(
+				service.processExecution(execution, { user: mockUser, redactExecutionData: false }),
+			).resolves.toBeDefined();
+		});
+
+		it('still force-redacts a manual run triggered by a different user', async () => {
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				executedByUserId: null,
+				manualTriggerUserId: 'another-user-id',
+			});
+
+			await service.processExecution(execution, { user: mockUser });
+
+			expect(fullItemRedactionStrategy.apply).toHaveBeenCalledTimes(1);
 		});
 	});
 });

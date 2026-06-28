@@ -337,7 +337,7 @@ describe('CredentialConfig', () => {
 			expect(screen.getByTestId('dynamic-credentials-toggle')).toBeInTheDocument();
 		});
 
-		it('should disable the dynamic credentials toggle when the credential is already shared', async () => {
+		it('keeps the dynamic credentials toggle enabled when the credential is already shared', async () => {
 			renderComponent({
 				props: {
 					isManaged: false,
@@ -349,7 +349,6 @@ describe('CredentialConfig', () => {
 					isOAuthType: true,
 					isNewCredential: false,
 					isResolvable: false,
-					isShared: true,
 					credentialPermissions: {
 						create: false,
 						update: true,
@@ -362,7 +361,7 @@ describe('CredentialConfig', () => {
 				},
 			});
 
-			expect(screen.getByTestId('dynamic-credentials-toggle')).toHaveClass('is-disabled');
+			expect(screen.getByTestId('dynamic-credentials-toggle')).not.toHaveClass('is-disabled');
 		});
 	});
 

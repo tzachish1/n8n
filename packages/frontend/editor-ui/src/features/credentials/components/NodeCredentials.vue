@@ -33,6 +33,7 @@ import { injectNDVStore } from '@/features/ndv/shared/ndv.store';
 import { useNodeTypesStore } from '@/app/stores/nodeTypes.store';
 import { useUIStore } from '@/app/stores/ui.store';
 import { useProjectsStore } from '@/features/collaboration/projects/projects.store';
+import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import { assert } from '@n8n/utils/assert';
 import { isEmpty } from '@/app/utils/typesUtils';
 import { getResourcePermissions } from '@n8n/permissions';
@@ -98,6 +99,7 @@ const nodeTypesStore = useNodeTypesStore();
 const ndvStore = injectNDVStore();
 const uiStore = useUIStore();
 const projectsStore = useProjectsStore();
+const workflowsStore = useWorkflowsStore();
 const workflowDocumentStore = props.standalone ? undefined : injectWorkflowDocumentStore();
 const { isEnabled: isDynamicCredentialsEnabled } = useDynamicCredentials();
 
@@ -261,6 +263,24 @@ watch(
 	{ immediate: true },
 );
 
+// Scope the credential fetch to the surface that determines which credentials
+// are *usable* here: a saved workflow uses its own access set, otherwise we fall
+// back to the current/personal project. This routes through
+// `getCredentialsAUserCanUseInAWorkflow` (the for-workflow endpoint), which
+// surfaces credentials shared with the user — including resolvable/private ones —
+// that the generic project-scoped list query would omit.
+function getCredentialFetchScope(): { workflowId: string } | { projectId: string } | undefined {
+	const workflowId = workflowDocumentStore?.value.workflowId;
+	if (workflowId && !workflowsStore.isNewWorkflow) {
+		return { workflowId };
+	}
+
+	const projectId =
+		props.projectId ?? projectsStore.currentProject?.id ?? projectsStore.personalProject?.id;
+
+	return projectId ? { projectId } : undefined;
+}
+
 onMounted(() => {
 	credentialsStore.$onAction(({ name, after, args }) => {
 		const listeningForActions = ['createNewCredential', 'updateCredential', 'deleteCredential'];
@@ -330,9 +350,10 @@ onMounted(() => {
 
 	ndvEventBus.on('credential.createNew', onCreateAndAssignNewCredential);
 
-	void credentialsStore.fetchAllCredentials({
-		projectId: projectsStore.currentProject?.id,
-	});
+	const scope = getCredentialFetchScope();
+	if (scope) {
+		void credentialsStore.fetchAllCredentialsForWorkflow(scope);
+	}
 
 	void aiGateway.fetchConfig();
 

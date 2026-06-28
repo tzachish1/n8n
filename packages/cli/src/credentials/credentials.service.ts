@@ -1232,16 +1232,38 @@ export class CredentialsService {
 		const userProjectRelations = await this.projectService.getProjectRelationsForUser(user);
 		const projectIds = [...new Set(userProjectRelations.map((pr) => pr.projectId))];
 		// Postgres rejects `IN ()`; SQLite tolerates it. Skip the query when there is no project scope.
-		if (projectIds.length === 0) {
-			return this.roleService.combineResourceScopes('credential', user, [], userProjectRelations);
+		const shared =
+			projectIds.length === 0
+				? []
+				: await this.sharedCredentialsRepository.find({
+						where: {
+							projectId: In(projectIds),
+							credentialsId: credentialId,
+						},
+					});
+		const scopes = this.roleService.combineResourceScopes(
+			'credential',
+			user,
+			shared,
+			userProjectRelations,
+		);
+
+		// Global ("All users and projects") credentials grant read access to every
+		// user regardless of an explicit sharing row, mirroring the global push in
+		// `RoleService.addScopes`. Without this, a user who can only reach the
+		// credential via the global flag gets empty scopes here, and the editor
+		// hides the per-user "Connect" action on resolvable credentials — making a
+		// globally shared dynamic credential impossible to connect without also
+		// adding an explicit per-user share.
+		if (!scopes.includes('credential:read')) {
+			const globalCredential =
+				await this.credentialsFinderService.findGlobalCredentialById(credentialId);
+			if (globalCredential) {
+				scopes.push('credential:read');
+			}
 		}
-		const shared = await this.sharedCredentialsRepository.find({
-			where: {
-				projectId: In(projectIds),
-				credentialsId: credentialId,
-			},
-		});
-		return this.roleService.combineResourceScopes('credential', user, shared, userProjectRelations);
+
+		return scopes;
 	}
 
 	/**

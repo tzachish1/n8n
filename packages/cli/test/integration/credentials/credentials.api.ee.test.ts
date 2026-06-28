@@ -554,6 +554,22 @@ describe('GET /credentials/:id', () => {
 		expect(response.body.data.data).toBeUndefined();
 	});
 
+	test('returns credential:read scope for a global credential to a user without an explicit share', async () => {
+		// Regression guard: a globally shared ("All users and projects") resolvable
+		// credential must expose `credential:read` to every user even when they have
+		// no sharing row, otherwise the editor hides the per-user "Connect" action and
+		// the credential can only be connected after adding an explicit per-user share.
+		const payload = { ...randomCredentialPayload(), isGlobal: true, isResolvable: true };
+		const savedCredential = await saveCredential(payload, { user: owner });
+
+		const response = await testServer
+			.authAgentFor(anotherMember)
+			.get(`/credentials/${savedCredential.id}`);
+
+		expect(response.statusCode).toBe(200);
+		expect(response.body.data.scopes).toEqual(expect.arrayContaining(['credential:read']));
+	});
+
 	test('should retrieve owned cred for owner', async () => {
 		const savedCredential = await saveCredential(randomCredentialPayload(), { user: owner });
 

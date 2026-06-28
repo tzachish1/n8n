@@ -27,7 +27,9 @@ We always branch from the upstream release tag, never from upstream `master`.
 | `feat/upgrade-to-n8n-2.19.2`             | `n8n@2.19.2` | 8              | absorbed `oidc.controller.ee.test.ts` 7th `EventService` mock, `import.service.ts` `Partial<WorkflowEntity>` cast (TS2589 workaround), `node-governance.service.ts` typeorm-import escape hatch, `NodeCreator.test.ts` `vi.mock` import-style fix; chore folded into `chore(upgrade-2.19.2)`. |
 | `feat/upgrade-to-n8n-2.20.7-exp.0`        | `n8n@2.20.7-exp.0` | 8 | reverted the 2.19.2-era `Partial<WorkflowEntity>` cast in `import.service.ts` (upstream `tx.upsert` no longer triggers TS2589, and keeping the cast itself now does); added 20th `mock<OwnershipService>()` to `execution.service.integration.test.ts` (upstream constructor reached 19 args, governance adds the 20th); SSRF refactor (`SsrfProtectionConfig` + `SsrfProtectionService` injection) re-merged with §1 governance enforcement in `workflows.controller.ts`; Azure APIM credentials kept fork superset (APIM + `approvedModels` + `Resource Name`) over upstream's bare drop; `release-build-daytona-snapshot.yml` deleted as part of §8 trim; chore folded into `chore(upgrade-2.20.7-exp.0)`. |
 | `feat/upgrade-to-n8n-2.20.9`             | `n8n@2.20.9` | 8 | small upgrade — 7 upstream commits (`1bb97d8392..38294c02d7`), 36 files, 0 customization-hotspot collisions in the pre-flight analysis. §1 needed a 12-line `execution-lifecycle-hooks.ts` + `workflow-execution.service.ts` re-wire (`projectId: project.id` → `ownerProject?.id` on the `'chat'` source path); folded into `chore(upgrade-2.20.9)`. §5 absorbed upstream PR n8n-io/n8n#30478's alpine 3.22→3.23 migration (`NODE_VERSION` 24.14.1→24.15.0; stage-2 paths `/usr/local/lib/node_modules` → `/usr/lib/node_modules` and `/usr/local/bin/n8n` → `/usr/bin/n8n`) — the merged-after-2.20.9 PR republished `n8nio/base:24.14.1` with the new DHI alpine 3.23 layout where `/usr/local/` doesn't exist by default, breaking n8n@2.20.9 source builds at the symlink step; folded into `chore(upgrade-2.20.9)` alongside the cli wiring fix. Picked up free from upstream: resource-center tooltip removal (#30476), `ObservableObject` proxy-layer-accumulation fix (#30505), VM-expression nested-array preservation fix (#30334). |
-| `feat/upgrade-to-n8n-2.22.4` (current)   | `n8n@2.22.4` | 8 | medium upgrade — landed all 8 customizations, then squashed mid-cycle follow-ons back into their feature commits to keep the convention. §3 OIDC absorbed two code follow-ons (diag ID-token claim fingerprint logging + access-token claim fallback when ID token omits roles) directly into `feat(sso-oidc)`. §7 chore absorbed cherry-pick collateral (`oidc.controller.ee.ts` + test double-`eventService` DI dedupe from §3 auto-merge; `NodeAccessRequestModal.vue` `workflowsStore.workflow` → `injectWorkflowDocumentStore().value?.name` after upstream marked `.workflow` private; `oidc.service.ee.test.ts` `rejects.toThrow(new BadRequestError(...))` → split `toThrow(BadRequestError)` + `toThrow('message')` for the new `n8n-local-rules/no-error-instance-in-to-throw` rule) on top of the 2.20.9-era chore content (`.gitignore` additions, Dockerfile alpine path migration, governance DTO shims) — renamed to `chore(upgrade-2.22.4)`. §8 docs absorbed two CUSTOMS.md-only follow-ons (Azure Entra v1-token edge-case troubleshooting row + recommended v1 OIDC settings row; cherry-pick-variation + manual-smoke-findings ledger entries). Upstream collisions resolved: §3 PR n8n-io/n8n#29856 absorbed our `user-login-failed` emit shape, making the §3 `auth.controller.ts` parameter-rename conflict redundant (kept HEAD); §5 Dockerfile combined HEAD's `npm rebuild sqlite3` with fork's `JOBS=1 npm rebuild isolated-vm`; kept HEAD's `alpine3.22` over incoming `alpine3.23` (consistency with upstream 2.22.4 pinning). §8 CI trim: 34 modify/delete conflicts resolved by honoring fork deletions; 3 UU files (`ci-master.yml`, `ci-pull-requests.yml`, `docker-build-smoke.yml`) preserved fork's removal of e2e/security/Slack notifications and daily cron triggers while keeping upstream functional changes. Required tooling fixes: `pnpm install` (new `@n8n/engine` package), force-rebuild of `@n8n/eslint-plugin-community-nodes` (stale turbo cache restored 8-of-35 rules from a 2.20.9-era build), and `NODE_OPTIONS=--max-old-space-size=10240` for `pnpm lint` (cli package OOMs the 4 GB default). New troubleshooting rows added below. |
+| `feat/upgrade-to-n8n-2.22.4`             | `n8n@2.22.4` | 8 | medium upgrade — landed all 8 customizations, then squashed mid-cycle follow-ons back into their feature commits to keep the convention. §3 OIDC absorbed two code follow-ons (diag ID-token claim fingerprint logging + access-token claim fallback when ID token omits roles) directly into `feat(sso-oidc)`. §7 chore absorbed cherry-pick collateral (`oidc.controller.ee.ts` + test double-`eventService` DI dedupe from §3 auto-merge; `NodeAccessRequestModal.vue` `workflowsStore.workflow` → `injectWorkflowDocumentStore().value?.name` after upstream marked `.workflow` private; `oidc.service.ee.test.ts` `rejects.toThrow(new BadRequestError(...))` → split `toThrow(BadRequestError)` + `toThrow('message')` for the new `n8n-local-rules/no-error-instance-in-to-throw` rule) on top of the 2.20.9-era chore content (`.gitignore` additions, Dockerfile alpine path migration, governance DTO shims) — renamed to `chore(upgrade-2.22.4)`. §8 docs absorbed two CUSTOMS.md-only follow-ons (Azure Entra v1-token edge-case troubleshooting row + recommended v1 OIDC settings row; cherry-pick-variation + manual-smoke-findings ledger entries). Upstream collisions resolved: §3 PR n8n-io/n8n#29856 absorbed our `user-login-failed` emit shape, making the §3 `auth.controller.ts` parameter-rename conflict redundant (kept HEAD); §5 Dockerfile combined HEAD's `npm rebuild sqlite3` with fork's `JOBS=1 npm rebuild isolated-vm`; kept HEAD's `alpine3.22` over incoming `alpine3.23` (consistency with upstream 2.22.4 pinning). §8 CI trim: 34 modify/delete conflicts resolved by honoring fork deletions; 3 UU files (`ci-master.yml`, `ci-pull-requests.yml`, `docker-build-smoke.yml`) preserved fork's removal of e2e/security/Slack notifications and daily cron triggers while keeping upstream functional changes. Required tooling fixes: `pnpm install` (new `@n8n/engine` package), force-rebuild of `@n8n/eslint-plugin-community-nodes` (stale turbo cache restored 8-of-35 rules from a 2.20.9-era build), and `NODE_OPTIONS=--max-old-space-size=10240` for `pnpm lint` (cli package OOMs the 4 GB default). New troubleshooting rows added below. |
+| `feat/upgrade-to-n8n-2.25.7`             | `n8n@2.25.7` | 11 | large upgrade — introduced the **dynamic-credentials feature family** on top of the prior 8: §9 programmatic credential **seeding endpoint**, §10 OIDC-driven **Microsoft Graph self-seeding** (DB migration `…000029-AddOidcSeedSourceToCredentialResolver`, breaking `feat(sso-oidc)!`), and §11 **generic SaaS OAuth2 dynamic-credential resolver** (v1). Chore folded into `chore(upgrade-2.25.7)`. Branch pushed to origin; pre-upgrade safety branch retained locally at `backup/pre-upgrade-2.25.7-branch`. |
+| `feat/upgrade-to-n8n-2.26.8` (current)   | `n8n@2.26.8` | 13 | large jump from 2.25.7 (~700 upstream commits across the 2.22.4→2.26.8 span). All 11 prior customizations re-applied (the 2.25.7 chore re-lands as `ae59bcc chore(upgrade-2.25.7): Phase 6 test reconcile`) plus two finishing commits: `d589c625 fix(upgrade): build/typecheck/lint/test drift for 2.26.8` and `56f1954 fix(credentials): restore fork dynamic/shared credential behavior`. 2.26.x shipped **three silent §11 conflicts**, all resolved in `56f1954`: (1) dropped upstream's sharing-vs-dynamic gate (#31644) so dynamic creds stay shareable; (2) restored workflow-scoped NDV credential fetch `fetchAllCredentialsForWorkflow` (#30463) so sharees see shared resolvable creds in the node picker; (3) restored the `isSelfManualReveal` dyncred-redaction exemption (#31139) so a test-webhook trigger sees its own output. Same commit also fixes a **pre-existing fork bug** — `CredentialsService.getCredentialScopes` now grants `credential:read` on global ("All users and projects") credentials, mirroring `RoleService.addScopes`. `master` set to clean `n8n@2.26.8`. See the §11 conflict notes and the ANTI-adoption greps in **Upstream-adoption audit**. ARM Docker images rebuilt under tag `2.26.8-fork-3`. |
 
 ## Commit-structure convention
 
@@ -59,7 +61,7 @@ access requests, project-level overrides, and an approval workflow. This is the
 most invasive customization — it touches DB, API, FE, permissions, and audit.
 
 **Commit on current branch (single, squashed)**
-- `f4473c8b1f feat(node-governance): introduce node governance with audit, enforcement, and per-project overrides`
+- `71425692d1c feat(node-governance): introduce node governance with audit, enforcement, and per-project overrides` *(2.26.8; SHA drifts each rebase — was `f4473c8b1f` on 2.17.x)*
 
 **Original component commits (pre-squash, archived in `backup/pre-squash-2.17.5`)**
 - `506b1a2cb6` initial node governance feature
@@ -204,7 +206,7 @@ external-secrets backend alongside the upstream Vault / AWS Secrets Manager
 providers. Needed for enterprise deployments.
 
 **Commit on current branch (single, squashed)**
-- `cf03e9c640 feat(external-secrets): add Akeyless provider with subfolder support and log redaction`
+- `7b57722d0e4 feat(external-secrets): add Akeyless provider with subfolder support and log redaction` *(2.26.8; SHA drifts each rebase — was `cf03e9c640` on 2.17.x)*
 
 **Original component commits (pre-squash)**
 - `1b64b95a60` initial Akeyless provider
@@ -245,7 +247,7 @@ rigid DB row shape. We need:
 - Readable diagnostic logs when provisioning doesn't fire.
 
 **Commit on current branch (single, squashed)**
-- `2d4eb6dc8b feat(sso-oidc): harden Azure Entra direct-claim provisioning for instance and project roles`
+- `4856256e21b feat(sso-oidc): harden Azure Entra direct-claim provisioning for instance and project roles` *(2.26.8; SHA drifts each rebase — was `2d4eb6dc8b` on 2.17.x)*
 
 **Original component commits (pre-squash)**
 - `337ab0a67c` handle Azure AD `roles` array claim format
@@ -410,8 +412,8 @@ already maps both events to `n8n.audit.user.login.failed` /
 node so enterprises can route through Azure API Management.
 
 **Commit on current branch**
-- `d58298ee5d feat(nodes-langchain): add Azure API Management (APIM) support for Azure OpenAI`
-  *(was `015157d75e` pre-squash, then `7b8b8b737d` on `feat/upgrade-to-n8n-2.17.5` — same diff, new SHA each rebase)*
+- `c74ba7e262d feat(nodes-langchain): add Azure API Management (APIM) support for Azure OpenAI`
+  *(was `015157d75e` pre-squash, then `7b8b8b737d` on `feat/upgrade-to-n8n-2.17.5`, `d58298ee5d` on 2.17.x — same diff, new SHA each rebase)*
 
 **Entry points / key files**
 - `packages/@n8n/nodes-langchain/credentials/AzureOpenAiApi.credentials.ts`
@@ -438,7 +440,7 @@ also carries the Docker `RUN`-step split for `sqlite3` / `isolated-vm`
 interleaved and share `scripts/dockerize-n8n.mjs` edits.
 
 **Commit on current branch (single, squashed)**
-- `96a11fc53a feat(core): add execution_mode and project_id labels to Prometheus metrics plus Docker build splits`
+- `7fbcee5e48e feat(core): add execution_mode and project_id labels to Prometheus metrics plus Docker build splits` *(2.26.8; SHA drifts each rebase — was `96a11fc53a` on 2.17.x)*
 
 **Original component commits (pre-squash)**
 - `d19b7868eb` add `execution_mode` label
@@ -506,8 +508,10 @@ The custom labels are layered onto a *mix* of upstream-named and audit-named met
 
 ### 6. Repo hygiene / upgrade scaffolding
 
-**Commit on current branch (single, squashed)**
-- `a6b4020e93 chore(upgrade-2.17.7): build, lint, test, and repo-hygiene fixes to land customizations on 2.17.7`
+**Commits on current branch** *(2.26.8 — the chore/drift work for this iteration; SHAs drift each rebase)*
+- `ae59bcc162f chore(upgrade-2.25.7): Phase 6 test reconcile` — re-applied 2.25.7 test reconciliation
+- `d589c625cf5 fix(upgrade): build/typecheck/lint/test drift for 2.26.8` — mechanical build/typecheck/lint/test fixes to land the 11 customizations on `n8n@2.26.8`
+  *(prior iterations folded this into a single `chore(upgrade-X.Y.Z)`, e.g. `a6b4020e93` on 2.17.7; the next upgrade should re-squash both into one fresh `chore(upgrade-X.Y.Z)`)*
 
 **Original component commits (pre-squash, archived in `backup/pre-squash-2.17.7`)**
 - `39dbfffcf2` ignore local build/docker/install log artefacts
@@ -540,7 +544,7 @@ last position on the branch (currently position 8 as of 2.17.7).
 ### 8. CI workflow trim (fork-only)
 
 **Commit on current branch (single, squashed)**
-- `26d513c091 chore(ci): trim fork-irrelevant GitHub Actions workflows`
+- `5a700b2edc1 chore(ci): trim fork-irrelevant GitHub Actions workflows` *(2.26.8; SHA drifts each rebase — was `26d513c091` on 2.22.4)*
 
 **What & why.** Upstream ships ~76 GitHub Actions workflows under
 `.github/workflows/` that are wired for `n8n-io/n8n` (and `n8n-io/n8n-private`).
@@ -1758,8 +1762,9 @@ the existing `eventService` infrastructure. The §10 env-var inventory
 (`N8N_ENV_FEAT_DYNAMIC_CREDENTIALS`, `N8N_DYNAMIC_CREDENTIALS_ENDPOINT_AUTH_TOKEN`,
 plus the OIDC self-seeding knobs) is sufficient.
 
-**Commits on current branch (newest last)**
-- _(populated after commit; see `git log feat/dynamic-credentials-saas-generic`)_
+**Commits on current branch (newest last)** *(2.26.8; SHAs drift each rebase)*
+- `4ca8ef558ca feat(dynamic-credentials): generic SaaS OAuth2 resolver with hybrid fallback (§11 v1)` — the feature itself (introduced on the 2.25.7 base)
+- `56f1954a4f3 fix(credentials): restore fork dynamic/shared credential behavior after 2.26.8 upgrade` — post-2.26.8 reconciliation: drops the #31644 sharing-vs-dynamic gate, restores `fetchAllCredentialsForWorkflow` NDV fetch (#30463) and the `isSelfManualReveal` redaction exemption (#31139), and fixes the global-credential `getCredentialScopes` read grant. See the four "Upstream conflict / Fork bug" notes earlier in this section.
 
 **Entry points / key files**
 
@@ -1846,6 +1851,168 @@ race is actually painful.
 5. The lazy `Container.get(DynamicCredentialService)` in
    `credential-resolver.service.ts::invalidateResolverEntityCache` is the
    only one-way coupling — keep it lazy to avoid forming a DI cycle.
+6. **Sharing-vs-dynamic gate (upstream #31644) must stay removed.** See the
+   dedicated note immediately below. After every rebase, re-grep for
+   `Private credentials cannot be shared` and `hide-add-input` and confirm
+   they have not crept back in.
+7. **NDV credential fetch must use `fetchAllCredentialsForWorkflow` (upstream
+   #30463 conflict).** `NodeCredentials.vue`'s `onMounted` must call
+   `credentialsStore.fetchAllCredentialsForWorkflow(getCredentialFetchScope())`,
+   **not** `fetchAllCredentials({ projectId })`. See the dedicated note below.
+   After every rebase, confirm `getCredentialFetchScope` still exists in
+   `NodeCredentials.vue`.
+8. **Dyncred redaction must keep the `isSelfManualReveal` exemption (upstream
+   #31139 conflict).** In `execution-redaction.service.ts`, a dynamic-credential
+   execution must be revealable to the requesting user via **either**
+   `isOwnDynamicCredentialsExecution` (resolved user) **or** `isSelfManualReveal`
+   (the user who triggered the manual run, e.g. a test webhook). After every
+   rebase, confirm `isSelfManualReveal` still exists and is OR'd in via
+   `canRevealDynamicCredentialsExecution`. See the dedicated note below.
+
+**Upstream conflict — "Prevent combining sharing with private credentials" (#31644, deliberately dropped)**
+
+Upstream commit `d9177c510136c834f775e767c26d35a353b76cc9` —
+*feat(core): Prevent combining sharing with private credentials (#31644)*,
+first present in `n8n@2.26.x` — makes dynamic ("private"/resolvable)
+credentials and sharing **mutually exclusive**. That directly contradicts
+the fork's whole §9–§11 model: in this fork a dynamic credential **is**
+shared, and each sharee connects their own account at run time (per-user /
+OBO resolution; see the §11 "Connect" banner row below and the read-only
+sharee → Connect-link behavior in `NodeCredentials.vue`). We therefore
+**drop #31644's gating** and keep dynamic credentials shareable.
+
+This conflict is **silent on rebase**: #31644 only *adds* new gate lines
+(no textual collision with fork code), so the cherry-picks auto-merge and
+the gate's own tests keep passing — the regression only shows up by
+exercising the UI ("can't share a credential once it's toggled dynamic").
+The fork's 2.25.7 base had none of these gates.
+
+*What we removed (restore fork behavior — keep removed on every upgrade):*
+- `packages/cli/src/credentials/credentials.controller.ts` — three gates:
+  (a) `shareCredentials`: `if (credential.isResolvable && toShare.length > 0) throw 'Private credentials cannot be shared'`;
+  (b) `updateCredentials`: the `isTogglingToPrivate && isShared` →
+  `'…Remove sharing before making it private.'` block (keep the
+  `isTogglingToPrivate` var — still used for `clearOauthTokenData`);
+  (c) `updateCredentials` global branch: `if (isGlobal && (body.isResolvable ?? credential.isResolvable)) throw 'Private credentials cannot be shared'`.
+- `…/CredentialEdit/CredentialSharing.ee.vue` — removed `:hide-add-input="isResolvable"`, the `info.dynamicCredential` ("not supported") tip, and the now-unused `isResolvable` prop.
+- `…/CredentialEdit/CredentialConfig.vue` — removed `isDynamicToggleDisabled` + the disabling tooltip wrap + the `isShared` prop (toggle is never disabled).
+- `…/CredentialEdit/CredentialEdit.vue` — removed `isCurrentlyShared` computed + the `:is-shared` (to config) and `:is-resolvable` (to sharing) bindings.
+- `@n8n/i18n` `en.json` — removed the two now-unused keys
+  `credentialConfig.dynamicCredentials.sharedDisabledTooltip` and
+  `credentialSharing.info.dynamicCredential`.
+- `ProjectSharing.vue`'s generic `hideAddInput` prop was left in place
+  (harmless reusable prop; just no longer passed `true`).
+
+*Tests reconciled to assert the fork behavior (dynamic creds ARE shareable):*
+- `packages/cli/test/integration/credentials/credentials.resolvable.api.test.ts`
+  — the `Sharing and dynamic credentials` block: share a dynamic cred → 200;
+  toggle a shared cred to dynamic → 200; unshare still works (17/17 pass).
+- `…/CredentialEdit/CredentialConfig.test.ts` — toggle stays **enabled** when shared.
+- `…/CredentialEdit/CredentialSharing.ee.test.ts` — share input shown, no
+  "not supported" copy, remove still works.
+
+**Upstream conflict — NDV credential fetch scope (#30463, fork override required)**
+
+Upstream commit `cec8238b646` — *fix(editor): Load credentials when opening
+node credential picker (#30463)* — rewrote `NodeCredentials.vue`'s `onMounted`
+to fetch credentials via `credentialsStore.fetchAllCredentials({ projectId:
+projectsStore.currentProject?.id })`. That **clobbers the fork's §11 logic** and
+breaks the core dynamic-credentials use case: **a sharee can no longer see a
+shared private/resolvable credential in the node credential dropdown** (it still
+shows in the cross-project Credentials list, which fetches with no project
+filter, so the bug looks inconsistent).
+
+*Why it breaks.* `fetchAllCredentials({ projectId })` is the generic list query
+scoped to one project; it returns credentials *owned by* that project. A
+credential shared **with** a sharee is owned by the owner's project, so it's
+absent when scoped to the sharee's personal project. The fork instead routes
+through `fetchAllCredentialsForWorkflow` → `GET /credentials/for-workflow` →
+`CredentialsService.getCredentialsAUserCanUseInAWorkflow`, which is purpose-built:
+it unions *everything the user can read* (`findCredentialsForUser(['credential:read'])`,
+includes shared) with the workflow/project's usable set, so shared resolvable
+credentials surface correctly.
+
+*Fork override (restore on every upgrade — `NodeCredentials.vue`):*
+- Keep the `getCredentialFetchScope()` helper: returns `{ workflowId }` for a
+  saved workflow (`!workflowsStore.isNewWorkflow`), else
+  `{ projectId: props.projectId ?? currentProject?.id ?? personalProject?.id }`.
+- `onMounted` calls `fetchAllCredentialsForWorkflow(getCredentialFetchScope())`.
+- This still satisfies #30463's intent (credentials are (re)fetched when the
+  picker mounts) — only the *scope/endpoint* differs.
+- Test: `NodeCredentials.test.ts` asserts `fetchAllCredentialsForWorkflow` (not
+  `fetchAllCredentials`) is called on mount.
+
+**Upstream conflict — dyncred redaction drops the manual-trigger reveal (#31139, fork override required)**
+
+Upstream commit `8de9958c5f4` — *feat(core): Grant execution owners access to
+their own redacted data (#31139)* — reworked the dynamic-credential reveal gate
+in `execution-redaction.service.ts`. Adopting it during the §11 v1 rebase
+(`4ca8ef558ca`) replaced the fork's `isSelfManualReveal` check with **only**
+`isOwnDynamicCredentialsExecution` (`runtimeData.executedByUserId === user.id`,
+i.e. the n8n user the *credential resolved to*). That **breaks the common test
+flow**: when the logged-in user triggers a **test webhook** (a manual-mode run
+they started), the credential resolves via the inbound webhook identity (bearer
+/ OBO) or no user at all, so `executedByUserId` is `null` or a different user —
+and the triggering user sees *"Output data redacted — this execution used
+private credentials"* for **their own** test run.
+
+*Why it breaks.* `executedByUserId` is the *resolved* identity, not the
+*triggering* identity. A test webhook is `mode === 'manual'` with
+`data.manualData.userId` set to the editor user, but its dyncred resolution
+rarely maps back to that same user. Upstream's model only ever reveals to the
+resolved user, so the editor user who ran the test is locked out of their own
+results.
+
+*Fork override (restore on every upgrade — `execution-redaction.service.ts`):*
+- Keep the `isSelfManualReveal(execution, user)` helper (manual mode +
+  `data.manualData.userId === user.id`). The fork's 2.25.7 base had it; #31139
+  dropped it.
+- Reveal a dyncred execution when **either** path matches, via
+  `canRevealDynamicCredentialsExecution = isOwnDynamicCredentialsExecution ||
+  isSelfManualReveal`. Use it in all three sites: the explicit-reveal
+  `ForbiddenError` guard, the `needsCheck` scope-skip, and the per-execution
+  `userCanReveal` / `enforceDynCredRedaction` computation.
+- This is additive: it **keeps** #31139's resolved-user reveal (covers a sharee
+  viewing a production execution that ran as them) and the cross-tenant
+  guarantee (production/cron/webhook runs have no `manualData.userId`, so a
+  third party still gets redacted output).
+- Tests: `execution-redaction.service.test.ts` — the `dynamic credentials owner
+  access` block adds cases for the manual-trigger reveal (triggering user sees
+  their data even when not the resolved user; a different triggering user stays
+  redacted). The helper gained a `manualTriggerUserId` override.
+
+**Fork bug — `getCredentialScopes` drops the global ("All users and projects") read grant**
+
+*Not an upstream conflict — a pre-existing bug in the fork's own global-credentials
+feature. `getCredentialScopes` is byte-identical to the 2.25.7 base, so the upgrade
+did not introduce or fix it.*
+
+`RoleService.addScopes` grants `credential:read` to **every** user on a credential
+flagged `isGlobal` (the "All users and projects" share), regardless of an explicit
+sharing row. But `CredentialsService.getCredentialScopes` computed scopes by calling
+`roleService.combineResourceScopes(...)` **directly**, bypassing that global push.
+`getCredentialScopes` is what populates the `scopes` field in the
+`GET /credentials/:id` response that the credential edit modal reads.
+
+*Symptom.* A globally shared **resolvable** credential is visible and shows a
+"Connect" button in the node credential picker — the picker uses
+`getCredentialsAUserCanUseInAWorkflow` → `addScopes`, which *does* add the global
+read. But clicking Connect opens the credential modal, which fetches scopes via
+`getCredentialScopes`; for a user with no explicit sharing row those scopes came
+back **empty**, so `credentialPermissions.read`/`update` were both false and the
+per-user "Connect" action was hidden/disabled. Adding an explicit `credential:user`
+share created a real sharing row that `getCredentialScopes` *does* pick up — which
+is why "I had to add each user individually before they could connect."
+
+*Fork fix (`credentials.service.ts` `getCredentialScopes`):* after
+`combineResourceScopes`, if the result lacks `credential:read`, look the credential
+up via `credentialsFinderService.findGlobalCredentialById(credentialId)` and push
+`credential:read` when it is global — mirroring `addScopes`. Keep the empty-
+`projectIds` short-circuit by passing `[]` shares into the same combine call.
+- Invariant: **`getCredentialScopes` must reflect the global read grant the same way
+  `addScopes` does.** Do not "simplify" it back to a bare `combineResourceScopes`.
+- Test: `credentials.api.ee.test.ts` → `GET /credentials/:id` — "returns
+  credential:read scope for a global credential to a user without an explicit share".
 
 **Supported vs not supported (v1)**
 
@@ -1864,13 +2031,18 @@ race is actually painful.
 
 ## Upgrade procedure (repeatable)
 
-This is the workflow we actually followed for 2.15.1 → 2.17.5 → 2.17.7 and
-that landed cleanly on the branch listed in **Baseline tags**.
+This is the workflow we actually followed for 2.15.1 → 2.17.5 → 2.17.7 → … →
+2.22.4 → 2.25.7 → 2.26.8 and that landed cleanly on the branch listed in
+**Baseline tags**. The customization count grows over time — as of 2.26.8 the
+branch carries **13 commits** (11 customization commits + a chore + a drift/fix
+commit). Always re-derive the exact cherry-pick list from the current baseline
+branch with `git log --oneline n8n@<prev-tag>..feat/upgrade-to-n8n-<prev-tag>`
+rather than trusting the pinned SHAs below (they drift every rebase).
 
 ```mermaid
 flowchart TD
     A[Pick target tag n8n@X.Y.Z] --> B[Branch from upstream tag<br/>git checkout -b feat/upgrade-to-n8n-X.Y.Z n8n@X.Y.Z]
-    B --> C[Cherry-pick the 7 squashed commits<br/>from the current baseline branch,<br/>in the order listed below]
+    B --> C[Cherry-pick the customization commits<br/>from the current baseline branch<br/>13 as of 2.26.8, in the order listed below]
     C --> D{pnpm install --frozen-lockfile}
     D -->|lockfile drift| D1[pnpm install --no-frozen-lockfile<br/>commit updated pnpm-lock.yaml]
     D -->|ok| E[pnpm build]
@@ -1879,7 +2051,7 @@ flowchart TD
     G --> H[node scripts/build-n8n.mjs]
     H --> I[node scripts/dockerize-n8n.mjs --tag X.Y.Z]
     I --> J[docker compose up -d --force-recreate n8n]
-    J --> K[Manual smoke:<br/>• login via OIDC<br/>• node governance UI<br/>• secrets from Akeyless<br/>• /metrics has project_id + execution_mode labels<br/>• audit log has payload.projectName]
+    J --> K[Manual smoke:<br/>• login via OIDC<br/>• node governance UI<br/>• secrets from Akeyless<br/>• /metrics has project_id + execution_mode labels<br/>• audit log has payload.projectName<br/>• share a dynamic credential + sharee sees it in node picker + Connect works]
     K --> L[Re-squash new chore work<br/>into chore(upgrade-X.Y.Z) commit]
     L --> M[Push branch, open draft PR,<br/>update CUSTOMS.md baseline tags table]
 ```
@@ -1894,19 +2066,44 @@ flowchart TD
    git checkout -b feat/upgrade-to-n8n-X.Y.Z n8n@X.Y.Z
    ```
 3. **Cherry-pick customizations in order.** From the current baseline branch
-   (`feat/upgrade-to-n8n-2.22.4` at time of writing), cherry-pick these
-   **eight** commits one at a time in this exact order:
+   (`feat/upgrade-to-n8n-2.26.8` at time of writing), cherry-pick these
+   **13** commits one at a time in this exact order. **Do not trust the SHAs
+   below verbatim** — they drift every rebase. Re-derive the live list first:
 
    ```bash
-   git cherry-pick a894aa7945   # node governance
-   git cherry-pick a1286ad4db   # external secrets (Akeyless)
-   git cherry-pick aa72e0b97f   # SSO OIDC provisioning hardening (+ diag fingerprint + access-token claim fallback)
-   git cherry-pick f521207ba5   # Azure OpenAI APIM (nodes-langchain)
-   git cherry-pick 2c9f4bb2fe   # Prometheus labels + Docker build splits + alpine 3.23 paths
-   git cherry-pick 4b4bfac715   # CI workflow trim (Section 8)
-   git cherry-pick 7e02413711   # upgrade chore (build/test/lint mechanical fixes + cli wiring fix + alpine path migration + cherry-pick collateral)
-   git cherry-pick $(git log --format=%H --grep='docs(upgrade)' -1 feat/upgrade-to-n8n-2.22.4)  # this docs file
+   git log --oneline --reverse n8n@2.26.8..feat/upgrade-to-n8n-2.26.8
    ```
+
+   The order on the 2.26.8 baseline (oldest → newest) is:
+
+   ```bash
+   git cherry-pick 71425692d1c   # §1  node governance
+   git cherry-pick 7b57722d0e4   # §2  external secrets (Akeyless)
+   git cherry-pick 4856256e21b   # §3  SSO OIDC provisioning hardening (+ diag fingerprint + access-token claim fallback)
+   git cherry-pick 5a700b2edc1   # §8  CI workflow trim
+   git cherry-pick c74ba7e262d   # §4  Azure OpenAI APIM (nodes-langchain)
+   git cherry-pick 7fbcee5e48e   # §5  Prometheus labels + Docker build splits + alpine 3.23 paths
+   git cherry-pick 8e82999736b   # §7  this docs file (CUSTOMS.md)
+   git cherry-pick 5bd2a4e745f   # §9  dynamic credential seeding endpoint
+   git cherry-pick bbc927b398f   # §10 OIDC self-seeding for Microsoft Graph (carries DB migration …000029 — verify it registers!)
+   git cherry-pick 4ca8ef558ca   # §11 generic SaaS OAuth2 dynamic credentials (v1)
+   git cherry-pick ae59bcc162f   # §6  chore(upgrade-2.25.7) test reconcile
+   git cherry-pick d589c625cf5   # §6  fix(upgrade) build/typecheck/lint/test drift
+   git cherry-pick 56f1954a4f3   # §11 restore fork dynamic/shared credential behavior (#31644/#30463/#31139 + getCredentialScopes global-read fix)
+   ```
+
+   **Critical for §9/§10/§11 (dynamic credentials):** 2.26.x ships three
+   conflicts that auto-merge **silently** (no textual collision) but break the
+   fork at runtime. Run the §11 ANTI-adoption greps in **Upstream-adoption
+   audit** *before* cherry-picking, and re-verify the §11 conflict notes after
+   `56f1954` lands — upstream's sharing-vs-dynamic gate (#31644) must stay
+   removed, `fetchAllCredentialsForWorkflow` (#30463) must stay, and
+   `isSelfManualReveal` (#31139) must stay OR'd into the redaction gate.
+
+   §6/§11 ordering note: the chore/drift commits (`ae59bcc`, `d589c625`) and the
+   credential reconciliation (`56f1954`) land **last** because they reconcile
+   the whole set against the new tag. After the upgrade is verified, re-squash
+   the per-version chore work into a single fresh `chore(upgrade-X.Y.Z)`.
 
    The CI-trim SHA is resolved at cherry-pick time because it will drift the
    first time it lands (and will be re-squashed under the same conventional
@@ -1923,8 +2120,9 @@ flowchart TD
    - Check the **Upgrade checklist** for the affected section.
    - Resolve, then run `pnpm typecheck` on that package before moving on.
    - After upgrade is verified end-to-end, squash any new mechanical fix-up
-     work into the `chore(upgrade-X.Y.Z)` commit so the next upgrade still
-     sees exactly eight commits.
+     work into a single `chore(upgrade-X.Y.Z)` commit so the next upgrade sees
+     one chore commit per iteration (the customization count itself grows over
+     time — 13 commits as of 2.26.8).
 4. **Resolve lockfile drift.**
    - If `pnpm install --frozen-lockfile` fails, run `pnpm install --no-frozen-lockfile`, commit `pnpm-lock.yaml` as a **separate** "chore(upgrade): refresh lockfile" commit.
    - Do **not** edit `package.json` files by hand. The `build-n8n.mjs` script
@@ -2027,8 +2225,9 @@ flowchart TD
 11. **Smoke test manually.** See the **Manual smoke checklist** below.
 12. **Re-squash if needed.** If landing the upgrade required extra mechanical
     commits (lockfile refresh, lint/test fixups, CI adjustments), fold them
-    into the `chore(upgrade-X.Y.Z)` commit so the next upgrade still
-    cherry-picks exactly eight commits:
+    into a single `chore(upgrade-X.Y.Z)` commit so the next upgrade
+    cherry-picks one chore commit per iteration (alongside the growing set of
+    customization commits — 13 total as of 2.26.8):
 
     ```bash
     # After verification is complete, from the feature branch:
@@ -2087,6 +2286,26 @@ git grep -nE 'execution_mode|workflowProjectCache|project_id' \
   'n8n@X.Y.Z' -- packages/cli/src/metrics/prometheus-metrics.service.ts
 git show 'n8n@X.Y.Z:docker/images/n8n/Dockerfile' \
   | grep -nE 'sqlite3|isolated-vm|JOBS=|npm rebuild'
+
+# §11 ANTI-adoption — upstream's sharing-vs-dynamic gate (#31644) CONFLICTS
+# with the fork. If present, it must be REMOVED post-cherry-pick, not kept.
+git grep -nE 'Private credentials cannot be shared|hide-add-input' 'n8n@X.Y.Z' \
+  -- packages/cli/src/credentials/credentials.controller.ts \
+     'packages/frontend/editor-ui/src/features/credentials/components/CredentialEdit/*.vue'
+
+# §11 NDV fetch scope (#30463) — upstream uses fetchAllCredentials({projectId});
+# the fork MUST keep getCredentialFetchScope + fetchAllCredentialsForWorkflow so
+# sharees see shared resolvable credentials in the node picker. 0 hits for the
+# helper ⇒ upstream clobbered it, RE-APPLY the fork override.
+git grep -nE 'getCredentialFetchScope|fetchAllCredentialsForWorkflow' 'n8n@X.Y.Z' \
+  -- packages/frontend/editor-ui/src/features/credentials/components/NodeCredentials.vue
+
+# §11 dyncred redaction (#31139) — upstream reveals dyncred data ONLY to the
+# resolved user (executedByUserId). The fork MUST also keep isSelfManualReveal so
+# the user who triggered a manual run (test webhook) sees their own results.
+# 0 hits for isSelfManualReveal ⇒ upstream/§11-rebase dropped it, RE-APPLY.
+git grep -nE 'isSelfManualReveal|canRevealDynamicCredentialsExecution' 'n8n@X.Y.Z' \
+  -- packages/cli/src/modules/redaction/executions/execution-redaction.service.ts
 ```
 
 **Interpreting results.**
@@ -2220,6 +2439,18 @@ Run these after every upgrade before tagging "done":
       execution since the last restart — the counter is registered lazily on
       first emit, not pre-seeded with `.inc(0)`).
 - [ ] LmChatAzureOpenAi node can authenticate via OAuth2 (APIM path).
+- [ ] **Dynamic credentials (§9–§11) survive the upgrade.** Toggle a credential
+      to dynamic/resolvable **and** share it — sharing must NOT be blocked
+      (#31644 gate stays removed). As a sharee, open a node and confirm the
+      shared resolvable credential **appears in the node credential dropdown**
+      (#30463 — `fetchAllCredentialsForWorkflow`, not the project-scoped list).
+      Trigger a **test webhook** as the editor user and confirm you see your own
+      output, not "Output data redacted" (#31139 — `isSelfManualReveal`).
+- [ ] **Global dynamic credential is connectable without a per-user share.**
+      Share a resolvable credential as "All users and projects" (global), then
+      as a user with **no** explicit share row, confirm the node-picker
+      "Connect" button opens the modal and works (`getCredentialScopes` grants
+      `credential:read` on global creds).
 - [ ] `pnpm exec turbo run test --affected --concurrency=1 --continue`
       tail shows only the three known upstream empty-test packages
       (`@n8n/extension-sdk`, `@n8n/constants`, `n8n-node-dev`) in the
