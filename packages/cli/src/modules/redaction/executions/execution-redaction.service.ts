@@ -268,7 +268,8 @@ export class ExecutionRedactionService implements ExecutionRedaction {
 
 	/**
 	 * Returns true when the execution used dynamic credential resolution.
-	 * Such executions must always be redacted with canReveal = false.
+	 * Such executions are hidden from everyone except the user the execution
+	 * ran as (see `isOwnDynamicCredentialsExecution`).
 	 *
 	 * Checks per-node `usedDynamicCredentials` flag which is only set when
 	 * resolution actually happened at runtime, rather than checking for the

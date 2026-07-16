@@ -386,7 +386,7 @@ describe('OAuth2 API', () => {
 			expect(decrypted).not.toHaveProperty('codeVerifier');
 		};
 
-		it('should reject auth start for a sharee with credential:user role', async () => {
+		it('should reject auth start for a sharee with credential:user role on a static credential', async () => {
 			const sharee = await createMember();
 			await shareCredentialWithUsers(credential, [sharee]);
 
@@ -397,6 +397,31 @@ describe('OAuth2 API', () => {
 
 			expect(response.statusCode).toBe(404);
 			await expectNoCsrfStateOnCredential(credential.id);
+		});
+
+		it('should allow auth start for a sharee with credential:user role on a resolvable credential', async () => {
+			const sharee = await createMember();
+			const resolvableCredential = await saveCredential(
+				{
+					name: 'Shared resolvable OAuth2 credential',
+					type: 'testOAuth2Api',
+					data: credentialData,
+					isResolvable: true,
+				},
+				{
+					user: owner,
+					role: 'credential:owner',
+				},
+			);
+			await shareCredentialWithUsers(resolvableCredential, [sharee]);
+
+			const response = await testServer
+				.authAgentFor(sharee)
+				.get('/oauth2-credential/auth')
+				.query({ id: resolvableCredential.id });
+
+			expect(response.statusCode).toBe(200);
+			expect(response.body.data).toContain('https://test.domain/oauth2/auth');
 		});
 
 		it('should reject auth start for a project viewer on a project-shared credential', async () => {

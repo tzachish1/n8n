@@ -84,6 +84,9 @@ export const eventNamesAudit = [
 	'n8n.audit.user.graph-token.lazy-seeded',
 	'n8n.audit.user.graph-token.lazy-seed-failed',
 	'n8n.audit.user.graph-token.lazy-seed-skipped',
+	// Fork §11 — generic SaaS OAuth2 dynamic-credential fallback event.
+	// Same audit-only payload contract: ids only, no token material.
+	'n8n.audit.dynamic-credential.fallback-used',
 	'n8n.audit.user.signedup',
 	'n8n.audit.user.updated',
 	'n8n.audit.user.deleted',

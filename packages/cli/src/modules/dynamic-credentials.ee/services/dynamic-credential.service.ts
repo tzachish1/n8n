@@ -1,5 +1,5 @@
 import { Logger } from '@n8n/backend-common';
-import { AuthenticatedRequest } from '@n8n/db';
+import { AuthenticatedRequest, AuthIdentityRepository } from '@n8n/db';
 import { CredentialResolverDataNotFoundError, CredentialResolverError } from '@n8n/decorators';
 import { Service } from '@n8n/di';
 import type { NextFunction, Response } from 'express';
@@ -15,6 +15,7 @@ import { jsonParse, toCredentialContext } from 'n8n-workflow';
 import { DynamicCredentialsProxy } from '@/credentials/dynamic-credentials-proxy';
 import type { ILazySeedProvider } from '@/credentials/lazy-seed-provider.interface';
 import { LoadNodesAndCredentials } from '@/load-nodes-and-credentials';
+import { CacheService } from '@/services/cache/cache.service';
 import { StaticAuthService } from '@/services/static-auth-service';
 
 import { carriesN8nIdentity } from '../credential-resolvers/identifiers/n8n-identifier';
@@ -29,12 +30,41 @@ import type {
 } from '../../../credentials/credential-resolution-provider.interface';
 import { SYSTEM_RESOLVER_ID, SYSTEM_RESOLVER_TYPE } from '../constants';
 import { DynamicCredentialResolverRepository } from '../database/repositories/credential-resolver.repository';
+import { DynamicCredentialUserEntryStorage } from '../credential-resolvers/storage/dynamic-credential-user-entry-storage';
 import { DynamicCredentialsConfig } from '../dynamic-credentials.config';
 import { CredentialResolutionError } from '../errors/credential-resolution.error';
 import { CredentialResolverNotConfiguredError } from '../errors/credential-resolver-not-configured.error';
 import { CredentialResolverNotFoundError } from '../errors/credential-resolver-not-found.error';
 import { MissingExecutionContextError } from '../errors/missing-execution-context.error';
 import { N8nIdentityNotSupportedError } from '../errors/n8n-identity-not-supported.error';
+
+/**
+ * Fork §11 perf hardening (PE-1 + PE-2):
+ *  - Cache the loaded `resolverEntity` AND its decrypted+parsed config
+ *    together, keyed by resolver id.
+ *  - TTL is short (60s) so admin updates take effect quickly without
+ *    requiring explicit invalidation, but explicit invalidation hooks in
+ *    `DynamicCredentialResolverService.update/delete` make the common case
+ *    (admin edited a resolver in the UI) immediate.
+ *  - Cached value omits anything user-scoped — purely the resolver's own
+ *    config — so a single cached entry safely serves all callers.
+ */
+const RESOLVER_ENTITY_CACHE_TTL_MS = 60_000;
+const RESOLVER_ENTITY_CACHE_PREFIX = 'dynamic-credentials:resolver-entity:';
+
+interface CachedResolverEntity {
+	entity: { id: string; type: string };
+	parsedConfig: Record<string, unknown>;
+}
+
+/**
+ * Fork §11 perf hardening (PE-3): non-enumerable Symbol used to memoize
+ * the decrypted credential context on the `executionContext` object itself.
+ * Per-execution scope; never shared across executions, never written to
+ * any global cache. Safe because `executionContext.credentials` is
+ * immutable for the lifetime of a single execution.
+ */
+const MEMOIZED_CREDENTIAL_CONTEXT = Symbol.for('n8n.dynamicCredentials.memoizedCredentialContext');
 
 /**
  * Service for resolving credentials dynamically via configured resolvers.
@@ -59,7 +89,48 @@ export class DynamicCredentialService implements ICredentialResolutionProvider {
 		private readonly logger: Logger,
 		private readonly expressionService: ResolverConfigExpressionService,
 		private readonly dynamicCredentialsProxy: DynamicCredentialsProxy,
+		private readonly cacheService: CacheService,
+		private readonly authIdentityRepository: AuthIdentityRepository,
+		private readonly userEntryStorage: DynamicCredentialUserEntryStorage,
 	) {}
+
+	/**
+	 * Fork §11 perf hardening (PE-1 + PE-2). Loads `resolverEntity` and its
+	 * decrypted+parsed config, caching the pair so repeated executions for
+	 * the same resolver skip a DB round-trip and a cipher decrypt+jsonParse.
+	 * Returns `null` when the row is absent — caller emits the usual
+	 * not-found error. Cache holds only resolver-owned config (no user data),
+	 * so a single entry is safely shared across all callers.
+	 */
+	private async loadResolverEntityCached(resolverId: string): Promise<CachedResolverEntity | null> {
+		const cacheKey = `${RESOLVER_ENTITY_CACHE_PREFIX}${resolverId}`;
+
+		const cached = await this.cacheService.get<CachedResolverEntity>(cacheKey);
+		if (cached) return cached;
+
+		const entity = await this.resolverRepository.findOneBy({ id: resolverId });
+		if (!entity) return null;
+
+		const decryptedConfig = await this.cipher.decryptV2(entity.config);
+		const parsedConfig = jsonParse<Record<string, unknown>>(decryptedConfig);
+
+		const value: CachedResolverEntity = {
+			entity: { id: entity.id, type: entity.type },
+			parsedConfig,
+		};
+
+		await this.cacheService.set(cacheKey, value, RESOLVER_ENTITY_CACHE_TTL_MS);
+		return value;
+	}
+
+	/**
+	 * Fork §11 — explicit invalidation hook called by
+	 * `DynamicCredentialResolverService.update/delete` so admin edits in the
+	 * UI take effect immediately, not after the 60s TTL fallback.
+	 */
+	async invalidateResolverEntityCache(resolverId: string): Promise<void> {
+		await this.cacheService.delete(`${RESOLVER_ENTITY_CACHE_PREFIX}${resolverId}`);
+	}
 
 	/**
 	 * Fork §10 Phase 2 — register (or clear) the webhook lazy-seed provider.
@@ -85,42 +156,50 @@ export class DynamicCredentialService implements ICredentialResolutionProvider {
 		executionContext?: IExecutionContext,
 		workflowSettings?: IWorkflowSettings,
 	): Promise<CredentialResolutionResult> {
-		// Determine which resolver ID to use: credential's own resolver or workflow's fallback
-		// (explicit workflow override, or the seeded system resolver looked up via the proxy).
-		const resolverId =
-			credentialsResolveMetadata.resolverId ??
-			this.dynamicCredentialsProxy.getEffectiveResolverId(workflowSettings);
-
 		// Not resolvable - return static credentials
 		if (!credentialsResolveMetadata.isResolvable) {
 			return { data: staticData, isDynamic: false };
+		}
+
+		const credentialContext = await this.buildCredentialContext(executionContext);
+
+		if (!credentialContext) {
+			return this.handleMissingContext(credentialsResolveMetadata);
+		}
+
+		// Determine which resolver ID to use: credential's own resolver or workflow's fallback
+		// (explicit workflow override, or the seeded system resolver looked up via the proxy).
+		// Editor/manual runs (Connect, load options, manual trigger) store tokens under the
+		// system n8n resolver — even when the credential also has a custom resolver for
+		// webhook/inbound-identity flows.
+		let resolverId =
+			credentialsResolveMetadata.resolverId ??
+			this.dynamicCredentialsProxy.getEffectiveResolverId(workflowSettings);
+
+		if (credentialContext.metadata?.source === 'manual-execution') {
+			resolverId = SYSTEM_RESOLVER_ID;
 		}
 
 		if (!resolverId) {
 			return this.handleResolverNotConfigured(credentialsResolveMetadata);
 		}
 
-		// Load resolver configuration
-		const resolverEntity = await this.resolverRepository.findOneBy({
-			id: resolverId,
-		});
-
-		if (!resolverEntity) {
+		// Fork §11 perf (PE-1 + PE-2): load resolver entity + decrypted config
+		// from cache so repeated executions for the same resolver skip the
+		// DB round-trip and the cipher decrypt + JSON parse.
+		const cachedResolver = await this.loadResolverEntityCached(resolverId);
+		if (!cachedResolver) {
 			return this.handleResolverNotFound(credentialsResolveMetadata, resolverId);
 		}
+
+		const resolverEntity = cachedResolver.entity;
+		const parsedConfig = cachedResolver.parsedConfig;
 
 		// Get resolver instance from registry
 		const resolver = this.resolverRegistry.getResolverByTypename(resolverEntity.type);
 
 		if (!resolver) {
 			return this.handleResolverNotFound(credentialsResolveMetadata, resolverId);
-		}
-
-		// Build credential context from execution context
-		const credentialContext = await this.buildCredentialContext(executionContext);
-
-		if (!credentialContext) {
-			return this.handleMissingContext(credentialsResolveMetadata);
 		}
 
 		if (carriesN8nIdentity(credentialContext) && !resolver.resolveOwningUserId) {
@@ -144,11 +223,10 @@ export class DynamicCredentialService implements ICredentialResolutionProvider {
 
 			const sharedFields = extractSharedFields(credentialType.type);
 
-			// Decrypt and parse resolver configuration
-			const decryptedConfig = await this.cipher.decryptV2(resolverEntity.config);
-			const parsedConfig = jsonParse<Record<string, unknown>>(decryptedConfig);
-
-			// Resolve expressions in resolver configuration using global data only
+			// Resolve expressions in resolver configuration using global data only.
+			// Re-run on every call (cheap pure-function eval) because expressions
+			// may reference values that change at runtime (env vars, etc.); the
+			// expensive part (DB + decrypt + parse) is cached above.
 			const resolverConfig = await this.expressionService.resolve(parsedConfig);
 
 			// Attempt dynamic resolution. Fork §10 Phase 2: on first miss for a
@@ -184,7 +262,11 @@ export class DynamicCredentialService implements ICredentialResolutionProvider {
 			// execution simply stays unattributed (redacted for everyone).
 			let resolvedUserId: string | undefined;
 			try {
-				resolvedUserId = await resolver.resolveOwningUserId?.(credentialContext, handle);
+				resolvedUserId = await resolver.resolveOwningUserId?.(credentialContext, {
+					resolverId: resolverEntity.id,
+					resolverName: resolverEntity.type,
+					configuration: resolverConfig,
+				});
 			} catch (error) {
 				this.logger.debug('Could not resolve owning user for dynamic credentials', {
 					credentialId: credentialsResolveMetadata.id,
@@ -296,53 +378,162 @@ export class DynamicCredentialService implements ICredentialResolutionProvider {
 		} catch (error) {
 			if (!(error instanceof CredentialResolverDataNotFoundError)) throw error;
 
-			const provider = this.lazySeedProvider;
-			if (!provider) throw error;
-
 			const request = {
 				context: credentialContext,
 				credentialsResolveMetadata,
 				resolverId: resolverEntity.id,
 			};
 
-			if (!provider.isEnabled() || !provider.isCandidate(request)) throw error;
+			const provider = this.lazySeedProvider;
+			if (provider?.isEnabled() && provider.isCandidate(request)) {
+				let seedResult;
+				try {
+					seedResult = await provider.tryLazySeed(request);
+				} catch (seedError) {
+					// Provider violated its contract (must never throw). Treat as a
+					// failed seed and surface the original miss to the caller.
+					this.logger.warn('Lazy-seed provider threw — surfacing original resolver miss', {
+						credentialId: credentialsResolveMetadata.id,
+						resolverId: resolverEntity.id,
+						error: seedError instanceof Error ? seedError.message : String(seedError),
+					});
+					seedResult = { seeded: false as const, reason: 'lazy_seed_obo_failed' as const };
+				}
 
-			let seedResult;
-			try {
-				seedResult = await provider.tryLazySeed(request);
-			} catch (seedError) {
-				// Provider violated its contract (must never throw). Treat as a
-				// failed seed and surface the original miss to the caller.
-				this.logger.warn('Lazy-seed provider threw — surfacing original resolver miss', {
-					credentialId: credentialsResolveMetadata.id,
-					resolverId: resolverEntity.id,
-					error: seedError instanceof Error ? seedError.message : String(seedError),
-				});
-				throw error;
+				if (seedResult.seeded) {
+					this.logger.debug('Lazy-seed succeeded; retrying resolver once', {
+						credentialId: credentialsResolveMetadata.id,
+						resolverId: resolverEntity.id,
+					});
+					return await invoke();
+				}
 			}
 
-			if (!seedResult.seeded) throw error;
+			const connectFallback = await this.tryConnectUserEntryFallback(
+				credentialsResolveMetadata,
+				credentialContext,
+				resolverEntity.id,
+			);
+			if (connectFallback) {
+				return connectFallback;
+			}
 
-			this.logger.debug('Lazy-seed succeeded; retrying resolver once', {
-				credentialId: credentialsResolveMetadata.id,
-				resolverId: resolverEntity.id,
-			});
-			return await invoke();
+			throw error;
 		}
 	}
 
 	/**
-	 * Builds credential context from execution context by decrypting the credentials field
+	 * When a webhook/inbound-identity resolver misses but the caller already
+	 * connected via the editor (system-n8n user entry), bridge Entra `sub` →
+	 * n8n user → per-user Connect storage.
+	 */
+	private async tryConnectUserEntryFallback(
+		credentialsResolveMetadata: CredentialResolveMetadata,
+		credentialContext: ICredentialContext,
+		attemptedResolverId: string,
+	): Promise<ICredentialDataDecryptedObject | null> {
+		if (
+			!credentialsResolveMetadata.resolverId ||
+			attemptedResolverId === SYSTEM_RESOLVER_ID ||
+			credentialContext.metadata?.source === 'manual-execution'
+		) {
+			return null;
+		}
+
+		if (typeof credentialContext.identity !== 'string') {
+			return null;
+		}
+
+		const claims = this.decodeJwtPayloadUnsafe(credentialContext.identity);
+		const subject = claims?.sub ?? claims?.oid;
+		if (!subject) {
+			return null;
+		}
+
+		const identity = await this.authIdentityRepository.findOne({
+			where: { providerId: subject, providerType: 'oidc' },
+		});
+		if (!identity) {
+			return null;
+		}
+
+		const encrypted = await this.userEntryStorage.getCredentialData(
+			credentialsResolveMetadata.id,
+			identity.userId,
+			SYSTEM_RESOLVER_ID,
+			{},
+		);
+		if (!encrypted) {
+			return null;
+		}
+
+		try {
+			const plaintext = await this.cipher.decryptV2(encrypted);
+			const data = jsonParse<ICredentialDataDecryptedObject>(plaintext);
+			this.logger.debug('Resolved credential via Connect user-entry fallback', {
+				credentialId: credentialsResolveMetadata.id,
+				userId: identity.userId,
+				subject,
+				primaryResolverId: attemptedResolverId,
+			});
+			return data;
+		} catch (error) {
+			this.logger.warn('Connect user-entry fallback data could not be decrypted', {
+				credentialId: credentialsResolveMetadata.id,
+				userId: identity.userId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			return null;
+		}
+	}
+
+	private decodeJwtPayloadUnsafe(token: string): { sub?: string; oid?: string } | undefined {
+		const parts = token.split('.');
+		if (parts.length !== 3) return undefined;
+
+		try {
+			const payload = Buffer.from(parts[1], 'base64url').toString('utf8');
+			const parsed: unknown = JSON.parse(payload);
+			if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+				return parsed as { sub?: string; oid?: string };
+			}
+		} catch {
+			return undefined;
+		}
+
+		return undefined;
+	}
+
+	/**
+	 * Builds credential context from execution context by decrypting the credentials field.
+	 *
+	 * Fork §11 perf (PE-3): The result is memoized on the `executionContext`
+	 * object itself via a Symbol key. Per-execution scope only (no global
+	 * cache), so a single execution that invokes many nodes/credentials only
+	 * decrypts once. Safe because `executionContext.credentials` is immutable
+	 * for the lifetime of a single execution.
 	 */
 	private async buildCredentialContext(executionContext: IExecutionContext | undefined) {
 		if (!executionContext?.credentials) {
 			return undefined;
 		}
 
+		const ctxAsAny = executionContext as unknown as Record<symbol, ICredentialContext | undefined>;
+		const memoized = ctxAsAny[MEMOIZED_CREDENTIAL_CONTEXT];
+		if (memoized !== undefined) return memoized;
+
 		try {
-			// Decrypt credential context from execution context
 			const decrypted = await this.cipher.decryptV2(executionContext.credentials);
-			return toCredentialContext(decrypted);
+			const result = toCredentialContext(decrypted);
+
+			Object.defineProperty(executionContext, MEMOIZED_CREDENTIAL_CONTEXT, {
+				value: result,
+				enumerable: false,
+				configurable: false,
+				writable: false,
+			});
+
+			return result;
 		} catch (error) {
 			this.logger.error('Failed to decrypt credential context from execution context', {
 				error: error instanceof Error ? error.message : String(error),

@@ -456,7 +456,7 @@ export abstract class NodeExecutionContext implements Omit<FunctionsBase, 'getCr
 		// 	) as string;
 		// }
 
-		additionalData.executionContext = this.getExecutionContext();
+		additionalData.executionContext = this.getExecutionContext() ?? additionalData.executionContext;
 		const decryptedDataObject = await additionalData.credentialsHelper.getDecrypted(
 			additionalData,
 			nodeCredentials,

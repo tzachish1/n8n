@@ -1,17 +1,15 @@
 import { mockLogger } from '@n8n/backend-test-utils';
-import type { Mocked } from 'vitest';
+import type { SsrfProtectionService } from '@n8n/backend-network';
+import { createFakeOutboundHttp, type Route } from '@n8n/backend-network/testing';
+import type { SsrfProtectionConfig } from '@n8n/config';
 import { Time } from '@n8n/constants';
-import axios from 'axios';
-import { mock } from 'vitest-mock-extended';
 import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
+import { mock } from 'vitest-mock-extended';
 
 import type { CacheService } from '@/services/cache/cache.service';
 
 import { IdentifierValidationError } from '../identifier-interface';
 import { OAuth2JwtClaimIdentifier } from '../oauth2-jwt-claim-identifier';
-
-vi.mock('axios');
-const mockedAxios = axios as Mocked<typeof axios>;
 
 type SignedTokenContext = {
 	privateKey: CryptoKey;
@@ -22,6 +20,9 @@ const ISSUER = 'https://login.microsoftonline.com/tid/v2.0';
 const METADATA_URI = 'https://login.microsoftonline.com/tid/v2.0/.well-known/openid-configuration';
 const JWKS_URI = 'https://login.microsoftonline.com/tid/discovery/v2.0/keys';
 const AUDIENCE = '390f995b-ed37-46e6-ae8c-7b11248dd67c';
+
+const METADATA_PATHNAME = new URL(METADATA_URI).pathname;
+const JWKS_PATHNAME = new URL(JWKS_URI).pathname;
 
 const validMetadata = {
 	issuer: ISSUER,
@@ -80,7 +81,6 @@ async function signToken(
 describe('OAuth2JwtClaimIdentifier', () => {
 	const logger = mockLogger();
 	const cache = mock<CacheService>();
-	let identifier: OAuth2JwtClaimIdentifier;
 	let keyCtx: SignedTokenContext;
 
 	const validOptions = {
@@ -90,27 +90,40 @@ describe('OAuth2JwtClaimIdentifier', () => {
 		audience: AUDIENCE,
 	};
 
+	const createIdentifier = (routes: Route[]) => {
+		const { outboundHttp, httpRequest } = createFakeOutboundHttp(
+			routes,
+			vi.fn as unknown as Parameters<typeof createFakeOutboundHttp>[1],
+		);
+		const identifier = new OAuth2JwtClaimIdentifier(
+			logger,
+			cache,
+			outboundHttp,
+			mock<SsrfProtectionService>(),
+			mock<SsrfProtectionConfig>({ enabled: true }),
+		);
+		return { identifier, httpRequest };
+	};
+
+	const metadataAndJwksRoutes = (publicJwk: JWK): Route[] => [
+		{ pathname: METADATA_PATHNAME, body: validMetadata },
+		{ pathname: JWKS_PATHNAME, body: { keys: [publicJwk] } },
+	];
+
 	beforeAll(async () => {
 		keyCtx = await createKeyContext();
 	});
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		identifier = new OAuth2JwtClaimIdentifier(logger, cache);
 		cache.get.mockResolvedValue(undefined);
 		cache.set.mockResolvedValue();
 	});
 
-	const mockMetadataAndJwksResponses = () => {
-		mockedAxios.get
-			.mockResolvedValueOnce({ status: 200, data: validMetadata })
-			.mockResolvedValueOnce({ status: 200, data: { keys: [keyCtx.publicJwk] } });
-	};
-
 	describe('Happy Path', () => {
 		test('should resolve subject from verified JWT', async () => {
 			const token = await signToken(keyCtx, { sub: 'avi-subject-1' });
-			mockMetadataAndJwksResponses();
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 
 			const result = await identifier.resolve(
 				{ identity: token, version: 1 as const },
@@ -130,7 +143,9 @@ describe('OAuth2JwtClaimIdentifier', () => {
 			cache.get
 				.mockResolvedValueOnce(undefined) // metadata miss
 				.mockResolvedValueOnce('cached-subject');
-			mockedAxios.get.mockResolvedValueOnce({ status: 200, data: validMetadata });
+			const { identifier, httpRequest } = createIdentifier([
+				{ pathname: METADATA_PATHNAME, body: validMetadata },
+			]);
 
 			const result = await identifier.resolve(
 				{ identity: token, version: 1 as const },
@@ -138,7 +153,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 			);
 
 			expect(result).toBe('cached-subject');
-			expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+			expect(httpRequest).toHaveBeenCalledTimes(1);
 		});
 
 		test('should support custom subject claim (e.g. oid)', async () => {
@@ -146,7 +161,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 				sub: 'opaque-sub',
 				oid: '72a10869-9fb2-4717-bea9-14f326d6a060',
 			});
-			mockMetadataAndJwksResponses();
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 
 			const result = await identifier.resolve(
 				{ identity: token, version: 1 as const },
@@ -158,7 +173,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 
 		test('should isolate cache entries per audience', async () => {
 			const token = await signToken(keyCtx, { sub: 's-shared' });
-			mockMetadataAndJwksResponses();
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 
 			await identifier.resolve({ identity: token, version: 1 as const }, validOptions);
 
@@ -169,34 +184,39 @@ describe('OAuth2JwtClaimIdentifier', () => {
 
 	describe('Validation', () => {
 		test('validateOptions succeeds when metadata has jwks_uri', async () => {
-			mockedAxios.get.mockResolvedValueOnce({ status: 200, data: validMetadata });
+			const { identifier } = createIdentifier([
+				{ pathname: METADATA_PATHNAME, body: validMetadata },
+			]);
 			await expect(identifier.validateOptions(validOptions)).resolves.toBeUndefined();
 		});
 
 		test('validateOptions rejects when audience is missing', async () => {
+			const { identifier } = createIdentifier([]);
 			await expect(
 				identifier.validateOptions({ ...validOptions, audience: undefined }),
 			).rejects.toThrow(IdentifierValidationError);
 		});
 
 		test('validateOptions rejects when audience is empty', async () => {
+			const { identifier } = createIdentifier([]);
 			await expect(
 				identifier.validateOptions({ ...validOptions, audience: '   ' }),
 			).rejects.toThrow(IdentifierValidationError);
 		});
 
 		test('validateOptions rejects when metadata document lacks jwks_uri', async () => {
-			mockedAxios.get.mockResolvedValueOnce({
-				status: 200,
-				data: { issuer: ISSUER },
-			});
+			const { identifier } = createIdentifier([
+				{ pathname: METADATA_PATHNAME, body: { issuer: ISSUER } },
+			]);
 			await expect(identifier.validateOptions(validOptions)).rejects.toThrow(
 				'Invalid OAuth2 metadata format',
 			);
 		});
 
 		test('validateOptions rejects when metadata URL is unreachable', async () => {
-			mockedAxios.get.mockRejectedValue(new Error('connect ECONNREFUSED'));
+			const { identifier } = createIdentifier([
+				{ pathname: METADATA_PATHNAME, networkError: 'ECONNREFUSED' },
+			]);
 			const error = await identifier.validateOptions(validOptions).catch((e) => e);
 			expect(error).toBeInstanceOf(IdentifierValidationError);
 			expect(error.message).toContain('Could not reach metadata URL');
@@ -206,7 +226,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 	describe('Critical Errors', () => {
 		test('rejects an expired token with token_expired reason', async () => {
 			const token = await signToken(keyCtx, { expSecondsFromNow: -10 });
-			mockMetadataAndJwksResponses();
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 
 			await expect(
 				identifier.resolve({ identity: token, version: 1 as const }, validOptions),
@@ -215,7 +235,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 
 		test('rejects a token whose audience does not match the configured audience', async () => {
 			const token = await signToken(keyCtx, { audience: 'some-other-app-id' });
-			mockMetadataAndJwksResponses();
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 
 			await expect(
 				identifier.resolve({ identity: token, version: 1 as const }, validOptions),
@@ -224,7 +244,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 
 		test('rejects a token whose issuer does not match the discovered issuer', async () => {
 			const token = await signToken(keyCtx, { issuer: 'https://attacker.example/v2.0' });
-			mockMetadataAndJwksResponses();
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 
 			await expect(
 				identifier.resolve({ identity: token, version: 1 as const }, validOptions),
@@ -234,9 +254,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 		test('rejects a token signed with a key whose kid is not in the JWKS', async () => {
 			const otherKey = await createKeyContext('rotated-kid');
 			const token = await signToken(otherKey);
-			mockedAxios.get
-				.mockResolvedValueOnce({ status: 200, data: validMetadata })
-				.mockResolvedValueOnce({ status: 200, data: { keys: [keyCtx.publicJwk] } });
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 
 			await expect(
 				identifier.resolve({ identity: token, version: 1 as const }, validOptions),
@@ -246,7 +264,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 		test('rejects a token whose signature was forged with a different key', async () => {
 			const attackerKey = await createKeyContext(keyCtx.publicJwk.kid as string);
 			const token = await signToken(attackerKey);
-			mockMetadataAndJwksResponses();
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 
 			await expect(
 				identifier.resolve({ identity: token, version: 1 as const }, validOptions),
@@ -254,7 +272,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 		});
 
 		test('rejects a malformed JWT', async () => {
-			mockMetadataAndJwksResponses();
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 			await expect(
 				identifier.resolve({ identity: 'not-a-jwt-at-all', version: 1 as const }, validOptions),
 			).rejects.toThrow(/malformed_jwt/);
@@ -262,7 +280,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 
 		test('rejects a verified JWT that is missing the configured subject claim', async () => {
 			const token = await signToken(keyCtx);
-			mockMetadataAndJwksResponses();
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 
 			await expect(
 				identifier.resolve(
@@ -274,9 +292,10 @@ describe('OAuth2JwtClaimIdentifier', () => {
 
 		test('rejects when the JWKS endpoint returns a non-200', async () => {
 			const token = await signToken(keyCtx);
-			mockedAxios.get
-				.mockResolvedValueOnce({ status: 200, data: validMetadata })
-				.mockResolvedValueOnce({ status: 503, data: 'service unavailable' });
+			const { identifier } = createIdentifier([
+				{ pathname: METADATA_PATHNAME, body: validMetadata },
+				{ pathname: JWKS_PATHNAME, status: 503, body: 'service unavailable' },
+			]);
 
 			await expect(
 				identifier.resolve({ identity: token, version: 1 as const }, validOptions),
@@ -285,9 +304,10 @@ describe('OAuth2JwtClaimIdentifier', () => {
 
 		test('rejects when the JWKS document is malformed', async () => {
 			const token = await signToken(keyCtx);
-			mockedAxios.get
-				.mockResolvedValueOnce({ status: 200, data: validMetadata })
-				.mockResolvedValueOnce({ status: 200, data: { not_keys: 'wrong' } });
+			const { identifier } = createIdentifier([
+				{ pathname: METADATA_PATHNAME, body: validMetadata },
+				{ pathname: JWKS_PATHNAME, body: { not_keys: 'wrong' } },
+			]);
 
 			await expect(
 				identifier.resolve({ identity: token, version: 1 as const }, validOptions),
@@ -298,7 +318,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 	describe('TTL Handling', () => {
 		test('caps TTL at MAX_TOKEN_CACHE_TIMEOUT for long-lived tokens', async () => {
 			const token = await signToken(keyCtx, { expSecondsFromNow: 7200 });
-			mockMetadataAndJwksResponses();
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 
 			await identifier.resolve({ identity: token, version: 1 as const }, validOptions);
 
@@ -308,7 +328,7 @@ describe('OAuth2JwtClaimIdentifier', () => {
 
 		test('floors TTL at MIN_TOKEN_CACHE_TIMEOUT for soon-expiring tokens', async () => {
 			const token = await signToken(keyCtx, { expSecondsFromNow: 5 });
-			mockMetadataAndJwksResponses();
+			const { identifier } = createIdentifier(metadataAndJwksRoutes(keyCtx.publicJwk));
 
 			await identifier.resolve({ identity: token, version: 1 as const }, validOptions);
 

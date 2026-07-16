@@ -1754,6 +1754,23 @@ describe('LogStreamingEventRelay', () => {
 				payload: event,
 			});
 		});
+
+		// Fork §11 — fallback audit event
+		it('should log on `dynamic-credential-fallback-used` event', () => {
+			const event: RelayEventMap['dynamic-credential-fallback-used'] = {
+				credentialId: 'cred-monday-1',
+				resolverId: 'resolver-monday',
+				fallbackCredentialId: 'cred-monday-shared',
+				subject: undefined,
+			};
+
+			eventService.emit('dynamic-credential-fallback-used', event);
+
+			expect(eventBus.sendAuditEvent).toHaveBeenCalledWith({
+				eventName: 'n8n.audit.dynamic-credential.fallback-used',
+				payload: event,
+			});
+		});
 	});
 
 	describe('community package events', () => {
@@ -2184,6 +2201,7 @@ describe('LogStreamingEventRelay', () => {
 					projectId: 'project-manual',
 					projectName: 'Manual Project',
 					source: 'user-manual',
+					mode: 'manual',
 				},
 			});
 		});
@@ -2260,6 +2278,7 @@ describe('LogStreamingEventRelay', () => {
 					projectId: 'project-retry',
 					projectName: 'Retry Project',
 					source: 'user-retry',
+					mode: 'retry',
 				},
 			});
 		});
@@ -2285,6 +2304,7 @@ describe('LogStreamingEventRelay', () => {
 					projectId: 'project-webhook',
 					projectName: 'Webhook Project',
 					source: 'webhook',
+					mode: 'webhook',
 				},
 			});
 		});
@@ -2310,6 +2330,7 @@ describe('LogStreamingEventRelay', () => {
 					projectId: 'project-trigger',
 					projectName: 'Trigger Project',
 					source: 'trigger',
+					mode: 'trigger',
 				},
 			});
 		});
@@ -2335,6 +2356,7 @@ describe('LogStreamingEventRelay', () => {
 					projectId: 'project-error',
 					projectName: 'Error Project',
 					source: 'error',
+					mode: 'error',
 				},
 			});
 		});
@@ -2364,6 +2386,7 @@ describe('LogStreamingEventRelay', () => {
 					projectId: 'project-cli',
 					projectName: 'CLI Project',
 					source: 'cli',
+					mode: 'cli',
 				},
 			});
 		});
@@ -2393,6 +2416,7 @@ describe('LogStreamingEventRelay', () => {
 					projectId: 'project-integrated',
 					projectName: 'Integrated Project',
 					source: 'integrated',
+					mode: 'integrated',
 				},
 			});
 		});
@@ -2422,6 +2446,7 @@ describe('LogStreamingEventRelay', () => {
 					projectId: 'project-evaluation',
 					projectName: 'Evaluation Project',
 					source: 'evaluation',
+					mode: 'internal',
 				},
 			});
 		});
@@ -2451,6 +2476,7 @@ describe('LogStreamingEventRelay', () => {
 					projectId: 'project-chat',
 					projectName: 'Chat Project',
 					source: 'chat',
+					mode: 'manual',
 				},
 			});
 		});

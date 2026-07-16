@@ -1,7 +1,12 @@
 import { Logger } from '@n8n/backend-common';
+import {
+	OutboundHttp,
+	SsrfProtectionService,
+	type HttpRequestClient,
+} from '@n8n/backend-network';
+import { SsrfProtectionConfig } from '@n8n/config';
 import { Time } from '@n8n/constants';
 import { Service } from '@n8n/di';
-import axios from 'axios';
 import {
 	createLocalJWKSet,
 	errors as joseErrors,
@@ -9,7 +14,7 @@ import {
 	type JSONWebKeySet,
 	type JWTPayload,
 } from 'jose';
-import type { ICredentialContext } from 'n8n-workflow';
+import type { ICredentialContext, IHttpRequestOptions, IN8nHttpFullResponse } from 'n8n-workflow';
 import { z } from 'zod';
 
 import { CacheService } from '@/services/cache/cache.service';
@@ -70,10 +75,21 @@ const CACHE_PREFIX = 'oauth2-jwt-claim-identifier';
 
 @Service()
 export class OAuth2JwtClaimIdentifier implements ITokenIdentifier {
+	private readonly http: HttpRequestClient;
+
 	constructor(
 		private readonly logger: Logger,
 		private readonly cache: CacheService,
-	) {}
+		outboundHttp: OutboundHttp,
+		ssrfProtectionService: SsrfProtectionService,
+		ssrfProtectionConfig: SsrfProtectionConfig,
+	) {
+		// Both hops need SSRF guarding when enabled: jwks_uri is IdP-controlled.
+		this.http = outboundHttp.requests({
+			ssrf: ssrfProtectionConfig.enabled ? ssrfProtectionService : 'disabled',
+			timeout: JWKS_NETWORK_TIMEOUT_MS,
+		});
+	}
 
 	async validateOptions(identifierOptions: Record<string, unknown>): Promise<void> {
 		const options = this.parseOptions(identifierOptions);
@@ -129,6 +145,14 @@ export class OAuth2JwtClaimIdentifier implements ITokenIdentifier {
 
 	// ------------------------ Private Methods ----------------------- //
 
+	private async requestFull(options: IHttpRequestOptions): Promise<IN8nHttpFullResponse> {
+		return await this.http.request({
+			...options,
+			returnFullResponse: true,
+			ignoreHttpStatusErrors: true,
+		});
+	}
+
 	private parseOptions(options: Record<string, unknown>): OAuth2JwtClaimOptions {
 		try {
 			return OAuth2JwtClaimOptionsSchema.parse(options);
@@ -152,22 +176,23 @@ export class OAuth2JwtClaimIdentifier implements ITokenIdentifier {
 			}
 		}
 
-		const response = await axios.get(options.metadataUri, {
-			validateStatus: () => true,
-			timeout: JWKS_NETWORK_TIMEOUT_MS,
+		const response = await this.requestFull({
+			url: options.metadataUri,
+			method: 'GET',
+			json: true,
 		});
 
-		if (response.status !== 200) {
+		if (response.statusCode !== 200) {
 			this.logger.error(
-				`Failed to fetch OAuth2 metadata from ${options.metadataUri}, status code: ${response.status}`,
+				`Failed to fetch OAuth2 metadata from ${options.metadataUri}, status code: ${response.statusCode}`,
 			);
 			throw new IdentifierValidationError(
-				`Failed to fetch OAuth2 metadata, status code: ${response.status}`,
+				`Failed to fetch OAuth2 metadata, status code: ${response.statusCode}`,
 			);
 		}
 
 		try {
-			const metadata = OAuth2MetadataSchema.parse(response.data);
+			const metadata = OAuth2MetadataSchema.parse(response.body);
 			if (!skipCache) {
 				await this.cache.set(cacheKey, metadata, METADATA_CACHE_TIMEOUT);
 			}
@@ -179,7 +204,7 @@ export class OAuth2JwtClaimIdentifier implements ITokenIdentifier {
 	}
 
 	/**
-	 * Fetches the JWKS document via axios (so corporate proxy env vars like
+	 * Fetches the JWKS document via OutboundHttp (proxy env vars like
 	 * HTTP_PROXY are respected) and caches the raw document. The local key
 	 * set is then rebuilt per call from the cached JSON — cheap, no extra
 	 * I/O, and lets jose pick the right key by `kid` during verification.
@@ -191,23 +216,26 @@ export class OAuth2JwtClaimIdentifier implements ITokenIdentifier {
 			return cached;
 		}
 
-		const response = await axios.get(jwksUri, {
-			validateStatus: () => true,
-			timeout: JWKS_NETWORK_TIMEOUT_MS,
+		const response = await this.requestFull({
+			url: jwksUri,
+			method: 'GET',
+			json: true,
 		});
 
-		if (response.status !== 200) {
-			this.logger.error(`Failed to fetch JWKS from ${jwksUri}, status code: ${response.status}`);
-			throw new IdentifierValidationError(`Failed to fetch JWKS, status code: ${response.status}`);
+		if (response.statusCode !== 200) {
+			this.logger.error(`Failed to fetch JWKS from ${jwksUri}, status code: ${response.statusCode}`);
+			throw new IdentifierValidationError(
+				`Failed to fetch JWKS, status code: ${response.statusCode}`,
+			);
 		}
 
-		const parsed = JwksDocumentSchema.safeParse(response.data);
+		const parsed = JwksDocumentSchema.safeParse(response.body);
 		if (!parsed.success) {
 			this.logger.error('Invalid JWKS document format', { error: parsed.error });
 			throw new IdentifierValidationError('Invalid JWKS document format');
 		}
 
-		const jwks = parsed.data as JSONWebKeySet;
+		const jwks: JSONWebKeySet = parsed.data;
 		await this.cache.set(cacheKey, jwks, METADATA_CACHE_TIMEOUT);
 		return jwks;
 	}
