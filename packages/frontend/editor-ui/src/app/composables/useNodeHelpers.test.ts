@@ -828,6 +828,17 @@ describe('useNodeHelpers()', () => {
 		const MCP_TRIGGER = '@n8n/n8n-nodes-langchain.mcpTrigger';
 		const WEBHOOK_TRIGGER = 'n8n-nodes-base.webhook';
 		const EXECUTE_WORKFLOW_TRIGGER = 'n8n-nodes-base.executeWorkflowTrigger';
+		const triggerWithIdentityHook = (overrides: Partial<INodeUi> = {}): INodeUi =>
+			createTestNode({
+				type: WEBHOOK_TRIGGER,
+				parameters: {
+					executionsHooksVersion: 1,
+					contextEstablishmentHooks: {
+						hooks: [{ hookName: 'HttpHeaderExtractor' }],
+					},
+				},
+				...overrides,
+			});
 
 		const notionNodeType: INodeTypeDescription = {
 			displayName: 'Notion',
@@ -1212,6 +1223,60 @@ describe('useNodeHelpers()', () => {
 
 				expect(result?.credentials?.[NOTION_API]?.[0]).toContain(
 					"End-user credentials aren't supported with the Webhook trigger",
+				);
+			});
+
+			it('does not warn when a webhook trigger has a context-establishment hook (runtime identity)', () => {
+				mockConnectedPrivateCred(true);
+				mockDocumentStore.workflowTriggerNodes = [triggerWithIdentityHook()];
+
+				const { getNodeCredentialIssues } = useNodeHelpers();
+				const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
+
+				expect(result).toBeNull();
+			});
+
+			it('does not warn even when the author has not connected the cred, if the trigger supplies identity at runtime', () => {
+				const cred = makePrivateCred({ connectedByMe: false });
+				const credentialsStore = mockedStore(useCredentialsStore);
+				credentialsStore.getCredentialById = vi.fn().mockReturnValue(cred);
+				credentialsStore.getCredentialsByType = vi.fn().mockReturnValue([cred]);
+				credentialsStore.getCredentialTypeByName = vi
+					.fn()
+					.mockReturnValue({ name: NOTION_API, displayName: 'Notion API' });
+				mockDocumentStore.workflowTriggerNodes = [triggerWithIdentityHook()];
+
+				const { getNodeCredentialIssues } = useNodeHelpers();
+				const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
+
+				expect(result).toBeNull();
+			});
+
+			it('does not warn in a multi-trigger workflow as long as one trigger supplies runtime identity', () => {
+				mockConnectedPrivateCred(true);
+				mockDocumentStore.workflowTriggerNodes = [
+					triggerWithIdentityHook(),
+					buildTriggerNode(WEBHOOK_TRIGGER),
+				];
+
+				const { getNodeCredentialIssues } = useNodeHelpers();
+				const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
+
+				expect(result).toBeNull();
+			});
+
+			it('ignores a disabled identity-providing trigger', () => {
+				mockConnectedPrivateCred(true);
+				mockDocumentStore.workflowTriggerNodes = [
+					triggerWithIdentityHook({ disabled: true }),
+					buildTriggerNode(WEBHOOK_TRIGGER),
+				];
+
+				const { getNodeCredentialIssues } = useNodeHelpers();
+				const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
+
+				expect(result?.credentials?.[NOTION_API]?.[0]).toContain(
+					'Private credentials require a trigger that establishes who is running the workflow',
 				);
 			});
 

@@ -401,6 +401,14 @@ describe('CredentialCard', () => {
 			expect(queryByTestId('credential-card-connect')).not.toBeInTheDocument();
 		});
 
+		it('should hide the Connect button when the user lacks read and update permission', () => {
+			const { queryByTestId } = renderComponent({
+				props: { data: privateUnconnectedData({ scopes: [] }) },
+			});
+
+			expect(queryByTestId('credential-card-connect')).not.toBeInTheDocument();
+		});
+
 		it('should show the Connect button for a user with only the connect permission', () => {
 			const { getByTestId } = renderComponent({
 				props: {

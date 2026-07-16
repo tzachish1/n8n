@@ -873,6 +873,16 @@ export class OidcService {
 
 		const accessToken = graphTokens.access_token;
 		const refreshToken = graphTokens.refresh_token;
+		// Original n8n-audience access token from the OIDC tokenset. Used as the
+		// identity argument for resolvers whose validation method requires a
+		// token issued for the n8n App Registration (audience = api://<n8n-app>),
+		// not the Graph-audience OBO token. Concretely: `oauth2-jwt-claim`
+		// resolvers verify the inbound bearer locally against the n8n-app JWKS,
+		// so feeding them `graphTokens.access_token` (Graph-audience) causes
+		// `JWSSignatureVerificationFailed` (`bad_signature`) and the seed never
+		// lands. This mirrors the Phase-2 webhook seeder fix that switched from
+		// the OBO token to the inbound user bearer for the same reason.
+		const inboundAccessToken = tokens.access_token;
 
 		// Resolve the set of (credential, resolverId) pairs to seed. Two sources,
 		// merged with credential-level binding taking precedence (mirrors the
@@ -922,12 +932,63 @@ export class OidcService {
 			expires_in: graphTokens.expires_in ?? 3599,
 		};
 
+		// Per-resolver cache of `validation` (e.g. `oauth2-jwt-claim` /
+		// `oauth2-userinfo` / `oauth2-introspection`) so we only decrypt each
+		// resolver's config once per OIDC login. Loaded lazily by the picker
+		// below; misses (resolver row gone, decrypt error, malformed config)
+		// degrade silently to the OBO Graph token, which preserves the prior
+		// behavior for non-jwt-claim resolvers.
+		const resolverValidationCache = new Map<string, string | undefined>();
+		const getResolverValidation = async (
+			resolverId: string,
+		): Promise<string | undefined> => {
+			if (resolverValidationCache.has(resolverId)) {
+				return resolverValidationCache.get(resolverId);
+			}
+			let validation: string | undefined;
+			try {
+				const entity = await this.resolverRepository.findOneBy({ id: resolverId });
+				if (entity) {
+					const decrypted = await this.cipher.decryptV2(entity.config);
+					const parsed = jsonParse<Record<string, unknown>>(decrypted);
+					if (typeof parsed.validation === 'string') {
+						validation = parsed.validation;
+					}
+				}
+			} catch (error) {
+				this.logger.warn(
+					'OIDC Graph auto-seed: failed to load resolver config for token-audience selection; ' +
+						'falling back to OBO Graph token',
+					{
+						resolverId,
+						error: error instanceof Error ? error.message : String(error),
+					},
+				);
+			}
+			resolverValidationCache.set(resolverId, validation);
+			return validation;
+		};
+
 		for (const { credential, resolverId } of candidates) {
 			try {
+				// Resolvers that verify the inbound bearer locally as a JWT
+				// (`oauth2-jwt-claim`) need a token whose `aud` matches the
+				// configured n8n-app audience. Feeding them the OBO Graph token
+				// fails with `bad_signature` because n8n's JWKS does not sign
+				// Graph-audience tokens. For `oauth2-userinfo` / introspection
+				// resolvers the OBO token is what their endpoints accept, so we
+				// keep using it. The picker is purely about the resolver-side
+				// identity check; the credential body still stores `accessToken`
+				// (the Graph token) as `oauthTokenData.access_token` so workflow
+				// nodes hit Graph-protected APIs successfully.
+				const validation = await getResolverValidation(resolverId);
+				const authHeader =
+					validation === 'oauth2-jwt-claim' ? inboundAccessToken : accessToken;
+
 				await this.oauthService.saveDynamicCredential(
 					credential,
 					{ oauthTokenData } as ICredentialDataDecryptedObject,
-					accessToken,
+					authHeader,
 					resolverId,
 					{ source: 'oidc-self-seed', enrolledAt: Date.now(), userId: user.id },
 				);

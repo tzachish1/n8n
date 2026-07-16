@@ -1,5 +1,5 @@
 import type { Logger } from '@n8n/backend-common';
-import type { AuthenticatedRequest } from '@n8n/db';
+import type { AuthenticatedRequest, AuthIdentityRepository } from '@n8n/db';
 import { CredentialResolverDataNotFoundError, type ICredentialResolver } from '@n8n/decorators';
 import type { Response } from 'express';
 import type { Cipher } from 'n8n-core';
@@ -18,7 +18,9 @@ import type { DynamicCredentialsProxy } from '@/credentials/dynamic-credentials-
 import type { LoadNodesAndCredentials } from '@/load-nodes-and-credentials';
 import { StaticAuthService } from '@/services/static-auth-service';
 
-import { SYSTEM_RESOLVER_TYPE } from '../../constants';
+import type { CacheService } from '@/services/cache/cache.service';
+
+import { SYSTEM_RESOLVER_ID, SYSTEM_RESOLVER_TYPE } from '../../constants';
 import { IdentifierValidationError } from '../../credential-resolvers/identifiers/identifier-interface';
 import type { DynamicCredentialResolver } from '../../database/entities/credential-resolver';
 import type { DynamicCredentialResolverRepository } from '../../database/repositories/credential-resolver.repository';
@@ -28,9 +30,9 @@ import { CredentialResolverNotConfiguredError } from '../../errors/credential-re
 import { CredentialResolverNotFoundError } from '../../errors/credential-resolver-not-found.error';
 import { MissingExecutionContextError } from '../../errors/missing-execution-context.error';
 import type { DynamicCredentialResolverRegistry } from '../credential-resolver-registry.service';
+import type { DynamicCredentialUserEntryStorage } from '../../credential-resolvers/storage/dynamic-credential-user-entry-storage';
 import { DynamicCredentialService } from '../dynamic-credential.service';
 import type { ResolverConfigExpressionService } from '../resolver-config-expression.service';
-
 describe('DynamicCredentialService', () => {
 	let service: DynamicCredentialService;
 	let mockResolverRegistry: Mocked<DynamicCredentialResolverRegistry>;
@@ -41,6 +43,9 @@ describe('DynamicCredentialService', () => {
 	let mockExpressionService: Mocked<ResolverConfigExpressionService>;
 	let mockDynamicCredentialConfig: Mocked<DynamicCredentialsConfig>;
 	let mockDynamicCredentialsProxy: Mocked<DynamicCredentialsProxy>;
+	let mockCacheService: Mocked<CacheService>;
+	let mockAuthIdentityRepository: Mocked<AuthIdentityRepository>;
+	let mockUserEntryStorage: Mocked<DynamicCredentialUserEntryStorage>;
 
 	beforeEach(() => {
 		mockDynamicCredentialConfig = {
@@ -52,6 +57,23 @@ describe('DynamicCredentialService', () => {
 			// pass through the workflow override if any, otherwise null.
 			getEffectiveResolverId: vi.fn((settings) => settings?.credentialResolverId ?? null),
 		} as unknown as Mocked<DynamicCredentialsProxy>;
+
+		// Default cache mock: behaves like an always-empty cache so tests
+		// exercise the underlying DB/decrypt path by default. Tests that
+		// specifically validate cache behavior override these mocks.
+		mockCacheService = {
+			get: vi.fn().mockResolvedValue(undefined),
+			set: vi.fn().mockResolvedValue(undefined),
+			delete: vi.fn().mockResolvedValue(undefined),
+		} as unknown as Mocked<CacheService>;
+
+		mockAuthIdentityRepository = {
+			findOne: vi.fn().mockResolvedValue(null),
+		} as unknown as Mocked<AuthIdentityRepository>;
+
+		mockUserEntryStorage = {
+			getCredentialData: vi.fn().mockResolvedValue(null),
+		} as unknown as Mocked<DynamicCredentialUserEntryStorage>;
 	});
 
 	const createMockCredentialsMetadata = (overrides: Partial<CredentialResolveMetadata> = {}) =>
@@ -225,6 +247,9 @@ describe('DynamicCredentialService', () => {
 			mockLogger,
 			mockExpressionService,
 			mockDynamicCredentialsProxy,
+			mockCacheService,
+			mockAuthIdentityRepository,
+			mockUserEntryStorage,
 		);
 	});
 
@@ -285,6 +310,29 @@ describe('DynamicCredentialService', () => {
 						undefined,
 					),
 				).rejects.toThrow(CredentialResolverNotConfiguredError);
+			});
+
+			it('uses the system resolver for manual-execution even when the credential has a custom resolver', async () => {
+				const credentialsEntity = createMockCredentialsMetadata({
+					resolverId: 'custom-monday-resolver',
+				});
+				const resolverEntity = createMockResolverEntity({
+					id: 'system-n8n',
+					type: SYSTEM_RESOLVER_TYPE,
+				});
+				const mockResolver = createMockResolver();
+				const executionContext = createMockExecutionContext('encrypted-credentials');
+				const credentialContext = createMockCredentialContext({ source: 'manual-execution' });
+
+				mockResolverRepository.findOneBy.mockResolvedValue(resolverEntity);
+				mockResolverRegistry.getResolverByTypename.mockReturnValue(mockResolver);
+				arrangeDecryptMocks(credentialContext, { prefix: 'test' });
+
+				await service.resolveIfNeeded(credentialsEntity, staticData, executionContext, {});
+
+				expect(mockResolverRepository.findOneBy).toHaveBeenCalledWith({
+					id: 'system-n8n',
+				});
 			});
 
 			it('falls back to the system resolver from the proxy when no override is set', async () => {
@@ -1269,6 +1317,72 @@ describe('DynamicCredentialService', () => {
 					}),
 				);
 			});
+
+			it('falls back to Connect user-entry storage when custom resolver misses and Entra sub maps to a connected user', async () => {
+				const entraSub = '87A_IWmwWVAWZmxDQEkaGFWojk93TPC8vA4wrgWt3U8';
+				const n8nUserId = 'e653dfd5-b065-4808-b0e5-9cb07161b10f';
+				const jwtPayload = Buffer.from(JSON.stringify({ sub: entraSub })).toString('base64url');
+				const entraJwt = `header.${jwtPayload}.sig`;
+
+				const credentialsEntity = createMockCredentialsMetadata({
+					resolverId: 'custom-monday-resolver',
+				});
+				const resolverEntity = createMockResolverEntity({
+					id: 'custom-monday-resolver',
+				});
+				const resolver = createMockResolver(false, true);
+				const executionContext = createMockExecutionContext('encrypted-credentials');
+				const credentialContext = createMockCredentialContext({ source: 'webhook' });
+				credentialContext.identity = entraJwt;
+
+				const connectData = { oauthTokenData: { access_token: 'monday-token-from-connect' } };
+
+				mockResolverRepository.findOneBy.mockResolvedValue(resolverEntity);
+				mockResolverRegistry.getResolverByTypename.mockReturnValue(resolver);
+				mockCipher.decryptV2.mockImplementation(async (value: string) => {
+					if (value === 'encrypted-credentials') return JSON.stringify(credentialContext);
+					if (value === 'encrypted-resolver-config') return '{}';
+					if (value === 'encrypted-connect-entry') return JSON.stringify(connectData);
+					return '{}';
+				});
+
+				mockAuthIdentityRepository.findOne.mockResolvedValue({
+					userId: n8nUserId,
+					providerId: entraSub,
+					providerType: 'oidc',
+				} as never);
+
+				mockUserEntryStorage.getCredentialData.mockResolvedValue('encrypted-connect-entry');
+
+				const result = await service.resolveIfNeeded(
+					credentialsEntity,
+					staticData,
+					executionContext,
+					undefined,
+				);
+
+				expect(result.isDynamic).toBe(true);
+				expect(result.data).toMatchObject(connectData);
+				expect(resolver.getSecret).toHaveBeenCalledTimes(1);
+				expect(mockAuthIdentityRepository.findOne).toHaveBeenCalledWith({
+					where: { providerId: entraSub, providerType: 'oidc' },
+				});
+				expect(mockUserEntryStorage.getCredentialData).toHaveBeenCalledWith(
+					'cred-123',
+					n8nUserId,
+					SYSTEM_RESOLVER_ID,
+					{},
+				);
+				expect(mockLogger.debug).toHaveBeenCalledWith(
+					'Resolved credential via Connect user-entry fallback',
+					expect.objectContaining({
+						credentialId: 'cred-123',
+						userId: n8nUserId,
+						subject: entraSub,
+						primaryResolverId: 'custom-monday-resolver',
+					}),
+				);
+			});
 		});
 
 		describe('getDynamicCredentialsEndpointsMiddleware', () => {
@@ -1283,6 +1397,9 @@ describe('DynamicCredentialService', () => {
 					mockLogger,
 					mockExpressionService,
 					mockDynamicCredentialsProxy,
+					mockCacheService,
+					mockAuthIdentityRepository,
+					mockUserEntryStorage,
 				);
 				const middleware = service.getDynamicCredentialsEndpointsMiddleware();
 				const mockReq = {
@@ -1315,6 +1432,9 @@ describe('DynamicCredentialService', () => {
 					mockLogger,
 					mockExpressionService,
 					mockDynamicCredentialsProxy,
+					mockCacheService,
+					mockAuthIdentityRepository,
+					mockUserEntryStorage,
 				);
 				service.getDynamicCredentialsEndpointsMiddleware();
 				expect(getStaticAuthMiddlewareSpy).toHaveBeenCalledWith('test-token', 'x-authorization');
@@ -1333,6 +1453,9 @@ describe('DynamicCredentialService', () => {
 						mockLogger,
 						mockExpressionService,
 						mockDynamicCredentialsProxy,
+						mockCacheService,
+						mockAuthIdentityRepository,
+						mockUserEntryStorage,
 					);
 
 					const middleware = service.getDynamicCredentialsEndpointsMiddleware();
@@ -1369,6 +1492,9 @@ describe('DynamicCredentialService', () => {
 						mockLogger,
 						mockExpressionService,
 						mockDynamicCredentialsProxy,
+						mockCacheService,
+						mockAuthIdentityRepository,
+						mockUserEntryStorage,
 					);
 
 					const middleware = service.getDynamicCredentialsEndpointsMiddleware();

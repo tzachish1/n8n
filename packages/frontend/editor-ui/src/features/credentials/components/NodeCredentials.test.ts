@@ -2053,7 +2053,7 @@ describe('NodeCredentials', () => {
 			expect(screen.getByTestId('node-credential-private-connect')).toBeEnabled();
 		});
 
-		it('disables the Connect button when the user lacks connect permission', async () => {
+		it('shows the Connect link for read-only sharees on resolvable credentials', async () => {
 			credentialsStore.state.credentials = {
 				'private-cred-id': {
 					...privateCredential,
@@ -2063,7 +2063,8 @@ describe('NodeCredentials', () => {
 			};
 			renderComponent({ props: { node: notionNode, overrideCredType: 'openAiApi' } });
 
-			expect(screen.getByTestId('node-credential-private-connect')).toBeDisabled();
+			expect(screen.getByText("Your account isn't connected yet.")).toBeInTheDocument();
+			expect(screen.getByTestId('node-credential-private-connect')).toBeInTheDocument();
 		});
 
 		it('disables the Connect button in readonly (execution view) mode', async () => {

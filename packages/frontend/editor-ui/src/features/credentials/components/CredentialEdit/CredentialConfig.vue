@@ -46,6 +46,7 @@ import {
 	N8nText,
 } from '@n8n/design-system';
 import CredentialTypeSelector from './CredentialTypeSelector.vue';
+import { canConnectResolvableCredential } from '../../credential-permissions.utils';
 import { useQuickConnect } from '../../quickConnect/composables/useQuickConnect';
 import QuickConnectButton from '../../quickConnect/components/QuickConnectButton.vue';
 import QuickConnectBanner from '../../quickConnect/components/QuickConnectBanner.vue';
@@ -208,10 +209,19 @@ const showOAuthSuccessBanner = computed(() => {
 	);
 });
 
+const canConnectOwnOAuth = computed(() =>
+	canConnectResolvableCredential(props.credentialPermissions, props.isResolvable),
+);
+
+const oauthConnectReady = computed(
+	() => props.requiredPropertiesFilled || canConnectOwnOAuth.value,
+);
+
 const showOAuthNotConnectedBanner = computed(() => {
 	return (
 		props.isOAuthType &&
-		props.requiredPropertiesFilled &&
+		props.isResolvable &&
+		oauthConnectReady.value &&
 		!props.isOAuthConnected &&
 		!props.authError
 	);
@@ -627,6 +637,16 @@ watch(showOAuthSuccessBanner, (newValue, oldValue) => {
 					:documentation-url="documentationUrl"
 					:show-validation-warnings="showValidationWarning"
 					@update="onDataChange"
+				/>
+
+				<QuickConnectButton
+					v-if="isOAuthType && !isOAuthConnected && (canWrite || canConnectOwnOAuth)"
+					:service-name="serviceName"
+					:credential-type-name="credentialType.name"
+					:disabled="!oauthConnectReady"
+					:disabled-tooltip="i18n.baseText('credentialEdit.credentialConfig.oauthDisabledTooltip')"
+					data-test-id="quick-connect-button"
+					@click="$emit('oauth')"
 				/>
 
 				<N8nText v-if="isMissingCredentials" color="text-base" size="medium">

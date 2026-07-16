@@ -575,7 +575,9 @@ export class WorkflowRunner {
 			restartExecutionId,
 			projectId: data.projectId,
 			projectName: data.projectName,
-			// Carry the manual-execution identity for private credential resolution on the worker.
+			// Forward the editor-built credential context to the worker so manual
+			// runs that target dynamic (`isResolvable=true`) credentials can
+			// resolve user-scoped tokens via the system n8n resolver.
 			encryptedRunnerIdentity: data.encryptedRunnerIdentity,
 			// MCP-specific fields for queue mode support
 			isMcpExecution: data.isMcpExecution,

@@ -30,6 +30,7 @@ import { useTelemetry } from '@/app/composables/useTelemetry';
 import { ChatHubToolContextKey, CREDENTIAL_ONLY_NODE_PREFIX } from '@/app/constants';
 import { ndvEventBus } from '@/features/ndv/shared/ndv.eventBus';
 import { useCredentialsStore } from '../credentials.store';
+import { canConnectResolvableCredential } from '../credential-permissions.utils';
 import { useQuickConnect } from '../quickConnect/composables/useQuickConnect';
 import { useCredentialOAuth } from '../composables/useCredentialOAuth';
 import QuickConnectButton from '../quickConnect/components/QuickConnectButton.vue';
@@ -216,7 +217,11 @@ function isPrivateConnected(credentialType: string): boolean {
 
 function canEditPrivateCredential(credentialType: string): boolean {
 	const credential = getSelectedPrivateCredential(credentialType);
-	return getResourcePermissions(credential?.scopes).credential.update === true;
+	if (!credential) return false;
+	return canConnectResolvableCredential(
+		getResourcePermissions(credential.scopes).credential,
+		credential.isResolvable,
+	);
 }
 
 function canConnectPrivateCredential(credentialType: string): boolean {

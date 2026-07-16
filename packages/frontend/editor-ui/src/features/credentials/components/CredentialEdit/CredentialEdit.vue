@@ -61,6 +61,7 @@ import {
 import { usePrivateCredentials } from '@/features/resolvers/composables/usePrivateCredentials';
 import PrivateCredentialIcon from '@/features/resolvers/components/PrivateCredentialIcon.vue';
 import TypeToConfirmDialog from './TypeToConfirmDialog.vue';
+import { canConnectResolvableCredential } from '../../credential-permissions.utils';
 import { useQuickConnect } from '../../quickConnect/composables/useQuickConnect';
 import { useCredentialForm } from '../../composables/useCredentialForm';
 import type { CredentialModeOption } from './CredentialModeSelector.vue';
@@ -260,6 +261,10 @@ const appendToBody = computed<boolean>(() => {
 	return isCredentialModalState(modalState) && modalState.appendToBody === true;
 });
 
+const canConnectOwnOAuth = computed(() =>
+	canConnectResolvableCredential(credentialPermissions.value, isResolvable.value),
+);
+
 const sidebarItems = computed(() => {
 	const menuItems: IMenuItem[] = [
 		{
@@ -384,6 +389,16 @@ onMounted(async () => {
 					// sharees can't see properties, so this check would always fail for them
 					// if the credential contains required fields.
 					showValidationWarning.value = true;
+				} else if (
+					canConnectOwnOAuth.value &&
+					!credentialPermissions.value.update &&
+					isOAuthType.value
+				) {
+					// Read-only sharee on a resolvable OAuth credential: connection settings
+					// stay server-side; skip validation/test and surface Connect only.
+					authError.value = '';
+					testedSuccessfully.value = false;
+					showValidationWarning.value = false;
 				} else {
 					await retestCredential();
 				}
@@ -978,13 +993,22 @@ async function oAuthCredentialAuthorize() {
 
 	credentialsStore.pendingOAuthRefresh = true;
 
-	// Editors persist any blueprint changes before connecting. Connect-only users
-	// (e.g. on a private credential they can't edit) have nothing to save, so
-	// connecting through saveCredential would be a no-op that returns null and
-	// aborts the flow — connect to the stored credential directly instead.
-	const canEditBlueprint = credentialPermissions.value.update || credentialPermissions.value.create;
-	const credential = canEditBlueprint ? await saveCredential() : currentCredential.value;
+	const canAuthorizeWithoutSave =
+		canConnectOwnOAuth.value && !credentialPermissions.value.update && !!credentialId.value;
+
+	let credential: ICredentialsResponse | null = null;
+	if (canAuthorizeWithoutSave) {
+		credential =
+			currentCredential.value ?? credentialsStore.getCredentialById(credentialId.value) ?? null;
+		authError.value = '';
+		showValidationWarning.value = false;
+	} else {
+		const canEditBlueprint =
+			credentialPermissions.value.update || credentialPermissions.value.create;
+		credential = canEditBlueprint ? await saveCredential() : currentCredential.value;
+	}
 	if (!credential) {
+		credentialsStore.pendingOAuthRefresh = false;
 		return;
 	}
 

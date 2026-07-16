@@ -1725,6 +1725,23 @@ describe('LogStreamingEventRelay', () => {
 				payload: event,
 			});
 		});
+
+		// Fork §11 — fallback audit event
+		it('should log on `dynamic-credential-fallback-used` event', () => {
+			const event: RelayEventMap['dynamic-credential-fallback-used'] = {
+				credentialId: 'cred-monday-1',
+				resolverId: 'resolver-monday',
+				fallbackCredentialId: 'cred-monday-shared',
+				subject: undefined,
+			};
+
+			eventService.emit('dynamic-credential-fallback-used', event);
+
+			expect(eventBus.sendAuditEvent).toHaveBeenCalledWith({
+				eventName: 'n8n.audit.dynamic-credential.fallback-used',
+				payload: event,
+			});
+		});
 	});
 
 	describe('community package events', () => {

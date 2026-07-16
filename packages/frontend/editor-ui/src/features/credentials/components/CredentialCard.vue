@@ -19,6 +19,7 @@ import { ResourceType } from '@/features/collaboration/projects/projects.utils';
 import type { CredentialsResource } from '@/Interface';
 import { usePrivateCredentials } from '@/features/resolvers/composables/usePrivateCredentials';
 import PrivateCredentialIcon from '@/features/resolvers/components/PrivateCredentialIcon.vue';
+import { canConnectResolvableCredential } from '../credential-permissions.utils';
 import { useCredentialOAuth } from '../composables/useCredentialOAuth';
 
 import {
@@ -76,7 +77,7 @@ const isPrivateUnconnected = computed(
 		isPrivateCredentialsEnabled.value &&
 		props.data.isResolvable === true &&
 		props.data.connectedByMe === false &&
-		credentialPermissions.value.connect === true,
+		canConnectResolvableCredential(credentialPermissions.value, props.data.isResolvable),
 );
 
 const actions = computed(() => {
