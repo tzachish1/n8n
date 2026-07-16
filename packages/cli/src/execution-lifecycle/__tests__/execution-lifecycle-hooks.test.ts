@@ -560,11 +560,70 @@ describe('Execution Lifecycle Hooks', () => {
 			expect(handlers.nodeExecuteBefore).toHaveLength(2);
 			expect(handlers.nodeExecuteAfter).toHaveLength(2);
 			expect(handlers.workflowExecuteBefore).toHaveLength(3);
-			expect(handlers.workflowExecuteAfter).toHaveLength(5);
+			// Six handlers: finalize-status, stamp-manual-userId, save, push, save-progress, external-hooks.
+			// `stamp-manual-userId` only registers when mode is manual and a userId is present;
+			// the createHooks() factory satisfies both, so it's counted here.
+			expect(handlers.workflowExecuteAfter).toHaveLength(6);
 			expect(handlers.workflowExecuteResume).toHaveLength(0);
 			expect(handlers.nodeFetchedData).toHaveLength(1);
 			expect(handlers.sendResponse).toHaveLength(0);
 			expect(handlers.sendChunk).toHaveLength(0);
+		});
+
+		describe('manual user stamping', () => {
+			// The redaction service grants the triggering user reveal access for
+			// their own manual run by matching `execution.data.manualData.userId`
+			// to the requester. The lifecycle hook that lands the userId on the
+			// persisted IRunExecutionData is the only thing closing the loop on
+			// the regular-main path (single-process / non-queue runs), so these
+			// tests pin the contract.
+
+			const buildRunData = (manualData?: IRun['data']['manualData']): IRun =>
+				({
+					status: 'success',
+					finished: true,
+					waitTill: undefined,
+					storedAt: 'db',
+					data: { resultData: { runData: {} }, manualData },
+				}) as unknown as IRun;
+
+			it('stamps userId on fullRunData.data.manualData for manual runs', async () => {
+				const fullRunData = buildRunData();
+
+				await lifecycleHooks.runHook('workflowExecuteAfter', [fullRunData, {}]);
+
+				expect(fullRunData.data.manualData?.userId).toBe(userId);
+			});
+
+			it('preserves any pre-existing manualData fields when stamping the userId', async () => {
+				const fullRunData = buildRunData({
+					triggerToStartFrom: { name: 'Webhook' },
+				} as IRun['data']['manualData']);
+
+				await lifecycleHooks.runHook('workflowExecuteAfter', [fullRunData, {}]);
+
+				expect(fullRunData.data.manualData?.userId).toBe(userId);
+				expect(
+					(fullRunData.data.manualData as { triggerToStartFrom?: { name: string } })
+						.triggerToStartFrom?.name,
+				).toBe('Webhook');
+			});
+
+			it('does not register the stamp hook when the execution mode is not manual', () => {
+				const productionHooks = createHooks('trigger');
+
+				// Six handlers minus the stamp-manual-userId hook → five.
+				expect(productionHooks.handlers.workflowExecuteAfter).toHaveLength(5);
+			});
+
+			it('does not register the stamp hook when userId is missing', () => {
+				const noUserHooks = getLifecycleHooksForRegularMain(
+					{ executionMode: 'manual', workflowData, pushRef, retryOf, userId: undefined },
+					executionId,
+				);
+
+				expect(noUserHooks.handlers.workflowExecuteAfter).toHaveLength(5);
+			});
 		});
 
 		describe('nodeExecuteBefore', () => {
@@ -1281,7 +1340,11 @@ describe('Execution Lifecycle Hooks', () => {
 			expect(handlers.nodeExecuteBefore).toHaveLength(0);
 			expect(handlers.nodeExecuteAfter).toHaveLength(0);
 			expect(handlers.workflowExecuteBefore).toHaveLength(2);
-			expect(handlers.workflowExecuteAfter).toHaveLength(4);
+			// Original four (workflow-events, save-progress, finalize-status,
+			// the inline metadata/persist handler) plus the manual-userId stamp
+			// added before save so the redaction service can identify the
+			// triggering user on the scaling-main path.
+			expect(handlers.workflowExecuteAfter).toHaveLength(5);
 			expect(handlers.workflowExecuteResume).toHaveLength(0);
 			expect(handlers.nodeFetchedData).toHaveLength(0);
 			expect(handlers.sendResponse).toHaveLength(0);

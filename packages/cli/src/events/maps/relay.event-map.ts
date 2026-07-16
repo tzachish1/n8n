@@ -220,7 +220,6 @@ export type RelayEventMap = {
 			| 'integrated'
 			| 'evaluation'
 			| 'chat';
-		projectId?: string;
 	};
 
 	'workflow-version-updated': {
@@ -412,6 +411,21 @@ export type RelayEventMap = {
 			| 'lazy_seed_token_issuer_mismatch'
 			| 'lazy_seed_negative_cache_hit'
 			| 'lazy_seed_user_not_provisioned';
+	};
+
+	/**
+	 * Fork §11 — emitted when the OAuth credential resolver returns data from
+	 * the configured fallback credential because the per-user lookup missed.
+	 * Lets operators answer "which workflows are running on the shared
+	 * service account vs per-user tokens" without reading workflow source.
+	 * Carries no token material; `subject` is the resolved identifier (may
+	 * be undefined when the identifier itself failed before lookup).
+	 */
+	'dynamic-credential-fallback-used': {
+		credentialId: string;
+		resolverId: string;
+		fallbackCredentialId: string;
+		subject?: string;
 	};
 
 	// #endregion

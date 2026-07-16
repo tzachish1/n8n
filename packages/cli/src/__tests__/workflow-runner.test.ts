@@ -501,10 +501,12 @@ describe('enqueueExecution', () => {
 		const activeExecutions = Container.get(ActiveExecutions);
 		vi.spyOn(activeExecutions, 'attachWorkflowExecution').mockReturnValue();
 		vi.spyOn(runner, 'processError').mockResolvedValue();
+
+		const encryptedRunnerIdentity = 'encrypted-identity-blob';
 		const data = mock<IWorkflowExecutionDataProcess>({
 			workflowData: { nodes: [], staticData: {} },
 			executionData: undefined,
-			encryptedRunnerIdentity: 'encrypted-identity-blob',
+			encryptedRunnerIdentity,
 		});
 		const error = new Error('stop for test purposes');
 
@@ -517,7 +519,9 @@ describe('enqueueExecution', () => {
 
 		expect(addJob).toHaveBeenCalledWith(
 			expect.objectContaining({
-				encryptedRunnerIdentity: 'encrypted-identity-blob',
+				workflowId: 'workflow-xyz',
+				executionId: '1',
+				encryptedRunnerIdentity,
 			}),
 			expect.any(Object),
 		);

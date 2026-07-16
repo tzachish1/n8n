@@ -25,7 +25,10 @@ export type JobData = {
 	projectId?: string;
 	projectName?: string;
 
-	/** Manual-execution identity, so offloaded manual runs resolve private credentials on the worker. */
+	/**
+	 * Encrypted credential context for editor-triggered manual runs in queue mode.
+	 * Enables dynamic credential resolution on workers via `establishExecutionContext`.
+	 */
 	encryptedRunnerIdentity?: string;
 
 	// MCP-specific fields for queue mode support

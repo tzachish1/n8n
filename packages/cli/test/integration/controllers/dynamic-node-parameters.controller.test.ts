@@ -8,8 +8,8 @@ import type {
 } from 'n8n-workflow';
 import { mock } from 'vitest-mock-extended';
 
+import * as EditorExecutionContext from '@/credentials/editor-execution-context';
 import { DynamicNodeParametersService } from '@/services/dynamic-node-parameters.service';
-import * as AdditionalData from '@/workflow-execute-additional-data';
 
 import { saveCredential } from '../shared/db/credentials';
 import { createMember, createOwner } from '../shared/db/users';
@@ -29,7 +29,7 @@ describe('DynamicNodeParametersController', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.spyOn(AdditionalData, 'getBase').mockResolvedValue(additionalData);
+		vi.spyOn(EditorExecutionContext, 'getEditorAdditionalData').mockResolvedValue(additionalData);
 	});
 
 	afterEach(() => {

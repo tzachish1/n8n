@@ -172,7 +172,8 @@ export class JobProcessor {
 		additionalData.streamingEnabled = job.data.streamingEnabled;
 		additionalData.restartExecutionId = job.data.restartExecutionId;
 		additionalData.evaluationRunId = execution.data.manualData?.evaluationRunId;
-		// Rehydrate the manual-execution identity for private credential resolution.
+		// Re-attach the editor-built credential context captured on the main process
+		// so the worker can rebuild runtime credential context for manual runs.
 		additionalData.encryptedRunnerIdentity = job.data.encryptedRunnerIdentity;
 
 		const { pushRef } = job.data;
