@@ -14,6 +14,7 @@ import type {
 	NodeConnectionType,
 	IRunData,
 	WorkflowExpression,
+	IExecutionContext,
 } from 'n8n-workflow';
 import {
 	UnexpectedError,
@@ -174,6 +175,27 @@ describe('SupplyDataContext', () => {
 			);
 
 			expect(credentials).toEqual({ secret: 'token' });
+		});
+
+		it('should use additionalData.executionContext as fallback when runtimeData is absent', async () => {
+			nodeTypes.getByNameAndVersion.mockReturnValue(nodeType);
+			credentialsHelper.getDecrypted.mockResolvedValue({ secret: 'dynamic-token' });
+			credentialsHelper.isCredentialUsableByNode.mockReturnValue(true);
+
+			const executionContext: IExecutionContext = {
+				version: 1,
+				establishedAt: Date.now(),
+				source: 'manual',
+				credentials: 'encrypted-credential-data',
+			};
+
+			runExecutionData.executionData = undefined;
+			additionalData.executionContext = executionContext;
+
+			await supplyDataContext.getCredentials(testCredentialType, 0);
+
+			expect(additionalData.executionContext).toEqual(executionContext);
+			expect(credentialsHelper.getDecrypted).toHaveBeenCalled();
 		});
 	});
 

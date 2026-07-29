@@ -59,6 +59,7 @@ describe('ExecutionRedactionService', () => {
 			withRuntimeData?: boolean;
 			withDynamicCredentials?: boolean;
 			executedByUserId?: string | null;
+			manualUserId?: string | null;
 		} = {},
 	): RedactableExecution => {
 		const {
@@ -70,6 +71,7 @@ describe('ExecutionRedactionService', () => {
 			withRuntimeData = true,
 			withDynamicCredentials = false,
 			executedByUserId = null,
+			manualUserId = null,
 		} = overrides;
 
 		const executionData: IRunExecutionData['executionData'] = {
@@ -127,6 +129,7 @@ describe('ExecutionRedactionService', () => {
 				version: 1,
 				resultData: { runData },
 				executionData,
+				...(manualUserId !== null ? { manualData: { userId: manualUserId } } : {}),
 			},
 			workflowData: {
 				settings: workflowSettingsPolicy ? { redactionPolicy: workflowSettingsPolicy } : {},
@@ -886,6 +889,77 @@ describe('ExecutionRedactionService', () => {
 			const dataPipelineRedacts = fullItemRedactionStrategy.apply.mock.calls.length > 0;
 
 			expect(shouldRedactConsoleOutput(redaction, undefined, mode)).toBe(dataPipelineRedacts);
+		});
+	});
+
+	describe('dynamic credentials self-manual reveal (isSelfManualReveal)', () => {
+		it('skips force redaction when the requester triggered the manual run', async () => {
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				manualUserId: mockUser.id,
+			});
+
+			await service.processExecution(execution, { user: mockUser });
+
+			expect(fullItemRedactionStrategy.apply).not.toHaveBeenCalled();
+		});
+
+		it('allows the manual trigger user to reveal without execution:reveal scope', async () => {
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				manualUserId: mockUser.id,
+			});
+
+			await expect(
+				service.processExecution(execution, { user: mockUser, redactExecutionData: false }),
+			).resolves.toBeDefined();
+			expect(workflowFinderService.findWorkflowIdsWithScopeForUser).not.toHaveBeenCalled();
+		});
+
+		it('still force-redacts when manualData.userId belongs to a different user', async () => {
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				manualUserId: 'another-user-id',
+			});
+
+			await service.processExecution(execution, { user: mockUser });
+
+			expect(fullItemRedactionStrategy.apply).toHaveBeenCalledTimes(1);
+		});
+
+		it('rejects reveal for a different manual trigger user even with execution:reveal scope', async () => {
+			workflowFinderService.findWorkflowIdsWithScopeForUser.mockResolvedValue(
+				new Set(['workflow-123']),
+			);
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				manualUserId: 'another-user-id',
+			});
+
+			await expect(
+				service.processExecution(execution, { user: mockUser, redactExecutionData: false }),
+			).rejects.toThrow(ForbiddenError);
+		});
+
+		it('does not grant self-manual reveal for non-manual execution modes', async () => {
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'webhook',
+				withDynamicCredentials: true,
+				manualUserId: mockUser.id,
+			});
+
+			await service.processExecution(execution, { user: mockUser });
+
+			expect(fullItemRedactionStrategy.apply).toHaveBeenCalledTimes(1);
 		});
 	});
 });

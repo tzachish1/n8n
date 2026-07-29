@@ -1,8 +1,8 @@
 import { Logger } from '@n8n/backend-common';
 import { OnPubSubEvent } from '@n8n/decorators';
-import { Service } from '@n8n/di';
+import { Container, Service } from '@n8n/di';
 import type express from 'express';
-import { InstanceSettings } from 'n8n-core';
+import { ExecutionContextService, InstanceSettings } from 'n8n-core';
 import { WebhookPathTakenError, Workflow } from 'n8n-workflow';
 import type {
 	IWebhookData,
@@ -129,7 +129,8 @@ export class TestWebhooks implements IWebhookManager {
 			});
 		}
 
-		const { pushRef, workflowEntity, webhook: testWebhook, destinationNode } = registration;
+		const { pushRef, workflowEntity, webhook: testWebhook, destinationNode, encryptedRunnerIdentity } =
+			registration;
 
 		const workflow = this.toWorkflow(workflowEntity);
 
@@ -168,6 +169,7 @@ export class TestWebhooks implements IWebhookManager {
 							else resolve(data);
 						},
 						destinationNode,
+						encryptedRunnerIdentity,
 					);
 
 					// The workflow did not run as the request was probably setup related
@@ -344,6 +346,7 @@ export class TestWebhooks implements IWebhookManager {
 		triggerToStartFrom?: WorkflowRequest.FullManualExecutionFromKnownTriggerPayload['triggerToStartFrom'];
 		chatSessionId?: string;
 		workflowIsActive?: boolean;
+		n8nAuthCookie?: string;
 	}) {
 		const {
 			userId,
@@ -355,6 +358,7 @@ export class TestWebhooks implements IWebhookManager {
 			triggerToStartFrom,
 			chatSessionId,
 			workflowIsActive,
+			n8nAuthCookie,
 		} = options;
 
 		if (!workflowEntity.id) throw new WorkflowMissingIdError(workflowEntity);
@@ -406,6 +410,13 @@ export class TestWebhooks implements IWebhookManager {
 				timeoutDuration,
 			);
 
+			let encryptedRunnerIdentity: string | undefined;
+			if (n8nAuthCookie) {
+				encryptedRunnerIdentity = await Container.get(
+					ExecutionContextService,
+				).buildManualExecutionCredentials(n8nAuthCookie);
+			}
+
 			for (const webhook of webhooks) {
 				webhook.path = removeTrailingSlash(webhook.path);
 
@@ -454,6 +465,7 @@ export class TestWebhooks implements IWebhookManager {
 					workflowEntity,
 					destinationNode,
 					webhook: cacheableWebhook as IWebhookData,
+					encryptedRunnerIdentity,
 				};
 
 				try {
