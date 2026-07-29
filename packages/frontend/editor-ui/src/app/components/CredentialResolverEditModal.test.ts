@@ -256,6 +256,30 @@ describe('CredentialResolverEditModal', () => {
 				);
 			});
 		});
+
+		it('should render the OIDC seed-source selector (fork §10)', async () => {
+			vi.mocked(restApiClient.getCredentialResolver).mockResolvedValue({
+				id: 'res-1',
+				name: 'Microsoft Graph',
+				type: 'test-resolver',
+				config: '{}',
+				decryptedConfig: {},
+				oidcSeedSource: 'oidc',
+				createdAt: new Date(),
+				updatedAt: new Date(),
+			});
+
+			const { findByTestId } = renderModal({
+				props: {
+					modalName: CREDENTIAL_RESOLVER_EDIT_MODAL_KEY,
+					data: { resolverId: 'res-1' },
+				},
+				pinia,
+				global,
+			});
+
+			expect(await findByTestId('credential-resolver-oidc-seed-source-select')).toBeInTheDocument();
+		});
 	});
 
 	describe('displayOptions filtering', () => {

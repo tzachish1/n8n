@@ -47,6 +47,7 @@ describe('PrometheusMetricsService', () => {
 	let version: Mocked<PrometheusVersionMetricsService>;
 	let defaultMetrics: Mocked<PrometheusDefaultMetricsService>;
 	let tokenExchange: Mocked<PrometheusTokenExchangeMetricsService>;
+	let oidcLazySeed: Mocked<PrometheusOidcLazySeedMetricsService>;
 	let ssrf: Mocked<PrometheusSsrfMetricsService>;
 	let dnsCache: Mocked<PrometheusDnsCacheMetricsService>;
 	let webhook: Mocked<PrometheusWebhookAndFormMetricsService>;
@@ -74,6 +75,7 @@ describe('PrometheusMetricsService', () => {
 			version,
 			defaultMetrics,
 			tokenExchange,
+			oidcLazySeed,
 			ssrf,
 			dnsCache,
 			webhook,
@@ -108,6 +110,7 @@ describe('PrometheusMetricsService', () => {
 		version = mock<PrometheusVersionMetricsService>({ enabled: true });
 		defaultMetrics = mock<PrometheusDefaultMetricsService>({ enabled: true });
 		tokenExchange = mock<PrometheusTokenExchangeMetricsService>({ enabled: true });
+		oidcLazySeed = mock<PrometheusOidcLazySeedMetricsService>({ enabled: true });
 		ssrf = mock<PrometheusSsrfMetricsService>({ enabled: true });
 		dnsCache = mock<PrometheusDnsCacheMetricsService>({ enabled: true });
 		webhook = mock<PrometheusWebhookAndFormMetricsService>({ enabled: true });
@@ -141,6 +144,7 @@ describe('PrometheusMetricsService', () => {
 			expect(version.init).toHaveBeenCalledWith(app);
 			expect(defaultMetrics.init).toHaveBeenCalledWith(app);
 			expect(tokenExchange.init).toHaveBeenCalledWith(app);
+			expect(oidcLazySeed.init).toHaveBeenCalledWith(app);
 			expect(ssrf.init).toHaveBeenCalledWith(app);
 			expect(dnsCache.init).toHaveBeenCalledWith(app);
 			expect(webhook.init).toHaveBeenCalledWith(app);
