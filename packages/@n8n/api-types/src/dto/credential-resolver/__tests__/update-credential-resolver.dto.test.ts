@@ -135,6 +135,29 @@ describe('UpdateCredentialResolverDto', () => {
 		});
 	});
 
+	describe('oidcSeedSource (Fork §10)', () => {
+		test.each([
+			{ name: 'omitted', data: { oidcSeedSource: undefined } },
+			{ name: 'null (explicit clear)', data: { oidcSeedSource: null } },
+			{ name: 'oidc', data: { oidcSeedSource: 'oidc' } },
+		])('accepts $name', ({ data }) => {
+			const result = UpdateCredentialResolverDto.safeParse({
+				name: 'Updated Resolver',
+				...data,
+			});
+
+			expect(result.success).toBe(true);
+		});
+
+		test('rejects unknown enum values', () => {
+			const result = UpdateCredentialResolverDto.safeParse({
+				oidcSeedSource: 'monday',
+			});
+
+			expect(result.success).toBe(false);
+		});
+	});
+
 	describe('Trimming', () => {
 		test('should trim name when provided', () => {
 			const result = UpdateCredentialResolverDto.safeParse({

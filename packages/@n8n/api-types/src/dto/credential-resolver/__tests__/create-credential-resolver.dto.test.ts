@@ -169,6 +169,34 @@ describe('CreateCredentialResolverDto', () => {
 		});
 	});
 
+	describe('oidcSeedSource (Fork §10)', () => {
+		test.each([
+			{ name: 'omitted', data: { oidcSeedSource: undefined } },
+			{ name: 'null', data: { oidcSeedSource: null } },
+			{ name: 'oidc', data: { oidcSeedSource: 'oidc' } },
+		])('accepts $name', ({ data }) => {
+			const result = CreateCredentialResolverDto.safeParse({
+				name: 'Test Resolver',
+				type: 'credential-resolver.test-1.0',
+				config: {},
+				...data,
+			});
+
+			expect(result.success).toBe(true);
+		});
+
+		test('rejects unknown enum values', () => {
+			const result = CreateCredentialResolverDto.safeParse({
+				name: 'Test Resolver',
+				type: 'credential-resolver.test-1.0',
+				config: {},
+				oidcSeedSource: 'monday', // not in v1 enum
+			});
+
+			expect(result.success).toBe(false);
+		});
+	});
+
 	describe('Trimming', () => {
 		test('should trim name', () => {
 			const result = CreateCredentialResolverDto.safeParse({
