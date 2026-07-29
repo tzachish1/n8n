@@ -6,7 +6,16 @@ import { OutboundHttp } from '@n8n/backend-network';
 import { type LocalServer, startServer } from '@n8n/backend-network/testing';
 import { mockInstance, mockLogger } from '@n8n/backend-test-utils';
 import type { GlobalConfig } from '@n8n/config';
-import type { AuthIdentityRepository, SettingsRepository, User, UserRepository } from '@n8n/db';
+import type {
+	AuthIdentityRepository,
+	CredentialsEntity,
+	CredentialsRepository,
+	SettingsRepository,
+	User,
+	UserRepository,
+	WorkflowEntity,
+	WorkflowRepository,
+} from '@n8n/db';
 import { Container } from '@n8n/di';
 import { mock } from 'vitest-mock-extended';
 import type { Cipher, InstanceSettings } from 'n8n-core';
@@ -24,7 +33,10 @@ vi.mock('openid-client', async (importOriginal) => {
 
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 import { ForbiddenError } from '@/errors/response-errors/forbidden.error';
+import type { EventService } from '@/events/event.service';
+import type { DynamicCredentialResolverRepository } from '@/modules/dynamic-credentials.ee/database/repositories/credential-resolver.repository';
 import { type ProvisioningService } from '@/modules/provisioning.ee/provisioning.service.ee';
+import type { OauthService } from '@/oauth/oauth.service';
 import { Publisher } from '@/scaling/pubsub/publisher.service';
 import type { JwtService } from '@/services/jwt.service';
 import type { UrlService } from '@/services/url.service';
@@ -32,6 +44,7 @@ import * as ssoHelpers from '@/sso.ee/sso-helpers';
 
 import { OIDC_PREFERENCES_DB_KEY } from '../constants';
 import { OidcService } from '../oidc.service.ee';
+import { GraphTokenExchanger } from '../services/graph-token-exchanger.service';
 
 describe('OidcService', () => {
 	let oidcService: OidcService;
@@ -46,6 +59,12 @@ describe('OidcService', () => {
 	let authIdentityRepository: AuthIdentityRepository;
 	let outboundHttp: Mocked<OutboundHttp>;
 	let customFetch: Mock;
+	let oauthService: OauthService;
+	let credentialsRepository: CredentialsRepository;
+	let eventService: EventService;
+	let resolverRepository: DynamicCredentialResolverRepository;
+	let workflowRepository: WorkflowRepository;
+	let graphTokenExchanger: GraphTokenExchanger;
 
 	const mockOidcConfig = {
 		clientId: 'test-client-id',
@@ -69,7 +88,14 @@ describe('OidcService', () => {
 
 		settingsRepository = mock<SettingsRepository>();
 		globalConfig = mock<GlobalConfig>({
-			sso: { oidc: { loginEnabled: false } },
+			sso: {
+				oidc: {
+					loginEnabled: false,
+					graphScopes: '',
+					graphAutoSeedEnabled: false,
+					graphSeedFailOpen: true,
+				},
+			},
 		});
 		instanceSettings = mock<InstanceSettings>({
 			isMultiMain: true,
@@ -90,6 +116,14 @@ describe('OidcService', () => {
 		outboundHttp.transport.mockReturnValue(
 			mock<HttpTransport>({ asCustomFetch: () => customFetch }),
 		);
+		oauthService = mock<OauthService>();
+		credentialsRepository = mock<CredentialsRepository>();
+		eventService = mock<EventService>();
+		resolverRepository = mock<DynamicCredentialResolverRepository>();
+		resolverRepository.find = vi.fn().mockResolvedValue([]);
+		workflowRepository = mock<WorkflowRepository>();
+		workflowRepository.find = vi.fn().mockResolvedValue([]);
+		graphTokenExchanger = new GraphTokenExchanger(globalConfig, eventService, logger);
 		vi.spyOn(ssoHelpers, 'setCurrentAuthenticationMethod').mockImplementation(
 			async () => await Promise.resolve(),
 		);
@@ -106,6 +140,12 @@ describe('OidcService', () => {
 			instanceSettings,
 			provisioningService,
 			outboundHttp,
+			oauthService,
+			credentialsRepository,
+			eventService,
+			resolverRepository,
+			workflowRepository,
+			graphTokenExchanger,
 		);
 
 		await oidcService.init();
@@ -1197,5 +1237,804 @@ describe('OidcService', () => {
 		const user = await login();
 
 		expect(user.user.email).toEqual('john.doe@test.com');
+	});
+
+	// Fork §10 — OIDC self-seeding for Microsoft Graph. The feature is opt-in via
+	// four env vars on `OidcConfig`; when disabled, behaviour is byte-identical to
+	// upstream — covered by every other `loginUser` test in this file.
+	describe('auto-seed Graph credentials', () => {
+		const mockUser = { id: 'user-id', email: 'john.doe@test.com' } as User;
+		const callbackUrl = new URL('https://example.com/callback');
+
+		const mockResolvableCredential = (overrides: Partial<CredentialsEntity> = {}) =>
+			({
+				id: 'cred-1',
+				name: 'Graph (auto)',
+				type: 'microsoftOAuth2Api',
+				data: 'encrypted-blob',
+				isResolvable: true,
+				resolvableAllowFallback: false,
+				resolverId: 'resolver-a',
+				...overrides,
+			}) as CredentialsEntity;
+
+		const setupLoginMocks = (
+			tokenOverrides: Record<string, unknown> = {},
+			oboResponseOverrides: Partial<{
+				access_token: string;
+				refresh_token?: string;
+				expires_in: number;
+			}> = {},
+		) => {
+			oidcService.verifyState = jest.fn().mockReturnValue('valid-state');
+			oidcService.verifyNonce = jest.fn().mockReturnValue('valid-nonce');
+			// @ts-expect-error - getOidcConfiguration is private and only accessible within class 'OidcService'
+			oidcService.getOidcConfiguration = jest.fn().mockResolvedValue({
+				serverMetadata: () => ({
+					token_endpoint: 'https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token',
+				}),
+			} as unknown as client.Configuration);
+			// @ts-expect-error - applySsoProvisioning is private
+			oidcService.applySsoProvisioning = jest.fn().mockResolvedValue(undefined);
+			authIdentityRepository.findOne = jest.fn().mockResolvedValue({ user: mockUser });
+
+			jest.spyOn(client, 'authorizationCodeGrant').mockResolvedValue({
+				// `access_token` here carries `aud=api://<n8n-app>` in the real flow —
+				// it's the assertion we feed into the OBO exchange.
+				access_token: 'user-api-access-token',
+				token_type: 'bearer',
+				expires_in: 3599,
+				claims: () => ({ sub: 'valid-subject' }),
+				...tokenOverrides,
+			} as unknown as client.TokenEndpointResponse & client.TokenEndpointResponseHelpers);
+			jest
+				.spyOn(client, 'fetchUserInfo')
+				.mockResolvedValue({ email_verified: true, email: 'john.doe@test.com' } as any);
+
+			// Default OBO response — Graph-audience access token + refresh token.
+			// Individual tests can override to simulate failure modes.
+			const oboBody = {
+				access_token: 'graph-access-token',
+				refresh_token: 'graph-refresh-token',
+				expires_in: 3599,
+				token_type: 'Bearer',
+				...oboResponseOverrides,
+			};
+			global.fetch = jest.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: async () => oboBody,
+			}) as unknown as typeof global.fetch;
+		};
+
+		const enableAutoSeed = (overrides: Partial<typeof globalConfig.sso.oidc> = {}) => {
+			Object.assign(globalConfig.sso.oidc, {
+				graphAutoSeedEnabled: true,
+				graphScopes: 'https://graph.microsoft.com/Mail.ReadWrite',
+				graphSeedFailOpen: true,
+				...overrides,
+			});
+			// Default opt-in set used by tests that don't override the resolver repo.
+			// Tests that need a different opt-in (empty, multiple ids, throw) override
+			// `resolverRepository.find` after calling this helper.
+			resolverRepository.find = jest.fn().mockResolvedValue([{ id: 'resolver-a' }]);
+		};
+
+		it('seeds the credential via OauthService.saveDynamicCredential and emits the captured event', async () => {
+			enableAutoSeed();
+			setupLoginMocks();
+			const credential = mockResolvableCredential();
+			credentialsRepository.find = jest.fn().mockResolvedValue([credential]);
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			const user = await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(user).toBe(mockUser);
+			expect(credentialsRepository.find).toHaveBeenCalledWith({
+				where: { isResolvable: true, resolverId: expect.anything() },
+				select: ['id', 'name', 'type', 'data', 'isResolvable', 'resolverId'],
+			});
+			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(1);
+			const [seededCredential, seededData, accessToken, resolverId, metadata] =
+				(oauthService.saveDynamicCredential as jest.Mock).mock.calls[0];
+			expect(seededCredential).toBe(credential);
+			expect(seededData).toEqual({
+				oauthTokenData: {
+					access_token: 'graph-access-token',
+					refresh_token: 'graph-refresh-token',
+					token_type: 'Bearer',
+					expires_in: 3599,
+				},
+			});
+			expect(accessToken).toBe('graph-access-token');
+			expect(resolverId).toBe('resolver-a');
+			expect(metadata).toMatchObject({ source: 'oidc-self-seed', userId: 'user-id' });
+
+			expect(eventService.emit).toHaveBeenCalledWith('oidc-graph-token-captured', {
+				userId: 'user-id',
+				resolverId: 'resolver-a',
+				credentialId: 'cred-1',
+				credentialType: 'microsoftOAuth2Api',
+			});
+		});
+
+		it('does nothing when graphAutoSeedEnabled is false (default — upstream parity)', async () => {
+			setupLoginMocks();
+			oauthService.saveDynamicCredential = jest.fn();
+			credentialsRepository.find = jest.fn();
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(credentialsRepository.find).not.toHaveBeenCalled();
+			expect(oauthService.saveDynamicCredential).not.toHaveBeenCalled();
+			expect(eventService.emit).not.toHaveBeenCalledWith(
+				expect.stringMatching(/^oidc-graph-token-/),
+				expect.anything(),
+			);
+		});
+
+		it('emits oidc-graph-token-skipped with reason=no_refresh_token when OBO response omits the refresh token', async () => {
+			// In the OBO model "no_refresh_token" means the IdP's OBO response
+			// lacked one — typically because the n8n App Registration is missing
+			// the `offline_access` delegated permission.
+			enableAutoSeed();
+			setupLoginMocks({}, { refresh_token: undefined });
+			credentialsRepository.find = jest.fn();
+			oauthService.saveDynamicCredential = jest.fn();
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(eventService.emit).toHaveBeenCalledWith('oidc-graph-token-skipped', {
+				userId: 'user-id',
+				reason: 'no_refresh_token',
+			});
+			expect(credentialsRepository.find).not.toHaveBeenCalled();
+			expect(oauthService.saveDynamicCredential).not.toHaveBeenCalled();
+		});
+
+		it('emits oidc-graph-token-skipped with reason=no_user_access_token when OIDC response has no access_token', async () => {
+			// Without a user access token there is no assertion to feed the OBO
+			// exchange. Operator must enable provisioning or set a custom API
+			// scope in N8N_SSO_SCOPES_NAME.
+			enableAutoSeed();
+			setupLoginMocks({ access_token: undefined });
+			credentialsRepository.find = jest.fn();
+			oauthService.saveDynamicCredential = jest.fn();
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(eventService.emit).toHaveBeenCalledWith('oidc-graph-token-skipped', {
+				userId: 'user-id',
+				reason: 'no_user_access_token',
+			});
+			expect(global.fetch).not.toHaveBeenCalled();
+			expect(credentialsRepository.find).not.toHaveBeenCalled();
+			expect(oauthService.saveDynamicCredential).not.toHaveBeenCalled();
+		});
+
+		it('exchanges the user access token via OBO and seeds the Graph-audience token', async () => {
+			enableAutoSeed();
+			setupLoginMocks();
+			const credential = mockResolvableCredential();
+			credentialsRepository.find = jest.fn().mockResolvedValue([credential]);
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			// OBO POST shape: grant=jwt-bearer, assertion=user-api-access-token,
+			// scope includes the configured Graph scopes + offline_access.
+			expect(global.fetch).toHaveBeenCalledTimes(1);
+			const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+			expect(fetchCall[0]).toBe(
+				'https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token',
+			);
+			const requestBody = new URLSearchParams(fetchCall[1].body as string);
+			expect(requestBody.get('grant_type')).toBe(
+				'urn:ietf:params:oauth:grant-type:jwt-bearer',
+			);
+			expect(requestBody.get('requested_token_use')).toBe('on_behalf_of');
+			expect(requestBody.get('assertion')).toBe('user-api-access-token');
+			expect(requestBody.get('scope')).toBe(
+				'https://graph.microsoft.com/Mail.ReadWrite offline_access',
+			);
+
+			// The token persisted to the credential is the Graph token from the OBO
+			// response — NOT the user-api-access-token captured at OIDC login.
+			const [, seededData, accessToken] = (oauthService.saveDynamicCredential as jest.Mock)
+				.mock.calls[0];
+			expect(accessToken).toBe('graph-access-token');
+			expect(seededData).toEqual({
+				oauthTokenData: {
+					access_token: 'graph-access-token',
+					refresh_token: 'graph-refresh-token',
+					token_type: 'Bearer',
+					expires_in: 3599,
+				},
+			});
+		});
+
+		it('defaults the OBO scope to https://graph.microsoft.com/.default when graphScopes is empty', async () => {
+			enableAutoSeed({ graphScopes: '' });
+			setupLoginMocks();
+			credentialsRepository.find = jest
+				.fn()
+				.mockResolvedValue([mockResolvableCredential()]);
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+			const requestBody = new URLSearchParams(fetchCall[1].body as string);
+			expect(requestBody.get('scope')).toBe(
+				'https://graph.microsoft.com/.default offline_access',
+			);
+		});
+
+		it('emits obo_exchange_failed when the IdP returns a non-2xx OBO response (fail-open)', async () => {
+			enableAutoSeed({ graphSeedFailOpen: true });
+			setupLoginMocks();
+			global.fetch = jest.fn().mockResolvedValue({
+				ok: false,
+				status: 400,
+				json: async () => ({
+					error: 'invalid_grant',
+					error_description: 'AADSTS50013: Assertion failed signature validation.',
+				}),
+			}) as unknown as typeof global.fetch;
+			credentialsRepository.find = jest.fn();
+			oauthService.saveDynamicCredential = jest.fn();
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			const user = await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(user).toBe(mockUser);
+			expect(eventService.emit).toHaveBeenCalledWith('oidc-graph-token-skipped', {
+				userId: 'user-id',
+				reason: 'obo_exchange_failed',
+			});
+			expect(credentialsRepository.find).not.toHaveBeenCalled();
+			expect(oauthService.saveDynamicCredential).not.toHaveBeenCalled();
+		});
+
+		it('emits obo_exchange_failed on network errors during the OBO POST (fail-open)', async () => {
+			enableAutoSeed({ graphSeedFailOpen: true });
+			setupLoginMocks();
+			global.fetch = jest
+				.fn()
+				.mockRejectedValue(new Error('ECONNRESET')) as unknown as typeof global.fetch;
+			credentialsRepository.find = jest.fn();
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(eventService.emit).toHaveBeenCalledWith('oidc-graph-token-skipped', {
+				userId: 'user-id',
+				reason: 'obo_exchange_failed',
+			});
+			expect(credentialsRepository.find).not.toHaveBeenCalled();
+		});
+
+		it('throws and blocks login when OBO fails and graphSeedFailOpen=false', async () => {
+			enableAutoSeed({ graphSeedFailOpen: false });
+			setupLoginMocks();
+			global.fetch = jest.fn().mockResolvedValue({
+				ok: false,
+				status: 401,
+				json: async () => ({ error: 'invalid_client' }),
+			}) as unknown as typeof global.fetch;
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await expect(
+				oidcService.loginUser(callbackUrl, storedState, storedNonce),
+			).rejects.toThrow(/OBO exchange failed/);
+
+			expect(eventService.emit).toHaveBeenCalledWith('oidc-graph-token-skipped', {
+				userId: 'user-id',
+				reason: 'obo_exchange_failed',
+			});
+		});
+
+		it('emits oidc-graph-token-skipped with reason=no_resolvers_configured when no resolvers are opted in', async () => {
+			enableAutoSeed();
+			resolverRepository.find = jest.fn().mockResolvedValue([]);
+			setupLoginMocks();
+			credentialsRepository.find = jest.fn();
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(eventService.emit).toHaveBeenCalledWith('oidc-graph-token-skipped', {
+				userId: 'user-id',
+				reason: 'no_resolvers_configured',
+			});
+			expect(credentialsRepository.find).not.toHaveBeenCalled();
+		});
+
+		it('iterates over every opted-in resolver and seeds matching credentials', async () => {
+			enableAutoSeed();
+			resolverRepository.find = jest
+				.fn()
+				.mockResolvedValue([{ id: 'resolver-a' }, { id: 'resolver-b' }]);
+			setupLoginMocks();
+			const credA = mockResolvableCredential({ id: 'cred-a', resolverId: 'resolver-a' });
+			const credB = mockResolvableCredential({
+				id: 'cred-b',
+				resolverId: 'resolver-b',
+				type: 'microsoftOutlookOAuth2Api',
+			});
+			credentialsRepository.find = jest.fn().mockResolvedValue([credA, credB]);
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(2);
+			expect(eventService.emit).toHaveBeenCalledWith(
+				'oidc-graph-token-captured',
+				expect.objectContaining({ credentialId: 'cred-a', resolverId: 'resolver-a' }),
+			);
+			expect(eventService.emit).toHaveBeenCalledWith(
+				'oidc-graph-token-captured',
+				expect.objectContaining({
+					credentialId: 'cred-b',
+					resolverId: 'resolver-b',
+					credentialType: 'microsoftOutlookOAuth2Api',
+				}),
+			);
+		});
+
+		it('fails open: continues login when a per-credential seed fails and emits oidc-graph-token-seed-failed', async () => {
+			enableAutoSeed({ graphSeedFailOpen: true });
+			setupLoginMocks();
+			const failing = mockResolvableCredential({ id: 'cred-fail' });
+			const succeeding = mockResolvableCredential({ id: 'cred-ok' });
+			credentialsRepository.find = jest.fn().mockResolvedValue([failing, succeeding]);
+			oauthService.saveDynamicCredential = jest
+				.fn()
+				.mockRejectedValueOnce(new Error('resolver introspection unavailable'))
+				.mockResolvedValueOnce(undefined);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			const user = await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(user).toBe(mockUser);
+			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(2);
+			expect(eventService.emit).toHaveBeenCalledWith('oidc-graph-token-seed-failed', {
+				userId: 'user-id',
+				resolverId: 'resolver-a',
+				credentialId: 'cred-fail',
+				errorMessage: 'resolver introspection unavailable',
+			});
+			expect(eventService.emit).toHaveBeenCalledWith(
+				'oidc-graph-token-captured',
+				expect.objectContaining({ credentialId: 'cred-ok' }),
+			);
+		});
+
+		it('fails closed: re-throws and blocks login when graphSeedFailOpen=false', async () => {
+			enableAutoSeed({ graphSeedFailOpen: false });
+			setupLoginMocks();
+			credentialsRepository.find = jest
+				.fn()
+				.mockResolvedValue([mockResolvableCredential({ id: 'cred-fail' })]);
+			oauthService.saveDynamicCredential = jest
+				.fn()
+				.mockRejectedValue(new Error('storage unavailable'));
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await expect(
+				oidcService.loginUser(callbackUrl, storedState, storedNonce),
+			).rejects.toThrow('storage unavailable');
+
+			expect(eventService.emit).toHaveBeenCalledWith(
+				'oidc-graph-token-seed-failed',
+				expect.objectContaining({ credentialId: 'cred-fail' }),
+			);
+		});
+
+		it('does not seed in the test login callback (test flow must be side-effect-free)', async () => {
+			enableAutoSeed();
+			oidcService.verifyState = jest.fn().mockReturnValue('valid-state');
+			oidcService.verifyNonce = jest.fn().mockReturnValue('valid-nonce');
+			oidcService.loadConfig = jest.fn().mockResolvedValue({
+				clientId: 'cid',
+				clientSecret: 'sec',
+				discoveryEndpoint: new URL('https://idp.example.com/.well-known/openid_configuration'),
+				prompt: 'select_account',
+				authenticationContextClassReference: [],
+				loginEnabled: true,
+			});
+			// @ts-expect-error - createProxyAwareConfiguration is private
+			oidcService.createProxyAwareConfiguration = jest
+				.fn()
+				.mockResolvedValue({} as client.Configuration);
+			jest.spyOn(client, 'authorizationCodeGrant').mockResolvedValue({
+				access_token: 'graph-access-token',
+				refresh_token: 'graph-refresh-token',
+				token_type: 'bearer',
+				claims: () => ({ sub: 'valid-subject' }),
+			} as unknown as client.TokenEndpointResponse & client.TokenEndpointResponseHelpers);
+			jest
+				.spyOn(client, 'fetchUserInfo')
+				.mockResolvedValue({ email_verified: true, email: 'john.doe@test.com' } as any);
+			oauthService.saveDynamicCredential = jest.fn();
+			credentialsRepository.find = jest.fn();
+
+			const storedState = oidcService.generateState(true).signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.processTestCallback(callbackUrl, storedState, storedNonce);
+
+			expect(credentialsRepository.find).not.toHaveBeenCalled();
+			expect(oauthService.saveDynamicCredential).not.toHaveBeenCalled();
+			expect(eventService.emit).not.toHaveBeenCalledWith(
+				expect.stringMatching(/^oidc-graph-token-/),
+				expect.anything(),
+			);
+		});
+
+		it('does NOT append Graph scopes to the authorization URL — upstream parity (OBO is server-side)', async () => {
+			// Critical: mixing Graph /.default with the n8n provisioning /.default
+			// triggers AADSTS70011 ("static scope limit exceeded"). The OBO design
+			// avoids this entirely by keeping the user-facing /authorize call
+			// byte-identical to upstream and exchanging for the Graph token
+			// server-side after the callback.
+			enableAutoSeed({ graphScopes: 'https://graph.microsoft.com/Mail.ReadWrite' });
+			provisioningService.getConfig = jest.fn().mockResolvedValue({
+				scopesProvisionInstanceRole: false,
+				scopesProvisionProjectRoles: false,
+				scopesName: 'n8n',
+			});
+
+			const buildAuthorizationUrlSpy = jest
+				.spyOn(client, 'buildAuthorizationUrl')
+				.mockReturnValue(new URL('https://idp.example.com/authorize'));
+			// @ts-expect-error - getOidcConfiguration is private
+			oidcService.getOidcConfiguration = jest.fn().mockResolvedValue({} as client.Configuration);
+
+			await oidcService.generateLoginUrl();
+
+			expect(buildAuthorizationUrlSpy).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ scope: 'openid email profile' }),
+			);
+		});
+
+		it('preserves the upstream provisioning-scope path when provisioning is enabled', async () => {
+			enableAutoSeed();
+			provisioningService.getConfig = jest.fn().mockResolvedValue({
+				scopesProvisionInstanceRole: true,
+				scopesProvisionProjectRoles: false,
+				scopesName: 'api://390f995b-ed37-46e6-ae8c-7b11248dd67c/.default',
+			});
+
+			const buildAuthorizationUrlSpy = jest
+				.spyOn(client, 'buildAuthorizationUrl')
+				.mockReturnValue(new URL('https://idp.example.com/authorize'));
+			// @ts-expect-error - getOidcConfiguration is private
+			oidcService.getOidcConfiguration = jest.fn().mockResolvedValue({} as client.Configuration);
+
+			await oidcService.generateLoginUrl();
+
+			expect(buildAuthorizationUrlSpy).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({
+					scope:
+						'openid email profile api://390f995b-ed37-46e6-ae8c-7b11248dd67c/.default',
+				}),
+			);
+		});
+
+		it('seeds via DB-discovered resolvers (oidcSeedSource=oidc)', async () => {
+			// The admin opted-in the resolver via the UI; `DynamicCredentialResolver`
+			// is the single source of truth for seed-eligible resolvers.
+			enableAutoSeed();
+			setupLoginMocks();
+
+			resolverRepository.find = jest
+				.fn()
+				.mockResolvedValue([{ id: 'resolver-from-db' }]);
+			const credential = mockResolvableCredential({ resolverId: 'resolver-from-db' });
+			credentialsRepository.find = jest.fn().mockResolvedValue([credential]);
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(resolverRepository.find).toHaveBeenCalledWith({
+				where: { oidcSeedSource: 'oidc' },
+				select: ['id'],
+			});
+			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(1);
+			expect(eventService.emit).toHaveBeenCalledWith(
+				'oidc-graph-token-captured',
+				expect.objectContaining({ resolverId: 'resolver-from-db' }),
+			);
+		});
+
+		it('skips with no_resolvers_configured (fail-open) when the resolver repository query throws', async () => {
+			// A transient DB failure on the resolver table must not block OIDC login.
+			// The seeder logs a warn and bails with no_resolvers_configured.
+			enableAutoSeed();
+			setupLoginMocks();
+
+			resolverRepository.find = jest
+				.fn()
+				.mockRejectedValue(new Error('resolver table unavailable'));
+			credentialsRepository.find = jest.fn();
+			oauthService.saveDynamicCredential = jest.fn();
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(logger.warn).toHaveBeenCalledWith(
+				expect.stringContaining('failed to query opted-in resolvers'),
+				expect.objectContaining({ userId: 'user-id' }),
+			);
+			expect(eventService.emit).toHaveBeenCalledWith('oidc-graph-token-skipped', {
+				userId: 'user-id',
+				reason: 'no_resolvers_configured',
+			});
+			expect(oauthService.saveDynamicCredential).not.toHaveBeenCalled();
+		});
+
+		it('emits no_resolvers_configured when the DB returns an empty opt-in set', async () => {
+			enableAutoSeed();
+			setupLoginMocks();
+			resolverRepository.find = jest.fn().mockResolvedValue([]);
+			credentialsRepository.find = jest.fn();
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(eventService.emit).toHaveBeenCalledWith('oidc-graph-token-skipped', {
+				userId: 'user-id',
+				reason: 'no_resolvers_configured',
+			});
+			expect(credentialsRepository.find).not.toHaveBeenCalled();
+		});
+
+		// ---- Workflow-level resolver binding discovery (fork §10 v4) ----
+
+		const mockWorkflow = (
+			id: string,
+			credentialResolverId: string | undefined,
+			credentialIds: Array<{ type: string; id: string }>,
+		): WorkflowEntity =>
+			({
+				id,
+				settings: credentialResolverId ? { credentialResolverId } : undefined,
+				nodes: [
+					{
+						id: `node-in-${id}`,
+						name: 'Some Node',
+						type: 'n8n-nodes-base.microsoftOutlook',
+						typeVersion: 1,
+						position: [0, 0],
+						parameters: {},
+						credentials: credentialIds.reduce(
+							(acc, { type, id: credId }) => {
+								acc[type] = { id: credId, name: 'whatever' };
+								return acc;
+							},
+							{} as Record<string, { id: string; name: string }>,
+						),
+					},
+				],
+			}) as unknown as WorkflowEntity;
+
+		it('discovers credentials via workflow-level binding (settings.credentialResolverId)', async () => {
+			// Credential has resolverId=NULL (the common case via the standard UI),
+			// but a workflow that references it has settings.credentialResolverId
+			// pointing at an opted-in resolver. The seed should still fire.
+			enableAutoSeed();
+			resolverRepository.find = jest
+				.fn()
+				.mockResolvedValue([{ id: 'resolver-from-workflow' }]);
+			setupLoginMocks();
+
+			// First find call → credential-level (resolverId=NULL → empty).
+			// Second find call → workflow-discovered ids.
+			const credential = mockResolvableCredential({
+				id: 'cred-no-resolverid',
+				resolverId: null as unknown as string,
+			});
+			credentialsRepository.find = jest
+				.fn()
+				.mockResolvedValueOnce([])
+				.mockResolvedValueOnce([credential]);
+
+			workflowRepository.find = jest
+				.fn()
+				.mockResolvedValue([
+					mockWorkflow('wf-1', 'resolver-from-workflow', [
+						{ type: 'microsoftOutlookOAuth2Api', id: 'cred-no-resolverid' },
+					]),
+				]);
+
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			// The workflow's resolverId is the one passed to saveDynamicCredential,
+			// not the credential's (null) resolverId.
+			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(1);
+			const [, , , resolverIdArg] = (oauthService.saveDynamicCredential as jest.Mock)
+				.mock.calls[0];
+			expect(resolverIdArg).toBe('resolver-from-workflow');
+			expect(eventService.emit).toHaveBeenCalledWith(
+				'oidc-graph-token-captured',
+				expect.objectContaining({
+					credentialId: 'cred-no-resolverid',
+					resolverId: 'resolver-from-workflow',
+				}),
+			);
+		});
+
+		it('ignores workflows whose credentialResolverId is not in the opted-in set', async () => {
+			enableAutoSeed();
+			resolverRepository.find = jest
+				.fn()
+				.mockResolvedValue([{ id: 'opted-in-resolver' }]);
+			setupLoginMocks();
+			credentialsRepository.find = jest.fn().mockResolvedValue([]);
+			workflowRepository.find = jest
+				.fn()
+				.mockResolvedValue([
+					// Workflow references a credential, but its resolverId is not opted-in.
+					mockWorkflow('wf-other', 'unrelated-resolver', [
+						{ type: 'slackOAuth2Api', id: 'cred-slack' },
+					]),
+				]);
+			oauthService.saveDynamicCredential = jest.fn();
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			// credentialsRepository.find is called once for the credential-level
+			// query (which returns []); the workflow-level path adds nothing
+			// because the only workflow references a non-opted-in resolver.
+			expect(oauthService.saveDynamicCredential).not.toHaveBeenCalled();
+			expect(eventService.emit).not.toHaveBeenCalledWith(
+				'oidc-graph-token-captured',
+				expect.anything(),
+			);
+		});
+
+		it('credential-level binding takes precedence over workflow-level (no double-seed)', async () => {
+			// Same credential is reachable via BOTH paths. It must be seeded
+			// exactly once, with its credential-level resolverId — mirroring the
+			// runtime precedence `credential.resolverId ?? workflow.settings.credentialResolverId`.
+			enableAutoSeed();
+			resolverRepository.find = jest
+				.fn()
+				.mockResolvedValue([{ id: 'resolver-cred' }, { id: 'resolver-wf' }]);
+			setupLoginMocks();
+
+			const credential = mockResolvableCredential({
+				id: 'cred-dual',
+				resolverId: 'resolver-cred',
+			});
+			// First find = credential-level (returns cred-dual).
+			// Second find = workflow-level for remaining ids — should be skipped
+			// because credentialsRepository.find should not be called again with
+			// cred-dual's id (it's already covered).
+			credentialsRepository.find = jest.fn().mockResolvedValueOnce([credential]);
+
+			workflowRepository.find = jest
+				.fn()
+				.mockResolvedValue([
+					mockWorkflow('wf-1', 'resolver-wf', [
+						{ type: 'microsoftOutlookOAuth2Api', id: 'cred-dual' },
+					]),
+				]);
+
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(1);
+			const [, , , resolverIdArg] = (oauthService.saveDynamicCredential as jest.Mock)
+				.mock.calls[0];
+			expect(resolverIdArg).toBe('resolver-cred');
+			// Second credentialsRepository.find (for workflow-discovered ids) must
+			// not be invoked because all workflow-discovered ids were already
+			// covered by the credential-level query.
+			expect(credentialsRepository.find).toHaveBeenCalledTimes(1);
+		});
+
+		it('skips workflows with no settings or no credentials block (defensive)', async () => {
+			enableAutoSeed();
+			resolverRepository.find = jest
+				.fn()
+				.mockResolvedValue([{ id: 'opted-in-resolver' }]);
+			setupLoginMocks();
+			credentialsRepository.find = jest.fn().mockResolvedValue([]);
+
+			workflowRepository.find = jest.fn().mockResolvedValue([
+				{ id: 'wf-no-settings', nodes: [] } as unknown as WorkflowEntity,
+				{
+					id: 'wf-nodeless',
+					settings: { credentialResolverId: 'opted-in-resolver' },
+					nodes: [],
+				} as unknown as WorkflowEntity,
+				{
+					id: 'wf-credless-node',
+					settings: { credentialResolverId: 'opted-in-resolver' },
+					nodes: [
+						{
+							id: 'n',
+							name: 'no creds',
+							type: 'n8n-nodes-base.set',
+							typeVersion: 1,
+							position: [0, 0],
+							parameters: {},
+						},
+					],
+				} as unknown as WorkflowEntity,
+			]);
+			oauthService.saveDynamicCredential = jest.fn();
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(oauthService.saveDynamicCredential).not.toHaveBeenCalled();
+		});
+
+		it('falls back to credential-level only when the workflow repo throws', async () => {
+			// A transient outage on the workflow table must not block the
+			// credential-level seed path.
+			enableAutoSeed();
+			resolverRepository.find = jest
+				.fn()
+				.mockResolvedValue([{ id: 'resolver-a' }]);
+			setupLoginMocks();
+			workflowRepository.find = jest
+				.fn()
+				.mockRejectedValue(new Error('workflow table down'));
+
+			const credential = mockResolvableCredential({ resolverId: 'resolver-a' });
+			credentialsRepository.find = jest.fn().mockResolvedValueOnce([credential]);
+			oauthService.saveDynamicCredential = jest.fn().mockResolvedValue(undefined);
+
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(logger.warn).toHaveBeenCalledWith(
+				expect.stringContaining(
+					'failed to scan workflows for resolver bindings',
+				),
+				expect.objectContaining({ error: 'workflow table down' }),
+			);
+			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(1);
+		});
 	});
 });

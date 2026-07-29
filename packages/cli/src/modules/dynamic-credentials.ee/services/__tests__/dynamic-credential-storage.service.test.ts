@@ -227,7 +227,12 @@ describe('DynamicCredentialStorageService', () => {
 					expect.objectContaining({
 						credentialId: 'cred-123',
 						resolverId: 'resolver-456',
+						identityFingerprint: expect.stringMatching(/^[0-9a-f]{12}$/),
 					}),
+				);
+				expect(mockLogger.debug).not.toHaveBeenCalledWith(
+					'Successfully stored dynamic credentials',
+					expect.objectContaining({ identity: expect.anything() }),
 				);
 			});
 

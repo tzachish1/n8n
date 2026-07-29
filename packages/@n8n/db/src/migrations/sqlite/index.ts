@@ -206,6 +206,7 @@ import { CreateInstanceAiMcpRegistryConnectionTable1784000000023 } from '../comm
 import { AddResourceToOAuthAuthorizationCodes1784000000024 } from '../common/1784000000024-AddResourceToOAuthAuthorizationCodes';
 import { CreateWorkflowPublicationOutboxTable1784000000027 } from '../common/1784000000027-CreateWorkflowPublicationOutboxTable';
 import { CreateAgentChatSubscriptions1784000000030 } from '../common/1784000000030-CreateAgentChatSubscriptions';
+import { AddOidcSeedSourceToCredentialResolver1785500832627 } from '../common/1785500832627-AddOidcSeedSourceToCredentialResolver';
 import type { Migration } from '../migration-types';
 import { CreateAgentTaskDefinitionTable1784000000021 } from './1784000000021-CreateAgentTaskDefinitionTable';
 import { MigrateRedactionEnforcementToFloor1784000000025 } from '../common/1784000000025-MigrateRedactionEnforcementToFloor';
@@ -467,6 +468,7 @@ const sqliteMigrations: Migration[] = [
 	AddMisfirePolicyToScheduler1785247194307,
 	CreateAgentChatAttachmentsTable1785255306000,
 	AddSetupCompletedAtToAgents1785500832626,
+	AddOidcSeedSourceToCredentialResolver1785500832627,
 ];
 
 export { sqliteMigrations };

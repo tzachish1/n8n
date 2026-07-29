@@ -13,6 +13,7 @@ import { PrometheusEventBusMetricsService } from './event-bus-metrics.service';
 import { PrometheusExecutionDataMetricsService } from './execution-data-metrics.service';
 import { PrometheusInstanceAiMetricsService } from './instance-ai-metrics.service';
 import { PrometheusInstanceRoleMetricsService } from './instance-role-metrics.service';
+import { PrometheusOidcLazySeedMetricsService } from './oidc-lazy-seed-metrics.service';
 import { PrometheusPssMetricsService } from './pss-metrics.service';
 import { PrometheusQueueMetricsService } from './queue-metrics.service';
 import { PrometheusRouteMetricsService } from './route-metrics.service';
@@ -47,6 +48,7 @@ export class PrometheusMetricsService {
 		version: PrometheusVersionMetricsService,
 		defaultMetrics: PrometheusDefaultMetricsService,
 		tokenExchange: PrometheusTokenExchangeMetricsService,
+		oidcLazySeed: PrometheusOidcLazySeedMetricsService,
 		ssrf: PrometheusSsrfMetricsService,
 		dnsCache: PrometheusDnsCacheMetricsService,
 		webhook: PrometheusWebhookAndFormMetricsService,
@@ -71,6 +73,7 @@ export class PrometheusMetricsService {
 			version,
 			defaultMetrics,
 			tokenExchange,
+			oidcLazySeed,
 			ssrf,
 			dnsCache,
 			webhook,

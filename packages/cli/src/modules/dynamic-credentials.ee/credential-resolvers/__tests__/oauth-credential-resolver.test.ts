@@ -4,6 +4,7 @@ import type { Mocked } from 'vitest';
 
 import { testCredentialResolverContract, testHelpers } from './resolver-contract-tests';
 import type { OAuth2TokenIntrospectionIdentifier } from '../identifiers/oauth2-introspection-identifier';
+import type { OAuth2JwtClaimIdentifier } from '../identifiers/oauth2-jwt-claim-identifier';
 import type { OAuth2UserInfoIdentifier } from '../identifiers/oauth2-userinfo-identifier';
 import { OAuthCredentialResolver } from '../oauth-credential-resolver';
 import type { DynamicCredentialEntryStorage } from '../storage/dynamic-credential-entry-storage';
@@ -12,6 +13,7 @@ describe('OAuthCredentialResolver', () => {
 	let mockLogger: Mocked<Logger>;
 	let mockIdentifier: Mocked<OAuth2TokenIntrospectionIdentifier>;
 	let mockIdentifierUserInfo: Mocked<OAuth2UserInfoIdentifier>;
+	let mockIdentifierJwtClaim: Mocked<OAuth2JwtClaimIdentifier>;
 	let mockStorage: Mocked<DynamicCredentialEntryStorage>;
 	let mockCipher: Mocked<Cipher>;
 
@@ -40,6 +42,11 @@ describe('OAuthCredentialResolver', () => {
 			resolve: vi.fn(),
 			validateOptions: vi.fn(),
 		} as unknown as Mocked<OAuth2UserInfoIdentifier>;
+
+		mockIdentifierJwtClaim = {
+			resolve: jest.fn(),
+			validateOptions: jest.fn(),
+		} as unknown as jest.Mocked<OAuth2JwtClaimIdentifier>;
 
 		mockStorage = {
 			getCredentialData: vi.fn(),
@@ -96,6 +103,7 @@ describe('OAuthCredentialResolver', () => {
 				mockLogger,
 				mockIdentifier,
 				mockIdentifierUserInfo,
+				mockIdentifierJwtClaim,
 				mockStorage,
 				mockCipher,
 			);
@@ -146,6 +154,7 @@ describe('OAuthCredentialResolver', () => {
 				mockLogger,
 				mockIdentifier,
 				mockIdentifierUserInfo,
+				mockIdentifierJwtClaim,
 				mockStorage,
 				mockCipher,
 			);
