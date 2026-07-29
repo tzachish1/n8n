@@ -417,7 +417,6 @@ export class LogStreamingEventRelay extends EventRelay {
 		projectId,
 		projectName,
 		source,
-		projectId,
 	}: WorkflowExecutedEventWithUser) {
 		void this.eventBus.sendAuditEvent({
 			eventName: 'n8n.audit.workflow.executed',
@@ -430,7 +429,6 @@ export class LogStreamingEventRelay extends EventRelay {
 				projectName,
 				source,
 				mode: sourceToMode[source],
-				projectId,
 			},
 		});
 	}
@@ -442,7 +440,6 @@ export class LogStreamingEventRelay extends EventRelay {
 		projectId,
 		projectName,
 		source,
-		projectId,
 	}: WorkflowExecutedEvent) {
 		void this.eventBus.sendAuditEvent({
 			eventName: 'n8n.audit.workflow.executed',
@@ -454,7 +451,6 @@ export class LogStreamingEventRelay extends EventRelay {
 				projectName,
 				source,
 				mode: sourceToMode[source],
-				projectId,
 			},
 		});
 	}

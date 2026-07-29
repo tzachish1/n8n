@@ -203,7 +203,7 @@ function hookFunctionsWorkflowEvents(
 	});
 }
 
-function hookFunctionsNodeEvents(hooks: ExecutionLifecycleHooks) {
+function hookFunctionsNodeEvents(hooks: ExecutionLifecycleHooks, projectId?: string) {
 	const eventService = Container.get(EventService);
 	hooks.addHandler('nodeExecuteBefore', function (nodeName) {
 		const { executionId, workflowData: workflow, mode } = this;
@@ -771,7 +771,7 @@ export function getLifecycleHooksForSubExecutions(
 	const hooks = new ExecutionLifecycleHooks(mode, executionId, workflowData);
 	const saveSettings = toSaveSettings(workflowData.settings);
 	hookFunctionsWorkflowEvents(hooks, userId, projectId, projectName);
-	hookFunctionsNodeEvents(hooks);
+	hookFunctionsNodeEvents(hooks, projectId);
 	hookFunctionsFinalizeExecutionStatus(hooks);
 	hookFunctionsSave(hooks, { saveSettings, parentExecution });
 	hookFunctionsSaveProgress(hooks, { saveSettings });
@@ -788,7 +788,7 @@ export function getLifecycleHooksForScalingWorker(
 	data: IWorkflowExecutionDataProcess,
 	executionId: string,
 ): ExecutionLifecycleHooks {
-	const { pushRef, retryOf, executionMode, workflowData, source } = data;
+	const { pushRef, retryOf, executionMode, workflowData, source, projectId } = data;
 	const hooks = new ExecutionLifecycleHooks(
 		executionMode,
 		executionId,
@@ -797,7 +797,7 @@ export function getLifecycleHooksForScalingWorker(
 	);
 	const saveSettings = toSaveSettings(workflowData.settings);
 	const optionalParameters = { pushRef, retryOf: retryOf ?? undefined, saveSettings, source };
-	hookFunctionsNodeEvents(hooks);
+	hookFunctionsNodeEvents(hooks, projectId);
 	hookFunctionsFinalizeExecutionStatus(hooks);
 	hookFunctionsSaveWorker(hooks, optionalParameters);
 	hookFunctionsSaveProgress(hooks, optionalParameters);
@@ -928,7 +928,7 @@ export function getLifecycleHooksForRegularMain(
 	const saveSettings = toSaveSettings(workflowData.settings);
 	const optionalParameters = { pushRef, retryOf: retryOf ?? undefined, saveSettings, source };
 	hookFunctionsWorkflowEvents(hooks, userId, projectId, projectName, source, telemetryMetadata);
-	hookFunctionsNodeEvents(hooks);
+	hookFunctionsNodeEvents(hooks, projectId);
 	hookFunctionsFinalizeExecutionStatus(hooks);
 	hookFunctionsSave(hooks, optionalParameters);
 	hookFunctionsPush(hooks, optionalParameters, userId, source);

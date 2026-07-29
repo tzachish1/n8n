@@ -7,7 +7,7 @@ import { useUIStore } from '@/app/stores/ui.store';
 import { storeToRefs } from 'pinia';
 
 import {
-	N8nActionBox,
+	N8nEmptyState,
 	N8nButton,
 	N8nCard,
 	N8nIcon,
@@ -292,7 +292,7 @@ async function onFileSelected(event: Event) {
 		</div>
 
 		<!-- Empty State -->
-		<N8nActionBox
+		<N8nEmptyState
 			v-if="categories.length === 0"
 			:heading="i18n.baseText('nodeGovernance.categories.empty.title')"
 			:description="i18n.baseText('nodeGovernance.categories.empty.description')"

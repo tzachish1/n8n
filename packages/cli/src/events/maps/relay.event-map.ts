@@ -214,7 +214,6 @@ export type RelayEventMap = {
 			| 'integrated'
 			| 'evaluation'
 			| 'chat';
-		projectId?: string;
 	};
 
 	'workflow-version-updated': {

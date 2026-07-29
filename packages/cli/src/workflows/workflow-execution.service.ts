@@ -328,7 +328,6 @@ export class WorkflowExecutionService {
 			projectId,
 			projectName,
 			source: 'chat',
-			projectId: ownerProject?.id,
 		});
 
 		return {
@@ -526,7 +525,6 @@ export class WorkflowExecutionService {
 				projectId: runningProject.id,
 				projectName: runningProject.name,
 				source: 'error',
-				projectId: runningProject.id,
 			});
 		} catch (error) {
 			this.errorReporter.error(error);

@@ -10,7 +10,7 @@ import type { ProjectSharingData } from '@/features/collaboration/projects/proje
 import ProjectSharing from '@/features/collaboration/projects/components/ProjectSharing.vue';
 
 import {
-	N8nActionBox,
+	N8nEmptyState,
 	N8nBadge,
 	N8nButton,
 	N8nDataTableServer,
@@ -286,7 +286,7 @@ function getNodeCount(policy: NodeGovernancePolicy): number {
 <template>
 	<div :class="$style.policiesTab">
 		<!-- Empty State -->
-		<N8nActionBox
+		<N8nEmptyState
 			v-if="policies.length === 0"
 			:heading="i18n.baseText('nodeGovernance.policies.empty.title')"
 			:description="i18n.baseText('nodeGovernance.policies.empty.description')"

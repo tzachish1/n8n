@@ -5,7 +5,7 @@ import { useUIStore } from '@/app/stores/ui.store';
 import { storeToRefs } from 'pinia';
 
 import {
-	N8nActionBox,
+	N8nEmptyState,
 	N8nBadge,
 	N8nButton,
 	N8nCard,
@@ -162,7 +162,7 @@ function getNodeDisplayName(nodeType: string): string {
 		</div>
 
 		<!-- Empty State -->
-		<N8nActionBox
+		<N8nEmptyState
 			v-if="pendingRequests.length === 0"
 			:heading="i18n.baseText('nodeGovernance.requests.empty.title')"
 			:description="i18n.baseText('nodeGovernance.requests.empty.description')"
