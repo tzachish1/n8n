@@ -21,6 +21,8 @@ export type TestWebhookRegistration = {
 	workflowEntity: IWorkflowBase;
 	destinationNode?: IDestinationNode;
 	webhook: IWebhookData;
+	/** Pre-built runner identity for dynamic credential resolution on manual test runs. */
+	encryptedRunnerIdentity?: string;
 };
 
 // Type guard for TestWebhookRegistration.

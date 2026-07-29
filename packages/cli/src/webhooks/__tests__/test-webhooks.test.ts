@@ -1,6 +1,8 @@
 import type { Logger } from '@n8n/backend-common';
 import type { WorkflowEntity } from '@n8n/db';
 import { generateNanoId } from '@n8n/db';
+import { Container } from '@n8n/di';
+import { ExecutionContextService } from 'n8n-core';
 import type * as express from 'express';
 import type {
 	ITaskData,
@@ -24,7 +26,7 @@ import type {
 import { TestWebhooks } from '@/webhooks/test-webhooks';
 import * as WebhookHelpers from '@/webhooks/webhook-helpers';
 import type { WebhookService } from '@/webhooks/webhook.service';
-import type { WebhookRequest } from '@/webhooks/webhook.types';
+import type { IWebhookResponseCallbackData, WebhookRequest } from '@/webhooks/webhook.types';
 import * as AdditionalData from '@/workflow-execute-additional-data';
 
 vi.mock('@/workflow-execute-additional-data');
@@ -154,6 +156,31 @@ describe('TestWebhooks', () => {
 			expect(registrations.register.mock.calls[0][0].webhook.node).toBe(webhook2.node);
 			expect(webhookService.createWebhookIfNotExists.mock.calls[0][1].node).toBe(webhook2.node);
 			expect(needsWebhook).toBe(true);
+		});
+
+		test('stores encryptedRunnerIdentity in registration when n8nAuthCookie is provided', async () => {
+			const workflow = mock<Workflow>({ expression: mock<WorkflowExpression>() });
+			const testWebhook = mock<IWebhookData>({
+				...webhook,
+				webhookDescription: { restartWebhook: false } as IWebhookData['webhookDescription'],
+			});
+			vi.spyOn(testWebhooks, 'toWorkflow').mockReturnValueOnce(workflow);
+			vi.spyOn(WebhookHelpers, 'getWorkflowWebhooks').mockReturnValue([testWebhook]);
+
+			const executionContextService = mock<ExecutionContextService>();
+			executionContextService.buildManualExecutionCredentials.mockResolvedValue(
+				'encrypted-identity',
+			);
+			Container.set(ExecutionContextService, executionContextService);
+
+			await testWebhooks.needsWebhook({ ...args, n8nAuthCookie: 'auth-cookie-jwt' });
+
+			expect(executionContextService.buildManualExecutionCredentials).toHaveBeenCalledWith(
+				'auth-cookie-jwt',
+			);
+			expect(registrations.register).toHaveBeenCalledWith(
+				expect.objectContaining({ encryptedRunnerIdentity: 'encrypted-identity' }),
+			);
 		});
 
 		test('should use sessionId-based path for ChatTrigger nodes when chatSessionId is provided', async () => {
@@ -425,6 +452,50 @@ describe('TestWebhooks', () => {
 			);
 
 			await expect(promise).rejects.toThrowError(WebhookNotFoundError);
+		});
+
+		test('passes stored encryptedRunnerIdentity to WebhookHelpers.executeWebhook', async () => {
+			const workflowStartNode = { name: 'Webhook', type: 'n8n-nodes-base.webhook' };
+			const workflow = mock<Workflow>({
+				expression: mock<WorkflowExpression>({
+					acquireIsolate: vi.fn().mockResolvedValue(undefined),
+					releaseIsolate: vi.fn().mockResolvedValue(undefined),
+				}),
+				getNode: vi.fn().mockReturnValue(workflowStartNode),
+			});
+
+			vi.spyOn(testWebhooks, 'getActiveWebhook').mockResolvedValue(webhook);
+			vi.spyOn(testWebhooks, 'getWebhookMethods').mockResolvedValue([]);
+			vi.spyOn(testWebhooks, 'toWorkflow').mockReturnValue(workflow);
+
+			const registration = mock<TestWebhookRegistration>({
+				version: 1,
+				pushRef: 'some-session-id',
+				workflowEntity,
+				webhook,
+				encryptedRunnerIdentity: 'stored-encrypted-identity',
+			});
+
+			await registrations.register(registration);
+			registrations.get.mockResolvedValue(registration);
+
+			const executeWebhookSpy = vi
+				.spyOn(WebhookHelpers, 'executeWebhook')
+				.mockImplementation(async (...args: unknown[]) => {
+					const callback = args[10] as (
+						error: Error | null,
+						data: IWebhookResponseCallbackData,
+					) => void;
+					callback(null, {});
+					return 'test-execution-id';
+				});
+
+			await testWebhooks.executeWebhook(
+				mock<WebhookRequest>({ params: { path } }),
+				mock<express.Response>(),
+			);
+
+			expect(executeWebhookSpy.mock.calls[0]?.at(-1)).toBe('stored-encrypted-identity');
 		});
 	});
 
