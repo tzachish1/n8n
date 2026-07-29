@@ -94,6 +94,44 @@ export const describeCommonTests = (
 			expect(context.getExecutionContext()).toBeUndefined();
 		});
 
+		it('should return fallback when runtimeData is not set', () => {
+			runExecutionData.executionData = undefined;
+
+			const fallback: IExecutionContext = {
+				version: 1,
+				establishedAt: Date.now(),
+				source: 'manual',
+				credentials: 'encrypted-credential-data',
+			};
+
+			expect(context.getExecutionContext(fallback)).toEqual(fallback);
+		});
+
+		it('should prefer runtimeData over fallback when both are set', () => {
+			const runtimeContext: IExecutionContext = {
+				version: 1,
+				establishedAt: 100,
+				source: 'webhook',
+			};
+			const fallback: IExecutionContext = {
+				version: 1,
+				establishedAt: 200,
+				source: 'manual',
+				credentials: 'encrypted-credential-data',
+			};
+
+			runExecutionData.executionData = {
+				contextData: {},
+				runtimeData: runtimeContext,
+				nodeExecutionStack: [],
+				metadata: {},
+				waitingExecution: {},
+				waitingExecutionSource: null,
+			};
+
+			expect(context.getExecutionContext(fallback)).toEqual(runtimeContext);
+		});
+
 		it('should handle optional credentials field', () => {
 			const contextWithoutCredentials: IExecutionContext = {
 				version: 1,

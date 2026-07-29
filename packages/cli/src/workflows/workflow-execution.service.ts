@@ -182,6 +182,7 @@ export class WorkflowExecutionService {
 					destinationNode: payload.destinationNode,
 					chatSessionId: payload.chatSessionId,
 					workflowIsActive,
+					n8nAuthCookie,
 				}))
 			) {
 				return { waitingForWebhook: true };
@@ -219,6 +220,7 @@ export class WorkflowExecutionService {
 					pushRef,
 					destinationNode: payload.destinationNode,
 					workflowIsActive,
+					n8nAuthCookie,
 				}))
 			) {
 				return { waitingForWebhook: true };

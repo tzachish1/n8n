@@ -207,6 +207,65 @@ describe('WorkflowExecutionService', () => {
 			expect(result).toEqual({ executionId });
 		});
 
+		test('should attach encryptedRunnerIdentity when n8nAuthCookie is provided', async () => {
+			const executionContextService = mock<import('n8n-core').ExecutionContextService>();
+			executionContextService.buildManualExecutionCredentials.mockResolvedValue(
+				'encrypted-identity-blob',
+			);
+
+			const serviceWithIdentity = new WorkflowExecutionService(
+				mock(),
+				mock(),
+				mock(),
+				mock(),
+				nodeTypes,
+				mock(),
+				workflowRunner,
+				mock(),
+				mock(),
+				mock(),
+				mock(),
+				mockOwnershipService(),
+				executionContextService,
+				mock(),
+				mock(),
+			);
+
+			const executionId = 'fake-execution-id';
+			const user = mock<User>({ id: 'user-id' });
+			const workflowData = mock<IWorkflowBase>({
+				nodes: [webhookNode, hackerNewsNode],
+				connections: createMainConnection(hackerNewsNode.name, webhookNode.name),
+				pinData: undefined,
+			});
+			const runPayload: WorkflowRequest.PartialManualExecutionToDestinationPayload = {
+				agentRequest: undefined,
+				runData: { [webhookNode.name]: [toITaskData([{ data: { value: 1 } }])] },
+				destinationNode: { nodeName: hackerNewsNode.name, mode: 'inclusive' },
+				dirtyNodeNames: [],
+			};
+
+			vi.mocked(nodeTypes.getByNameAndVersion).mockReturnValueOnce(
+				mock<INodeType>({ description: { group: [] } }),
+			);
+			workflowRunner.run.mockResolvedValue(executionId);
+
+			await serviceWithIdentity.executeManually(
+				workflowData,
+				runPayload,
+				user,
+				undefined,
+				'auth-cookie-jwt',
+			);
+
+			expect(executionContextService.buildManualExecutionCredentials).toHaveBeenCalledWith(
+				'auth-cookie-jwt',
+			);
+			expect(workflowRunner.run).toHaveBeenCalledWith(
+				expect.objectContaining({ encryptedRunnerIdentity: 'encrypted-identity-blob' }),
+			);
+		});
+
 		test('removes runData if the destination node is a trigger', async () => {
 			const executionId = 'fake-execution-id';
 			const userId = 'user-id';

@@ -14,6 +14,7 @@ import merge from 'lodash/merge';
 import {
 	BinaryDataService,
 	ErrorReporter,
+	ExecutionContextService,
 	establishExecutionContext,
 	WAITING_TOKEN_QUERY_PARAM,
 } from 'n8n-core';
@@ -443,6 +444,7 @@ export async function executeWebhook(
 		data: IWebhookResponseCallbackData | WebhookResponse,
 	) => void,
 	destinationNode?: IDestinationNode,
+	manualRunnerIdentity?: string,
 ): Promise<string | undefined> {
 	// Get the nodeType to know which responseMode is set
 	const nodeType = workflow.nodeTypes.getByNameAndVersion(
@@ -740,6 +742,17 @@ export async function executeWebhook(
 			projectName: project?.name,
 			userId: webhookData.userId,
 		};
+
+		if (executionMode === 'manual') {
+			const n8nAuthCookie = authService.getCookieToken(req);
+			if (n8nAuthCookie) {
+				runData.encryptedRunnerIdentity = await Container.get(
+					ExecutionContextService,
+				).buildManualExecutionCredentials(n8nAuthCookie);
+			} else if (manualRunnerIdentity) {
+				runData.encryptedRunnerIdentity = manualRunnerIdentity;
+			}
+		}
 
 		// When resuming from a wait node, copy over the pushRef from the execution-data
 		if (!runData.pushRef) {

@@ -17,6 +17,7 @@ import type {
 	ExecuteAgentInfo,
 	ExecuteAgentData,
 	ExecuteAgentSource,
+	IExecutionContext,
 	ITaskMetadata,
 	ContextType,
 	IContextObject,
@@ -59,8 +60,8 @@ export class BaseExecuteContext extends NodeExecutionContext {
 		super(workflow, node, additionalData, mode, runExecutionData, runIndex);
 	}
 
-	getExecutionContext() {
-		return this.runExecutionData.executionData?.runtimeData;
+	getExecutionContext(fallback?: IExecutionContext) {
+		return super.getExecutionContext(fallback);
 	}
 
 	getExecutionCancelSignal() {
