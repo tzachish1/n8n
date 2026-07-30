@@ -27,7 +27,35 @@ We always branch from the upstream release tag, never from upstream `master`.
 | `feat/upgrade-to-n8n-2.19.2`             | `n8n@2.19.2` | 8              | absorbed `oidc.controller.ee.test.ts` 7th `EventService` mock, `import.service.ts` `Partial<WorkflowEntity>` cast (TS2589 workaround), `node-governance.service.ts` typeorm-import escape hatch, `NodeCreator.test.ts` `vi.mock` import-style fix; chore folded into `chore(upgrade-2.19.2)`. |
 | `feat/upgrade-to-n8n-2.20.7-exp.0`        | `n8n@2.20.7-exp.0` | 8 | reverted the 2.19.2-era `Partial<WorkflowEntity>` cast in `import.service.ts` (upstream `tx.upsert` no longer triggers TS2589, and keeping the cast itself now does); added 20th `mock<OwnershipService>()` to `execution.service.integration.test.ts` (upstream constructor reached 19 args, governance adds the 20th); SSRF refactor (`SsrfProtectionConfig` + `SsrfProtectionService` injection) re-merged with §1 governance enforcement in `workflows.controller.ts`; Azure APIM credentials kept fork superset (APIM + `approvedModels` + `Resource Name`) over upstream's bare drop; `release-build-daytona-snapshot.yml` deleted as part of §8 trim; chore folded into `chore(upgrade-2.20.7-exp.0)`. |
 | `feat/upgrade-to-n8n-2.20.9`             | `n8n@2.20.9` | 8 | small upgrade — 7 upstream commits (`1bb97d8392..38294c02d7`), 36 files, 0 customization-hotspot collisions in the pre-flight analysis. §1 needed a 12-line `execution-lifecycle-hooks.ts` + `workflow-execution.service.ts` re-wire (`projectId: project.id` → `ownerProject?.id` on the `'chat'` source path); folded into `chore(upgrade-2.20.9)`. §5 absorbed upstream PR n8n-io/n8n#30478's alpine 3.22→3.23 migration (`NODE_VERSION` 24.14.1→24.15.0; stage-2 paths `/usr/local/lib/node_modules` → `/usr/lib/node_modules` and `/usr/local/bin/n8n` → `/usr/bin/n8n`) — the merged-after-2.20.9 PR republished `n8nio/base:24.14.1` with the new DHI alpine 3.23 layout where `/usr/local/` doesn't exist by default, breaking n8n@2.20.9 source builds at the symlink step; folded into `chore(upgrade-2.20.9)` alongside the cli wiring fix. Picked up free from upstream: resource-center tooltip removal (#30476), `ObservableObject` proxy-layer-accumulation fix (#30505), VM-expression nested-array preservation fix (#30334). |
-| `feat/upgrade-to-n8n-2.22.4` (current)   | `n8n@2.22.4` | 8 | medium upgrade — landed all 8 customizations, then squashed mid-cycle follow-ons back into their feature commits to keep the convention. §3 OIDC absorbed two code follow-ons (diag ID-token claim fingerprint logging + access-token claim fallback when ID token omits roles) directly into `feat(sso-oidc)`. §7 chore absorbed cherry-pick collateral (`oidc.controller.ee.ts` + test double-`eventService` DI dedupe from §3 auto-merge; `NodeAccessRequestModal.vue` `workflowsStore.workflow` → `injectWorkflowDocumentStore().value?.name` after upstream marked `.workflow` private; `oidc.service.ee.test.ts` `rejects.toThrow(new BadRequestError(...))` → split `toThrow(BadRequestError)` + `toThrow('message')` for the new `n8n-local-rules/no-error-instance-in-to-throw` rule) on top of the 2.20.9-era chore content (`.gitignore` additions, Dockerfile alpine path migration, governance DTO shims) — renamed to `chore(upgrade-2.22.4)`. §8 docs absorbed two CUSTOMS.md-only follow-ons (Azure Entra v1-token edge-case troubleshooting row + recommended v1 OIDC settings row; cherry-pick-variation + manual-smoke-findings ledger entries). Upstream collisions resolved: §3 PR n8n-io/n8n#29856 absorbed our `user-login-failed` emit shape, making the §3 `auth.controller.ts` parameter-rename conflict redundant (kept HEAD); §5 Dockerfile combined HEAD's `npm rebuild sqlite3` with fork's `JOBS=1 npm rebuild isolated-vm`; kept HEAD's `alpine3.22` over incoming `alpine3.23` (consistency with upstream 2.22.4 pinning). §8 CI trim: 34 modify/delete conflicts resolved by honoring fork deletions; 3 UU files (`ci-master.yml`, `ci-pull-requests.yml`, `docker-build-smoke.yml`) preserved fork's removal of e2e/security/Slack notifications and daily cron triggers while keeping upstream functional changes. Required tooling fixes: `pnpm install` (new `@n8n/engine` package), force-rebuild of `@n8n/eslint-plugin-community-nodes` (stale turbo cache restored 8-of-35 rules from a 2.20.9-era build), and `NODE_OPTIONS=--max-old-space-size=10240` for `pnpm lint` (cli package OOMs the 4 GB default). New troubleshooting rows added below. |
+| `feat/upgrade-to-n8n-2.22.4`             | `n8n@2.22.4` | 8 | medium upgrade — landed all 8 customizations, then squashed mid-cycle follow-ons back into their feature commits to keep the convention. §3 OIDC absorbed two code follow-ons (diag ID-token claim fingerprint logging + access-token claim fallback when ID token omits roles) directly into `feat(sso-oidc)`. §7 chore absorbed cherry-pick collateral (`oidc.controller.ee.ts` + test double-`eventService` DI dedupe from §3 auto-merge; `NodeAccessRequestModal.vue` `workflowsStore.workflow` → `injectWorkflowDocumentStore().value?.name` after upstream marked `.workflow` private; `oidc.service.ee.test.ts` `rejects.toThrow(new BadRequestError(...))` → split `toThrow(BadRequestError)` + `toThrow('message')` for the new `n8n-local-rules/no-error-instance-in-to-throw` rule) on top of the 2.20.9-era chore content (`.gitignore` additions, Dockerfile alpine path migration, governance DTO shims) — renamed to `chore(upgrade-2.22.4)`. §8 docs absorbed two CUSTOMS.md-only follow-ons (Azure Entra v1-token edge-case troubleshooting row + recommended v1 OIDC settings row; cherry-pick-variation + manual-smoke-findings ledger entries). Upstream collisions resolved: §3 PR n8n-io/n8n#29856 absorbed our `user-login-failed` emit shape, making the §3 `auth.controller.ts` parameter-rename conflict redundant (kept HEAD); §5 Dockerfile combined HEAD's `npm rebuild sqlite3` with fork's `JOBS=1 npm rebuild isolated-vm`; kept HEAD's `alpine3.22` over incoming `alpine3.23` (consistency with upstream 2.22.4 pinning). §8 CI trim: 34 modify/delete conflicts resolved by honoring fork deletions; 3 UU files (`ci-master.yml`, `ci-pull-requests.yml`, `docker-build-smoke.yml`) preserved fork's removal of e2e/security/Slack notifications and daily cron triggers while keeping upstream functional changes. Required tooling fixes: `pnpm install` (new `@n8n/engine` package), force-rebuild of `@n8n/eslint-plugin-community-nodes` (stale turbo cache restored 8-of-35 rules from a 2.20.9-era build), and `NODE_OPTIONS=--max-old-space-size=10240` for `pnpm lint` (cli package OOMs the 4 GB default). New troubleshooting rows added below. |
+| `feat/upgrade-to-n8n-2.26.8`             | `n8n@2.26.8` | 13 | large upgrade — 11 customization commits cherry-picked from `feat/upgrade-to-n8n-2.25.7` plus `ae59bcc162f` `chore(upgrade-2.25.7)` and two fresh reconciliation commits (`f5dc4d59ca1` `fix(credentials)` + `d589c625cf5` drift fix). §3 partial upstream adoption (PR #29856, `scopesInstanceRoleClaimName`, outbound HTTP proxy refactor). §5 Docker largely upstream; fork scratch-flatten base kept. §11 redaction: upstream 2.26.8 adopted `executedByUserId`-based reveal — fork `isSelfManualReveal` dropped at cherry-pick, re-applied fresh in reconciliation. §10 migration renumbered to `…0029` (collision with upstream `…022–028`). Ledger: `UPGRADE-2.26.8-PROGRESS.md`. |
+| `feat/upgrade-to-n8n-2.30.6`             | `n8n@2.30.6` | 13 | large upgrade from `n8n@2.26.8` — 11 customization commits cherry-picked from `feat/upgrade-to-n8n-2.26.8` (`3e2efab623f` … `77b41fccc47`) plus `3f8468f8dc9` interim Phase-1 drift, `e70012050ef` `fix(credentials)` (W8 fresh reconciliation), `29a35e2b4d4` `chore(upgrade-2.30.6)` (W9 drift). Key manual ports: §5 labels into `packages/cli/src/metrics/prometheus/event-bus-metrics.service.ts` (monolithic `prometheus-metrics.service.ts` gone upstream); §10 migration `1784000000044` + lazy-seed counter in `oidc-lazy-seed-metrics.service.ts`; §11 upstream #33071/#31938/#33070 verified intact. **Automated gates:** build 64/64, typecheck 120/120, lint 116/116, tests 558 pass. **Packaging smoke (2026-07-19):** isolated `n8nio/n8n:2.30.6` container — `/healthz` 200, `/metrics` shows `execution_mode` + `project_id` after one workflow run. **Manual smoke:** pending user sign-off (see checklist below). **User-compose blocker:** `n8n-mcp-client-node` missing `ajv` under `N8N_CUSTOM_EXTENSIONS` — fix before pointing compose at 2.30.6. Ledger: `UPGRADE-2.30.6-PROGRESS.md`. |
+| `feat/upgrade-to-n8n-2.32.6` (current)   | `n8n@2.32.6` (`c580585cf48c62fe71adabfffe3f238ce604e263`) | 12 committed + pending reconciliation | upgrade from `n8n@2.30.6` — 12 customization commits cherry-picked from `feat/upgrade-to-n8n-2.30.6` (see index below) plus `ab6561f6843` interim Phase-1 drift. **§12 (new):** manual test-webhook/chat runner-identity chain + `getExecutionContext(fallback)`; **TRIM** upstream-adopted `manualData.userId` webhook stamping + direct `executeManually` identity. §10 migration renumbered `…0044` → **`1784000000052`** (`AddOidcSeedSourceToCredentialResolver1784000000052`; collision with upstream `AddPartialIndexForGlobalCredentials` at `…0044`). **Automated gates (W9):** build 65/65, lint green, typecheck green (cli + editor-ui direct; full turbo 119/120 — `@n8n/node-cli#build` EPERM only). **Packaging smoke (2026-07-30):** `n8nio/n8n:2.32.6` + `n8nio/runners:2.32.6` — `/healthz` 200, `/metrics` served (fork labels lazy until first workflow run). **Pending (uncommitted):** W8+W9 dynamic/shared-credential reconciliation + §11 editor-ui connect-gating fixes — see reconciliation table below. Ledger: `UPGRADE-2.32.6-PROGRESS.md`. Backup tag: `backup/pre-2.32.6-8f868357deb`. |
+
+### Customization commit index (current branch `feat/upgrade-to-n8n-2.32.6`)
+
+Cherry-pick source SHAs (from `feat/upgrade-to-n8n-2.30.6`) → landed SHAs on `n8n@2.32.6` (`c580585cf48c`):
+
+| § | Landed SHA | Subject |
+|---|------------|---------|
+| §1 | `07a7d0440a0` | `feat(node-governance): introduce node governance with audit, enforcement, and per-project overrides` |
+| §2 | `02657c328ee` | `feat(external-secrets): add Akeyless provider with subfolder support and log redaction` |
+| §3 | `13b9db2ac5d` | `feat(sso-oidc): harden Azure Entra direct-claim provisioning for instance and project roles` |
+| §8 | `385cb693da3` | `chore(ci): trim fork-irrelevant GitHub Actions workflows` |
+| §4 | `bf6fbe196f2` | `feat(nodes-langchain): add Azure API Management (APIM) support for Azure OpenAI` |
+| §5 | `3858ee1fb48` | `feat(core): add execution_mode and project_id labels to Prometheus metrics plus Docker build splits` |
+| §7 | `20a80d160b3` | `docs(upgrade): CUSTOMS.md customization ledger and upgrade procedure` |
+| interim-drift | `ab6561f6843` | `fix(upgrade): interim build drift for 2.32.6 Phase-1` |
+| §9 | `e8b98f36bf4` | `feat(dynamic-credentials): add programmatic credential seeding endpoint` |
+| §10 | `9016b4eb6a0` | `feat(sso-oidc)!: implement OIDC-driven Microsoft Graph credential seeding (Phase 1-2d)` |
+| §11 | `1a5609e0098` | `feat(dynamic-credentials): generic SaaS OAuth2 resolver with hybrid fallback (§11 v1)` |
+| §12 | `6aa25eb000a` | `feat(dynamic-credentials): resolve private OAuth2 credentials on manual test-webhook/chat runs + supply-data execution-context fallback` |
+
+Reconciliation (regenerate on each upgrade — do **not** replay verbatim):
+
+| Status | Description |
+|--------|-------------|
+| **pending reconciliation commit** *(uncommitted working tree, W11)* | W8 fresh fork reconciliation: `isSelfManualReveal` + `hookFunctionsStampManualUser` + `getCredentialScopes` global-read + `node-execution-context.ts` `getExecutionContext(fallback?)`. W9 drift fixes (OutboundHttp migrations, test reconciles, governance Vue/DTO lint). W9-fix §11 editor-ui connect-gating (`CredentialConfig.vue`, `NodeCredentials.vue`, `useNodeHelpers.ts`, related tests). **67 tracked files** modified — no commit SHA yet. See `UPGRADE-2.32.6-PROGRESS.md` W8/W9/W9-fix sections. |
 
 ## Commit-structure convention
 
@@ -59,7 +87,7 @@ access requests, project-level overrides, and an approval workflow. This is the
 most invasive customization — it touches DB, API, FE, permissions, and audit.
 
 **Commit on current branch (single, squashed)**
-- `f4473c8b1f feat(node-governance): introduce node governance with audit, enforcement, and per-project overrides`
+- `07a7d0440a0 feat(node-governance): introduce node governance with audit, enforcement, and per-project overrides`
 
 **Original component commits (pre-squash, archived in `backup/pre-squash-2.17.5`)**
 - `506b1a2cb6` initial node governance feature
@@ -204,7 +232,7 @@ external-secrets backend alongside the upstream Vault / AWS Secrets Manager
 providers. Needed for enterprise deployments.
 
 **Commit on current branch (single, squashed)**
-- `cf03e9c640 feat(external-secrets): add Akeyless provider with subfolder support and log redaction`
+- `02657c328ee feat(external-secrets): add Akeyless provider with subfolder support and log redaction`
 
 **Original component commits (pre-squash)**
 - `1b64b95a60` initial Akeyless provider
@@ -245,7 +273,7 @@ rigid DB row shape. We need:
 - Readable diagnostic logs when provisioning doesn't fire.
 
 **Commit on current branch (single, squashed)**
-- `2d4eb6dc8b feat(sso-oidc): harden Azure Entra direct-claim provisioning for instance and project roles`
+- `13b9db2ac5d feat(sso-oidc): harden Azure Entra direct-claim provisioning for instance and project roles`
 
 **Original component commits (pre-squash)**
 - `337ab0a67c` handle Azure AD `roles` array claim format
@@ -410,8 +438,8 @@ already maps both events to `n8n.audit.user.login.failed` /
 node so enterprises can route through Azure API Management.
 
 **Commit on current branch**
-- `d58298ee5d feat(nodes-langchain): add Azure API Management (APIM) support for Azure OpenAI`
-  *(was `015157d75e` pre-squash, then `7b8b8b737d` on `feat/upgrade-to-n8n-2.17.5` — same diff, new SHA each rebase)*
+- `bf6fbe196f2 feat(nodes-langchain): add Azure API Management (APIM) support for Azure OpenAI`
+  *(was `a6459999c50` on `feat/upgrade-to-n8n-2.30.6`; same diff, new SHA each rebase)*
 
 **Entry points / key files**
 - `packages/@n8n/nodes-langchain/credentials/AzureOpenAiApi.credentials.ts`
@@ -438,7 +466,8 @@ also carries the Docker `RUN`-step split for `sqlite3` / `isolated-vm`
 interleaved and share `scripts/dockerize-n8n.mjs` edits.
 
 **Commit on current branch (single, squashed)**
-- `96a11fc53a feat(core): add execution_mode and project_id labels to Prometheus metrics plus Docker build splits`
+- `3858ee1fb48 feat(core): add execution_mode and project_id labels to Prometheus metrics plus Docker build splits`
+  *(manual port at 2.32.6: labels in `event-bus-metrics.service.ts`; upstream `scheduler-metrics.service.ts` + expanded collectors preserved)*
 
 **Original component commits (pre-squash)**
 - `d19b7868eb` add `execution_mode` label
@@ -448,13 +477,13 @@ interleaved and share `scripts/dockerize-n8n.mjs` edits.
 
 **Entry points / key files**
 
-*Metrics*
-- `packages/cli/src/metrics/prometheus-metrics.service.ts`
-- `packages/cli/src/metrics/types.ts`
+*Metrics (as of `n8n@2.30.6` — upstream split monolithic service into collectors)*
+- `packages/cli/src/metrics/prometheus/event-bus-metrics.service.ts` *(fork labels: `execution_mode`, `project_id`, `workflowProjectCache`, `buildBaseWorkflowLabels` split)*
+- `packages/cli/src/metrics/prometheus/prometheus.service.ts` *(registers collectors)*
+- `packages/cli/src/metrics/prometheus/__tests__/event-bus-metrics.service.test.ts`
+- `packages/cli/src/metrics/prometheus/__tests__/event-bus-metrics.service.unmocked.test.ts`
 - `packages/cli/src/executions/execution.service.ts`
 - `packages/cli/src/workflows/workflow-execution.service.ts`
-- `packages/cli/src/metrics/__tests__/prometheus-metrics.service.test.ts`
-- `packages/cli/src/metrics/__tests__/prometheus-metrics.service.unmocked.test.ts`
 - `packages/cli/test/integration/prometheus-metrics.test.ts`
 
 *Docker*
@@ -469,9 +498,8 @@ interleaved and share `scripts/dockerize-n8n.mjs` edits.
   the revert command)*
 
 **Runtime contract**
-- Metric `n8n_audit_workflow_executed_total` (emitted from the `n8n.audit.workflow.executed` event via `toCounter()` in `prometheus-metrics.service.ts`) gains `execution_mode` and `project_id` labels. The same two labels are also applied to the per-node audit counters (`n8n_node_started_total`, `n8n_node_finished_total`). There is no upstream metric named `n8n_workflow_executions_total` — every event-bus counter in this file is named after its source event (see "Metric-name reference" below).
-- Existing dashboards/alerts keyed on these metrics must be updated if they depended on cardinality.
-- `PrometheusMetricsService` keeps an in-memory `workflowProjectCache: Map<workflowId, projectId>` that is opportunistically populated from any inbound event that carries a non-empty `projectId`. When a later event for the same workflow arrives without `projectId` (e.g. the execution-retry path in `executions/execution.service.ts`, or the webhook/trigger/cli/integrated/evaluation `eventService.emit('workflow-executed', …)` call sites that omit `projectId`), the cache supplies the value so `project_id="unknown"` is not emitted. Cache is process-local and resets on restart. Regression test lives in `prometheus-metrics.service.unmocked.test.ts` ("falls back to remembered project_id when payload omits it").
+- Metric `n8n_audit_workflow_executed_total` (emitted from the `n8n.audit.workflow.executed` event via `EventBusMetricsService.toLabels()` / `toCounter()` in `packages/cli/src/metrics/prometheus/event-bus-metrics.service.ts`) gains `execution_mode` and `project_id` labels. The same two labels are also applied to the per-node audit counters (`n8n_node_started_total`, `n8n_node_finished_total`). There is no upstream metric named `n8n_workflow_executions_total` — every event-bus counter in this collector is named after its source event (see "Metric-name reference" below).
+- `EventBusMetricsService` keeps an in-memory `workflowProjectCache: Map<workflowId, projectId>` that is opportunistically populated from any inbound event that carries a non-empty `projectId`. When a later event for the same workflow arrives without `projectId` (e.g. the execution-retry path in `executions/execution.service.ts`, or the webhook/trigger/cli/integrated/evaluation `eventService.emit('workflow-executed', …)` call sites that omit `projectId`), the cache supplies the value so `project_id="unknown"` is not emitted. Cache is process-local and resets on restart. Regression test lives in `event-bus-metrics.service.unmocked.test.ts` ("falls back to remembered project_id when payload omits it").
 - **Known cold-start gap.** For webhook executions, n8n emits the audit event `n8n.audit.workflow.executed` ~300ms BEFORE the first `n8n.node.started` event of the same execution. As a result, the very FIRST webhook execution for a given workflow after a fresh restart will emit `project_id="unknown"` (cache hasn't been primed yet). Every subsequent webhook execution for that workflow resolves correctly because the cache is then populated. Trigger / cli / integrated / evaluation execution sources have the same race in theory, but in practice `node-pre-execute` for those usually fires within the same tick as the audit event, so the cache wins. The orphan `project_id="unknown"` series can be safely filtered out at the Prometheus query layer (`{project_id!="unknown"}`) since each workflow produces at most one such sample per restart. Accepted as a narrow upstream-shape constraint; see "trade-offs" below.
 
 **Metric-name reference (for dashboards / alerts / smoke tests)**
@@ -485,10 +513,8 @@ The custom labels are layered onto a *mix* of upstream-named and audit-named met
 - Cache metrics: `n8n_cache_hits_total`, `n8n_cache_misses_total`, `n8n_cache_updates_total`.
 
 **Upgrade checklist**
-- Upstream has been slowly refactoring the metrics pipeline. If
-  `prometheus-metrics.service.ts` signatures change, re-plumb the two labels
-  into the counter definition and into every call site that increments it.
-- Keep `metrics/types.ts` declarations in sync with the labels we emit.
+- Upstream refactored metrics into `packages/cli/src/metrics/prometheus/` (~20 collectors). If upstream moves collectors again, re-plumb the two labels into `event-bus-metrics.service.ts` (not the deleted monolithic `prometheus-metrics.service.ts`). Verify with `git grep prometheus-metrics.service -- packages/cli` → 0 hits.
+- Keep `buildWorkflowLabels` / `buildBaseWorkflowLabels` in sync with the audit.executed vs audit.* split.
 - Keep the `workflowProjectCache` fallback in `buildWorkflowLabels` — it is the
   only reason `project_id="unknown"` doesn't surface for executions whose
   upstream emitter forgot to populate `projectId` (notably the retry path in
@@ -507,7 +533,12 @@ The custom labels are layered onto a *mix* of upstream-named and audit-named met
 ### 6. Repo hygiene / upgrade scaffolding
 
 **Commit on current branch (single, squashed)**
-- `a6b4020e93 chore(upgrade-2.17.7): build, lint, test, and repo-hygiene fixes to land customizations on 2.17.7`
+- `ab6561f6843 fix(upgrade): interim build drift for 2.32.6 Phase-1` *(W6 interim fixes between §7 and §9–§12)*
+
+**Pending reconciliation commit (uncommitted, W8+W9+W9-fix):**
+- W8 fresh fork reconciliation — `isSelfManualReveal`, `hookFunctionsStampManualUser`, `getCredentialScopes` global-read, `node-execution-context.ts` `getExecutionContext(fallback?)` *(not cherry-picked from `e70012050ef`/`29a35e2b4d4` — regenerated fresh)*
+- W9 drift — OutboundHttp migrations (`akeyless.ts`, `oauth2-jwt-claim-identifier.ts`), governance/editor-ui lint+typecheck fixes, test reconciles
+- W9-fix — §11 editor-ui connect-gating (`CredentialConfig.vue`, `NodeCredentials.vue`, `useNodeHelpers.ts`, related tests)
 
 **Original component commits (pre-squash, archived in `backup/pre-squash-2.17.7`)**
 - `39dbfffcf2` ignore local build/docker/install log artefacts
@@ -524,9 +555,8 @@ upgrade, squash that version's chore work into a fresh
 ### 7. Docs — CUSTOMS.md
 
 **Commit on current branch (single, squashed)**
-- The tip of the branch — check with
-  `git log --oneline --grep='docs(upgrade)' -1`. This SHA drifts every time
-  the file is amended, so we don't pin it here.
+- `20a80d160b3 docs(upgrade): CUSTOMS.md customization ledger and upgrade procedure`
+  *(W11 baseline bump to 2.32.6 finalized in this working tree — pending user commit)*
 
 **Original component commits (pre-squash)**
 - `5d63b94e26` initial CUSTOMS.md
@@ -535,12 +565,12 @@ upgrade, squash that version's chore work into a fresh
 Keep this file in the same commit that introduces or modifies a customization.
 When you amend/extend `CUSTOMS.md`, either fixup into the existing docs
 commit or let it be a trailing docs commit — either way, it stays at the
-last position on the branch (currently position 8 as of 2.17.7).
+last position on the branch (§7 docs commit, then §9–§11 in Phase 2).
 
 ### 8. CI workflow trim (fork-only)
 
 **Commit on current branch (single, squashed)**
-- `26d513c091 chore(ci): trim fork-irrelevant GitHub Actions workflows`
+- `385cb693da3 chore(ci): trim fork-irrelevant GitHub Actions workflows`
 
 **What & why.** Upstream ships ~76 GitHub Actions workflows under
 `.github/workflows/` that are wired for `n8n-io/n8n` (and `n8n-io/n8n-private`).
@@ -647,6 +677,9 @@ Reusable workflows referenced by the keepers:
   list above.
 
 ### 9. Dynamic Credential Seeding Endpoint
+
+**Commit on current branch (single, squashed)**
+- `e8b98f36bf4 feat(dynamic-credentials): add programmatic credential seeding endpoint`
 
 See also: [Credential-Seeding-Guide.md](./Credential-Seeding-Guide.md) for the
 auth-backend integration recipe, Entra setup cookbook, and troubleshooting
@@ -822,6 +855,10 @@ any OAuth2 credential whose resolver can validate an Azure AD-issued token.
 
 ### 10. OIDC Self-Seeding for Microsoft Graph
 
+**Commit on current branch (single, squashed)**
+- `9016b4eb6a0 feat(sso-oidc)!: implement OIDC-driven Microsoft Graph credential seeding (Phase 1-2d)`
+  *(manual port at 2.32.6: migration renumbered to `1784000000052`; lazy-seed counter in `oidc-lazy-seed-metrics.service.ts`)*
+
 See also: [Credential-Seeding-Guide.md](./Credential-Seeding-Guide.md)
 ("Self-Seeding from OIDC Login") for the operator-facing setup walkthrough.
 This section is the upstream-rebase reference.
@@ -888,10 +925,13 @@ Wireable into HTTP Request nodes day-one; native `microsoft*` accept-lists
 are intentionally deferred (see "What we are explicitly NOT doing" below).
 
 **Entry points / key files**
-- `packages/@n8n/db/src/migrations/common/1784000000022-AddOidcSeedSourceToCredentialResolver.ts`
+- `packages/@n8n/db/src/migrations/common/1784000000052-AddOidcSeedSourceToCredentialResolver.ts`
   *(new)* — additive nullable `oidcSeedSource VARCHAR(64)` column on
   `dynamic_credential_resolver`. Default `NULL` keeps every existing row
-  inert post-migration.
+  inert post-migration. Renumbered at 2.32.6 to **`1784000000052`**
+  (class `AddOidcSeedSourceToCredentialResolver1784000000052`) — upstream
+  occupies `…0044` with `AddPartialIndexForGlobalCredentials`; registered
+  after `BackfillInstanceAiEventLog1784000000051` in sqlite + postgresdb indices.
 - `packages/cli/src/modules/dynamic-credentials.ee/database/entities/credential-resolver.ts`
   — `oidcSeedSource?: string | null` field on the entity. v1 valid value
   is just `'oidc'`; the field is a varchar (not enum) so future capture
@@ -1082,7 +1122,7 @@ distinguish in downstream reporting.
 - **`DynamicCredentialResolver` entity / schema** — if upstream refactors
   the resolver entity (e.g. adds a typed discriminator, splits into
   per-source tables), re-home the `oidcSeedSource` field accordingly.
-  The migration `1784000000022-AddOidcSeedSourceToCredentialResolver`
+  The migration `1784000000052-AddOidcSeedSourceToCredentialResolver`
   must stay registered in both `sqlite/index.ts` and `postgresdb/index.ts`.
 - **`OidcService` constructor** — adding/removing/reordering the six
   fork-only dependencies (`OauthService`, `CredentialsRepository`,
@@ -1289,16 +1329,13 @@ webhooks outside trusted networks.
   `n8n.audit.user.graph-token.{lazy-seeded,lazy-seed-failed,lazy-seed-skipped}`.
 - `packages/cli/src/eventbus/event-message-classes/index.ts` — three new
   `eventNamesAudit` entries.
-- `packages/cli/src/metrics/prometheus-metrics.service.ts` — new
+- `packages/cli/src/metrics/prometheus/oidc-lazy-seed-metrics.service.ts` — new
   `n8n_oidc_lazy_seed_attempts_total{result, reason}` counter,
-  initialized in `initOidcLazySeedMetrics()` and incremented via three
-  `eventService.on(...)` listeners (`lazy-seeded` → `result=seeded`,
-  `lazy-seed-skipped` → `result=skipped, reason=<skip-reason>`,
-  `lazy-seed-failed` → `result=failed, reason=obo_or_persist_error`).
-  Mirrors the `tokenExchangeRequestsTotal` event-driven pattern so the
-  seeder stays decoupled from the metrics service. The
-  `prometheus-metrics.service.test.ts` counter/listener-count assertions
-  bumped from 6 to 7 (counter) and 6 to 9 (listeners).
+  registered in `prometheus.service.ts` collectors array. Incremented via
+  `eventService.on(...)` listeners on lazy-seed audit events. Tests in
+  `packages/cli/src/metrics/prometheus/__tests__/oidc-lazy-seed-metrics.service.test.ts`.
+  *(At 2.26.8 this lived in monolithic `prometheus-metrics.service.ts`; do not
+  restore the monolithic file on rebase.)*
 - `packages/cli/src/modules/sso-oidc/services/__tests__/oidc-webhook-seeder.service.test.ts`
   *(new)* — 16 cases covering the full lifecycle: feature gate,
   isEnabled/isCandidate, opaque vs JWT bearers, audience mismatch,
@@ -1364,10 +1401,9 @@ to split lazy-seeded rows out of downstream reporting.
   the transaction wrapper), update both sites together. Symptom of
   silent drift: lazy-seed succeeds at login but the JIT path emits
   `lazy_seed_obo_failed` whenever it tries to provision.
-- **`prometheus-metrics.service.test.ts` counter/listener-count
-  assertions** — anchored at counter=7 and listeners=9 to include the
-  Phase 2 lazy-seed counter + 3 listeners. Future fork metrics (Phase 3
-  / 4) must bump these assertions, not split the test file.
+- **`oidc-lazy-seed-metrics.service.test.ts` / collector registration** — if
+  upstream adds collectors, ensure `PrometheusOidcLazySeedMetricsService` stays
+  registered when message-event-bus metrics are enabled.
 - **Discovery + clientId reads in the hot path** — every webhook
   triggers `oidcService.getLazySeedExpectedIssuer()` and
   `oidcService.getOptedInResolverIds()` before OBO. Both are cached
@@ -1759,7 +1795,8 @@ the existing `eventService` infrastructure. The §10 env-var inventory
 plus the OIDC self-seeding knobs) is sufficient.
 
 **Commits on current branch (newest last)**
-- _(populated after commit; see `git log feat/dynamic-credentials-saas-generic`)_
+- `1a5609e0098 feat(dynamic-credentials): generic SaaS OAuth2 resolver with hybrid fallback (§11 v1)`
+- Reconciliation (**pending uncommitted commit**, not part of §11): W8 restores `isSelfManualReveal` + `getCredentialScopes` global-read + `hookFunctionsStampManualUser`; W9-fix restores §11 editor-ui connect-gating for read-only sharees (`canConnectResolvableCredential`). Upstream #33071/#31938/#33070 kept intact.
 
 **Entry points / key files**
 
@@ -1862,15 +1899,43 @@ race is actually painful.
 | Editor canvas "Execute node" with no inbound HTTP | **Static credential** | The dynamic resolver gate is upstream; trigger via webhook URL for a true dynamic test. See §10 for the gate location |
 | Proactive "Connect" banner in the editor UI for UI-driven SaaS credentials | **Upstream since 2.23.0 (#30994)** for the N8N system resolver path | For interactive Monday/Slack/etc. credentials, prefer upstream's system resolver + **Connect** button (writes `_user_entry`). §11 OAuth2 resolver remains for webhook/backend integrators with `fallbackCredentialId` |
 
+### 12. Manual test-webhook/chat runner identity + execution-context fallback
+
+**What & why.** Resolves private/resolvable OAuth2 credentials when operators exercise
+workflows via manual test-webhook or chat trigger paths, and supplies a
+`getExecutionContext(fallback?)` chain so supply-data/sub-node credential
+resolution can consume `additionalData.executionContext` when `runtimeData`
+is absent.
+
+**Commit on current branch (single, squashed)**
+- `6aa25eb000a feat(dynamic-credentials): resolve private OAuth2 credentials on manual test-webhook/chat runs + supply-data execution-context fallback`
+
+**2.32.6 TRIM (upstream already has — do not re-introduce):**
+- `webhook-helpers.ts` `manualData.userId` stamping in `prepareExecutionData` — upstream `@397`, `@615`
+- `workflow-execution.service.ts` direct `executeManually` `encryptedRunnerIdentity` from cookie — upstream `@249–250`
+
+**KEPT (fork-only @ 2.32.6):**
+- `workflow-execution.service.ts`: pass `n8nAuthCookie` into `testWebhooks.needsWebhook` (cases 2 & 3)
+- `test-webhooks.ts`: build/store `encryptedRunnerIdentity` on registration; forward to `executeWebhook`
+- `test-webhook-registrations.service.ts`: `encryptedRunnerIdentity?` on registration type
+- `webhook-helpers.ts`: `manualRunnerIdentity` param + cookie/identity block in `executeWebhook` manual path
+- `base-execute-context.ts`: `getExecutionContext(fallback?)` → `super.getExecutionContext(fallback)`
+- Parent fallback (W8 reconciliation, **pending uncommitted**): `node-execution-context.ts` `getExecutionContext(fallback?)` + `_getCredentials` call site; `load-options-context.ts` passes fallback through
+
+**Upgrade checklist**
+- Cherry-pick §12 **after §11**. Expect to drop manualData/executeManually hunks (upstream adopted).
+- Parent `node-execution-context.ts` fallback is required for §12 `base-execute-context` to function — land in W8 reconciliation, not in §12 commit alone.
+- Upstream `supply-data-context.ts` `executedByUserId` stamping is **complementary** — still need W8 `isSelfManualReveal` + `hookFunctionsStampManualUser`.
+
 ## Upgrade procedure (repeatable)
 
-This is the workflow we actually followed for 2.15.1 → 2.17.5 → 2.17.7 and
+This is the workflow we actually followed for 2.15.1 → 2.17.5 → 2.17.7 → 2.26.8 → 2.30.6 → 2.32.6 and
 that landed cleanly on the branch listed in **Baseline tags**.
 
 ```mermaid
 flowchart TD
     A[Pick target tag n8n@X.Y.Z] --> B[Branch from upstream tag<br/>git checkout -b feat/upgrade-to-n8n-X.Y.Z n8n@X.Y.Z]
-    B --> C[Cherry-pick the 7 squashed commits<br/>from the current baseline branch,<br/>in the order listed below]
+    B --> C[Cherry-pick the 12 squashed customization commits<br/>from the current baseline branch,<br/>in the order listed below]
     C --> D{pnpm install --frozen-lockfile}
     D -->|lockfile drift| D1[pnpm install --no-frozen-lockfile<br/>commit updated pnpm-lock.yaml]
     D -->|ok| E[pnpm build]
@@ -1894,28 +1959,39 @@ flowchart TD
    git checkout -b feat/upgrade-to-n8n-X.Y.Z n8n@X.Y.Z
    ```
 3. **Cherry-pick customizations in order.** From the current baseline branch
-   (`feat/upgrade-to-n8n-2.22.4` at time of writing), cherry-pick these
-   **eight** commits one at a time in this exact order:
+   (`feat/upgrade-to-n8n-2.32.6` at time of writing), cherry-pick these
+   **twelve** commits one at a time in this exact order (Phase 1 non-dyncred,
+   then Phase 2 dyncred last):
 
    ```bash
-   git cherry-pick a894aa7945   # node governance
-   git cherry-pick a1286ad4db   # external secrets (Akeyless)
-   git cherry-pick aa72e0b97f   # SSO OIDC provisioning hardening (+ diag fingerprint + access-token claim fallback)
-   git cherry-pick f521207ba5   # Azure OpenAI APIM (nodes-langchain)
-   git cherry-pick 2c9f4bb2fe   # Prometheus labels + Docker build splits + alpine 3.23 paths
-   git cherry-pick 4b4bfac715   # CI workflow trim (Section 8)
-   git cherry-pick 7e02413711   # upgrade chore (build/test/lint mechanical fixes + cli wiring fix + alpine path migration + cherry-pick collateral)
-   git cherry-pick $(git log --format=%H --grep='docs(upgrade)' -1 feat/upgrade-to-n8n-2.22.4)  # this docs file
+   # Phase 1 — non-dyncred (W2–W5)
+   git cherry-pick 07a7d0440a0   # §1 node governance
+   git cherry-pick 02657c328ee   # §2 external secrets (Akeyless)
+   git cherry-pick 13b9db2ac5d   # §3 SSO OIDC provisioning hardening
+   git cherry-pick 385cb693da3   # §8 CI workflow trim
+   git cherry-pick bf6fbe196f2   # §4 Azure OpenAI APIM (nodes-langchain)
+   git cherry-pick 3858ee1fb48   # §5 Prometheus labels + Docker build splits
+   git cherry-pick 20a80d160b3   # §7 docs (CUSTOMS.md)
+
+   # Phase 2 — dynamic credentials LAST (W7)
+   git cherry-pick e8b98f36bf4   # §9 credential seeding endpoint
+   git cherry-pick 9016b4eb6a0   # §10 OIDC Graph self-seed
+   git cherry-pick 1a5609e0098   # §11 generic SaaS OAuth2 resolver
+   git cherry-pick 6aa25eb000a   # §12 manual test-webhook/chat runner identity
    ```
+
+   After all twelve land, **regenerate fresh** (do not replay verbatim from
+   prior upgrades): interim Phase-1 drift fixes (`ab6561f6843` on 2.32.6),
+   W8 credential reconciliation
+   (`isSelfManualReveal`, `getCredentialScopes`, `hookFunctionsStampManualUser`,
+   `node-execution-context.ts` fallback), W9 drift fixes, W9-fix §11 editor-ui
+   connect-gating, and optional `chore(upgrade-X.Y.Z)` folding build/typecheck/lint/test drift.
 
    The CI-trim SHA is resolved at cherry-pick time because it will drift the
    first time it lands (and will be re-squashed under the same conventional
    commit subject on later upgrades). If the cherry-pick conflicts, the
    freshly-rebased upstream tag has restored deleted workflows and/or added
    new ones — re-apply the keep/delete list from **Section 8** by hand.
-
-   The docs SHA is resolved at cherry-pick time because it drifts every time
-   `CUSTOMS.md` is updated.
 
    Prefer cherry-pick over merge to keep the branch readable. If a
    cherry-pick conflicts:
@@ -1924,7 +2000,7 @@ flowchart TD
    - Resolve, then run `pnpm typecheck` on that package before moving on.
    - After upgrade is verified end-to-end, squash any new mechanical fix-up
      work into the `chore(upgrade-X.Y.Z)` commit so the next upgrade still
-     sees exactly eight commits.
+     sees exactly eleven customization commits (+ fresh reconciliation).
 4. **Resolve lockfile drift.**
    - If `pnpm install --frozen-lockfile` fails, run `pnpm install --no-frozen-lockfile`, commit `pnpm-lock.yaml` as a **separate** "chore(upgrade): refresh lockfile" commit.
    - Do **not** edit `package.json` files by hand. The `build-n8n.mjs` script
@@ -2028,7 +2104,7 @@ flowchart TD
 12. **Re-squash if needed.** If landing the upgrade required extra mechanical
     commits (lockfile refresh, lint/test fixups, CI adjustments), fold them
     into the `chore(upgrade-X.Y.Z)` commit so the next upgrade still
-    cherry-picks exactly eight commits:
+    cherry-picks exactly eleven customization commits:
 
     ```bash
     # After verification is complete, from the feature branch:
@@ -2041,8 +2117,9 @@ flowchart TD
     you can recover if the squash goes sideways.
 
 13. **Update this file.** Bump the baseline tags table to point to the new
-    tag, update the eight SHAs in step 3, record any new upgrade-checklist
-    lessons.
+    tag, update the eleven § SHAs in the customization commit index, record
+    any new upgrade-checklist lessons, and note packaging-smoke vs manual-smoke
+    status.
 14. **Push and open draft PR** (unless explicitly told otherwise).
 
 ### Upstream-adoption audit (run before every cherry-pick)
@@ -2190,9 +2267,34 @@ absorption / conflict patterns:
   cron) while keeping upstream's functional changes to the remaining
   jobs.
 
+**Recorded findings (2.30.6, against `n8n@2.30.6` =
+`a5d97843e15`).** All 11 customizations remained required. Full audit in
+`UPGRADE-2.30.6-PROGRESS.md` W1. Highlights:
+
+- §1–§2 — 0 upstream hits; cherry-pick as-is. Preserve `init.ts` logout-hook reset.
+- §3 — 0 hits for `resolveInstanceRoleClaim` / fork claim resolver; upstream
+  default `scopesInstanceRoleClaimName` still `'n8n_instance_role'` at
+  `sso.config.ts:48` — cherry-pick §3 superset. Drop fork duplicate
+  `user-logged-in` emit (upstream has it at `oidc.controller.ee.ts:142`).
+  Use upstream `outboundHttp` proxy path, not fork `createProxyAwareFetch`.
+- §4 — partial file-path adoption; keep fork APIM superset on Azure credential files.
+- §5 — 0 hits for fork labels in `packages/cli/src/metrics/`; upstream replaced
+  monolithic `prometheus-metrics.service.ts` with `metrics/prometheus/` collectors —
+  **manual port** labels into `event-bus-metrics.service.ts`.
+- §8 — fork-only trim; expect modify/delete storm on fresh upstream tag.
+- §9–§11 — 0 upstream hits for seed controller, `oidcSeedSource`, hybrid resolver.
+- §11 upstream adopted #33071 (sharing), #31938 (workflow-scoped NDV fetch),
+  #33070 (`credential:connect`) — verify after §11; re-apply fork-only
+  `isSelfManualReveal` + global-read `getCredentialScopes` in W8 reconciliation.
+- §10 migration — at 2.32.6 renumber to **`1784000000052`** (upstream occupies `…0044` with `AddPartialIndexForGlobalCredentials`; append after `BackfillInstanceAiEventLog1784000000051` in sqlite + postgresdb indices).
+
 ## Manual smoke checklist
 
-Run these after every upgrade before tagging "done":
+Run these after every upgrade before tagging "done". **As of 2.32.6:** isolated
+Docker packaging smoke passed (`n8nio/n8n:2.32.6` — `/healthz` 200, `/metrics`
+served; fork `execution_mode`/`project_id` labels require at least one workflow
+run — see W10 checklist in `UPGRADE-2.32.6-PROGRESS.md`); interactive items
+below are **still pending user sign-off** on the licensed/configured compose stack.
 
 - [ ] Login via OIDC (Azure Entra). Admin gets `global:admin`, member gets `global:member`.
 - [ ] OIDC "Test Connection" button on SSO settings: **known cosmetic
@@ -2236,11 +2338,11 @@ Run these after every upgrade before tagging "done":
 | OIDC admin login leaves user as member                                             | Check `docker logs` for the `OIDC provisioning:` diagnostic line. Usually the DB row has the wrong `scopesInstanceRoleClaimName`. Repair with a `jsonb_set` SQL update on the settings row. |
 | Secrets appear in `docker logs` at `-v` verbosity                                  | Regression in `akeyless.ts` interceptors. The log-redaction change is baked into the single External Secrets commit (`cf03e9c640` on 2.17.7); if a future rebase drops it, restore method/URL/status-only logging in both interceptors. |
 | Node governance migrations missing after upgrade                                   | Upstream merge dropped our entries in `migrations/postgresdb/index.ts` or `migrations/sqlite/index.ts`. Re-add them in chronological order.                                              |
-| Project override names render as "M…", "My proj…"                                  | Upstream SCSS refactor broke the grid layout in `SettingsTab.vue`. The `.projectRow { display: grid; grid-template-columns: minmax(0, 1fr) 220px; }` block is part of the Node Governance commit (`f4473c8b1f` on 2.17.7); re-apply if a merge drops it. |
+| Project override names render as "M…", "My proj…"                                  | Upstream SCSS refactor broke the grid layout in `SettingsTab.vue`. The `.projectRow { display: grid; grid-template-columns: minmax(0, 1fr) 220px; }` block is part of the Node Governance commit (`3e2efab623f` on 2.30.6); re-apply if a merge drops it. |
 | `pnpm install --frozen-lockfile` fails about `patchedDependencies`                 | Someone (often an editor auto-formatter) truncated `package.json`. `git checkout -- package.json` and retry.                                                                             |
 | `build-n8n.mjs` killed mid-deploy, frontend `package.json` files now stripped      | That's the script's in-place edit phase. Restore them with the `git checkout` command in step 8 above.                                                                                   |
 | `git status` shows `packages/cli/package.json` dirty after a successful pack, with `'!dist/**/e2e.*'` appearing **N times** in `files` and no trailing newline at EOF | `build-n8n.mjs:201-208` does `packageJson.files.push('!dist/**/e2e.*')` then `JSON.stringify(..., null, 2)` (no `\n`). Each pack run that wasn't preceded by `git checkout -- packages/cli/package.json` appends another duplicate. Fix: revert with `git checkout -- packages/cli/package.json`; from then on, always run the step-8 revert command **before** re-running the pack, not just after. |
-| Prometheus dashboard breaks after upgrade                                          | Cardinality of `n8n_audit_workflow_executed_total` (and the per-node `n8n_node_started_total` / `n8n_node_finished_total`) changed — audit `metrics/prometheus-metrics.service.ts` for upstream renames before widening panels' `by()`. Note: there is no metric named `n8n_workflow_executions_total`; counters are derived from event names via `toCounter()`. |
+| Prometheus dashboard breaks after upgrade                                          | Cardinality of `n8n_audit_workflow_executed_total` (and the per-node `n8n_node_started_total` / `n8n_node_finished_total`) changed — audit `packages/cli/src/metrics/prometheus/event-bus-metrics.service.ts` for upstream renames before widening panels' `by()`. Note: there is no metric named `n8n_workflow_executions_total`; counters are derived from event names via `toCounter()`. |
 | `pnpm typecheck` reports 46 × `TS2339: Property 'X' does not exist on type '{}'` in Node Governance modal Vue files | Upstream tightens generic inference. Each `modalData` computed in the six modal wrappers under `frontend/editor-ui/src/features/settings/nodeGovernance/components/` must annotate the modal payload with its concrete governance type (`NodeAccessRequest`, `NodeCategory`, or `NodeGovernancePolicy`) imported from `nodeGovernance.api.ts`. Folded into `chore(upgrade-2.17.7)` (`a6b4020e93`); re-apply on the next typecheck regression. |
 | `@n8n/workflow-sdk` test suite fails with 44 × `Exceeded timeout of 120000 ms for a hook` on `setupTestSchemas`     | Upstream `beforeAll(setupTestSchemas, 120_000)` regenerates zod schemas for ~169 nodes from `packages/nodes-base/dist/types/nodes.json`. Under heavy parallel load (e.g. when nodes-base jest workers are still warm) this hook can exceed 120 s. Re-run `pnpm --filter=@n8n/workflow-sdk test` in isolation to verify; if it passes alone, the failure was contention, not a regression. |
 | `pnpm install --frozen-lockfile` fails inside the Cursor sandbox with `EPERM: reflink` or `EPERM: unlink` on `node_modules` | The sandbox blocks APFS clonefile and certain in-place modifications. Wipe all `node_modules` (`rm -rf node_modules && find packages -name node_modules -type d -prune -exec rm -rf {} +`), then re-run `CI=true pnpm install --frozen-lockfile` outside the sandbox (`required_permissions: ["all"]` in tooling).        |
