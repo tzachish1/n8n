@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
 
 import type { IUpdateInformation } from '@/Interface';
-import type { ICredentialsResponse } from '../../credentials.types';
+import type { ICredentialsResponse, ICredentialsDecryptedResponse } from '../../credentials.types';
 
 import type {
 	CredentialInformation,
@@ -996,7 +996,7 @@ async function oAuthCredentialAuthorize() {
 	const canAuthorizeWithoutSave =
 		canConnectOwnOAuth.value && !credentialPermissions.value.update && !!credentialId.value;
 
-	let credential: ICredentialsResponse | null = null;
+	let credential: ICredentialsResponse | ICredentialsDecryptedResponse | null = null;
 	if (canAuthorizeWithoutSave) {
 		credential =
 			currentCredential.value ?? credentialsStore.getCredentialById(credentialId.value) ?? null;

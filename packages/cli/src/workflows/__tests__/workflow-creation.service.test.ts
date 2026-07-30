@@ -11,6 +11,7 @@ import { NotFoundError } from '@/errors/response-errors/not-found.error';
 import type { InstanceRedactionEnforcementService } from '@/modules/redaction/instance-redaction-enforcement.service';
 import type { NodeTypes } from '@/node-types';
 import { userHasScopes } from '@/permissions.ee/check-access';
+import type { NodeGovernanceService } from '@/services/node-governance.service';
 import type { ProjectService } from '@/services/project.service.ee';
 import * as WorkflowHelpers from '@/workflow-helpers';
 import { WorkflowCreationService } from '@/workflows/workflow-creation.service';
@@ -34,6 +35,7 @@ describe('WorkflowCreationService', () => {
 	let workflowValidationServiceMock: MockProxy<WorkflowValidationService>;
 	let instanceRedactionEnforcementServiceMock: MockProxy<InstanceRedactionEnforcementService>;
 	let workflowHistoryServiceMock: MockProxy<WorkflowHistoryService>;
+	let nodeGovernanceServiceMock: MockProxy<NodeGovernanceService>;
 
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -46,8 +48,13 @@ describe('WorkflowCreationService', () => {
 		workflowValidationServiceMock = mock<WorkflowValidationService>();
 		instanceRedactionEnforcementServiceMock = mock<InstanceRedactionEnforcementService>();
 		workflowHistoryServiceMock = mock<WorkflowHistoryService>();
+		nodeGovernanceServiceMock = mock<NodeGovernanceService>();
 		workflowValidationServiceMock.validateCredentialNodeRestrictions.mockReturnValue({
 			isValid: true,
+		});
+		nodeGovernanceServiceMock.validateWorkflowNodes.mockResolvedValue({
+			hasBlockedNodes: false,
+			blockedNodes: [],
 		});
 
 		// Default: no active floor. Tests opt into a floor explicitly.
@@ -72,6 +79,7 @@ describe('WorkflowCreationService', () => {
 			mock<NodeTypes>(),
 			workflowValidationServiceMock,
 			instanceRedactionEnforcementServiceMock,
+			nodeGovernanceServiceMock,
 		);
 	});
 

@@ -1228,6 +1228,7 @@ describe('useNodeHelpers()', () => {
 
 			it('does not warn when a webhook trigger has a context-establishment hook (runtime identity)', () => {
 				mockConnectedPrivateCred(true);
+				mockDocumentStore.settings = { credentialResolverId: 'custom-resolver' };
 				mockDocumentStore.workflowTriggerNodes = [triggerWithIdentityHook()];
 
 				const { getNodeCredentialIssues } = useNodeHelpers();
@@ -1244,6 +1245,7 @@ describe('useNodeHelpers()', () => {
 				credentialsStore.getCredentialTypeByName = vi
 					.fn()
 					.mockReturnValue({ name: NOTION_API, displayName: 'Notion API' });
+				mockDocumentStore.settings = { credentialResolverId: 'custom-resolver' };
 				mockDocumentStore.workflowTriggerNodes = [triggerWithIdentityHook()];
 
 				const { getNodeCredentialIssues } = useNodeHelpers();
@@ -1252,8 +1254,9 @@ describe('useNodeHelpers()', () => {
 				expect(result).toBeNull();
 			});
 
-			it('does not warn in a multi-trigger workflow as long as one trigger supplies runtime identity', () => {
+			it('warns in a multi-trigger workflow when any trigger cannot supply runtime identity', () => {
 				mockConnectedPrivateCred(true);
+				mockDocumentStore.settings = { credentialResolverId: 'custom-resolver' };
 				mockDocumentStore.workflowTriggerNodes = [
 					triggerWithIdentityHook(),
 					buildTriggerNode(WEBHOOK_TRIGGER),
@@ -1262,7 +1265,9 @@ describe('useNodeHelpers()', () => {
 				const { getNodeCredentialIssues } = useNodeHelpers();
 				const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
 
-				expect(result).toBeNull();
+				expect(result?.credentials?.[NOTION_API]?.[0]).toContain(
+					'need a trigger that extracts an identity',
+				);
 			});
 
 			it('ignores a disabled identity-providing trigger', () => {
@@ -1276,7 +1281,7 @@ describe('useNodeHelpers()', () => {
 				const result = getNodeCredentialIssues(buildNotionNode(), notionNodeType);
 
 				expect(result?.credentials?.[NOTION_API]?.[0]).toContain(
-					'Private credentials require a trigger that establishes who is running the workflow',
+					"End-user credentials aren't supported with the Webhook trigger",
 				);
 			});
 

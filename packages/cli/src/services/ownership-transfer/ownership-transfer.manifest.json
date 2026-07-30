@@ -58,6 +58,16 @@
 			"name": "InsightsMetadata",
 			"path": "packages/cli/src/modules/insights/database/entities/insights-metadata.ts",
 			"reason": "Denormalized analytics snapshot; historical insights keep the original project reference by design."
+		},
+		{
+			"name": "NodeAccessRequest",
+			"path": "packages/@n8n/db/src/entities/node-access-request.ts",
+			"reason": "Governance access-request queue is project-scoped admin config; dropped with the project."
+		},
+		{
+			"name": "PolicyProjectAssignment",
+			"path": "packages/@n8n/db/src/entities/policy-project-assignment.ts",
+			"reason": "Governance policy-to-project bindings are project-scoped config; dropped with the project."
 		}
 	]
 }

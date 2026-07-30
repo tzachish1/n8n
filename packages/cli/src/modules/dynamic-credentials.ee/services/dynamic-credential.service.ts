@@ -246,7 +246,11 @@ export class DynamicCredentialService implements ICredentialResolutionProvider {
 			// execution simply stays unattributed (redacted for everyone).
 			let resolvedUserId: string | undefined;
 			try {
-				resolvedUserId = await resolver.resolveOwningUserId?.(credentialContext, handle);
+				resolvedUserId = await resolver.resolveOwningUserId?.(credentialContext, {
+					resolverId: resolverEntity.id,
+					resolverName: resolverEntity.type,
+					configuration: resolverConfig,
+				});
 			} catch (error) {
 				this.logger.debug('Could not resolve owning user for dynamic credentials', {
 					credentialId: credentialsResolveMetadata.id,

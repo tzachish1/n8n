@@ -1,5 +1,5 @@
 import type { CredentialsEntity, User } from '@n8n/db';
-import { mock } from 'jest-mock-extended';
+import { mock } from 'vitest-mock-extended';
 
 import { findCredentialForOAuthConnect } from '@/credentials/credential-oauth-access';
 import type { CredentialsFinderService } from '@/credentials/credentials-finder.service';
@@ -9,7 +9,7 @@ describe('findCredentialForOAuthConnect', () => {
 	const user = mock<User>({ id: 'user-1' });
 
 	beforeEach(() => {
-		jest.resetAllMocks();
+		vi.resetAllMocks();
 	});
 
 	it('returns credential when user has credential:update', async () => {

@@ -570,22 +570,22 @@ describe('CredentialConfig', () => {
 			isResolvable: true,
 		};
 
-		it('shows the connect button when the user has the connect scope but cannot edit', () => {
+		it('shows the connect button when the user has read access but cannot edit', () => {
 			renderComponent({
 				props: {
 					...notConnectedProps,
-					credentialPermissions: { read: true, connect: true },
+					credentialPermissions: { read: true },
 				},
 			});
 
 			expect(screen.getByTestId('quick-connect-button')).toBeInTheDocument();
 		});
 
-		it('hides the connect button when the user lacks the connect scope', () => {
+		it('hides the connect button when the user lacks read and update permission', () => {
 			renderComponent({
 				props: {
 					...notConnectedProps,
-					credentialPermissions: { read: true },
+					credentialPermissions: { connect: true },
 				},
 			});
 
@@ -949,11 +949,11 @@ describe('CredentialConfig', () => {
 			isResolvable: true,
 		};
 
-		it('shows the connect button for a private credential when the user can connect', () => {
+		it('shows the connect button for a private credential when the user can connect via read access', () => {
 			renderComponent({
 				props: {
 					...oAuthNotConnectedProps,
-					credentialPermissions: { read: true, connect: true },
+					credentialPermissions: { read: true },
 				},
 			});
 
@@ -964,7 +964,7 @@ describe('CredentialConfig', () => {
 			renderComponent({
 				props: {
 					...oAuthNotConnectedProps,
-					credentialPermissions: { read: true, connect: false },
+					credentialPermissions: { connect: true },
 				},
 			});
 

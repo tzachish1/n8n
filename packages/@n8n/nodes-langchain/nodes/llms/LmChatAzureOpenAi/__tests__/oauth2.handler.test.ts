@@ -100,7 +100,7 @@ describe('setupOAuth2Authentication', () => {
 		it('should not include apimConfig when useApim is false', async () => {
 			// Arrange
 			mockCredential.useApim = false;
-			ctx.getCredentials = jest.fn().mockResolvedValue(mockCredential);
+			ctx.getCredentials = vi.fn().mockResolvedValue(mockCredential);
 
 			// Act
 			const result = await setupOAuth2Authentication.call(ctx, 'testCredential');
@@ -111,7 +111,7 @@ describe('setupOAuth2Authentication', () => {
 
 		it('should not include apimConfig when useApim is undefined', async () => {
 			// Arrange - useApim not set (backward compatibility)
-			ctx.getCredentials = jest.fn().mockResolvedValue(mockCredential);
+			ctx.getCredentials = vi.fn().mockResolvedValue(mockCredential);
 
 			// Act
 			const result = await setupOAuth2Authentication.call(ctx, 'testCredential');
@@ -124,7 +124,7 @@ describe('setupOAuth2Authentication', () => {
 			// Arrange
 			mockCredential.useApim = true;
 			mockCredential.apimBasePath = 'https://my-apim.azure-api.net/openai/deployments';
-			ctx.getCredentials = jest.fn().mockResolvedValue(mockCredential);
+			ctx.getCredentials = vi.fn().mockResolvedValue(mockCredential);
 
 			// Act
 			const result = await setupOAuth2Authentication.call(ctx, 'testCredential');
@@ -143,7 +143,7 @@ describe('setupOAuth2Authentication', () => {
 					{ name: 'custom-param', value: 'custom-value' },
 				],
 			};
-			ctx.getCredentials = jest.fn().mockResolvedValue(mockCredential);
+			ctx.getCredentials = vi.fn().mockResolvedValue(mockCredential);
 
 			// Act
 			const result = await setupOAuth2Authentication.call(ctx, 'testCredential');
@@ -165,7 +165,7 @@ describe('setupOAuth2Authentication', () => {
 					{ name: 'X-Custom-Header', value: 'custom-header-value' },
 				],
 			};
-			ctx.getCredentials = jest.fn().mockResolvedValue(mockCredential);
+			ctx.getCredentials = vi.fn().mockResolvedValue(mockCredential);
 
 			// Act
 			const result = await setupOAuth2Authentication.call(ctx, 'testCredential');
@@ -188,7 +188,7 @@ describe('setupOAuth2Authentication', () => {
 			mockCredential.apimHeaders = {
 				headers: [{ name: 'X-Custom-Header', value: 'custom-value' }],
 			};
-			ctx.getCredentials = jest.fn().mockResolvedValue(mockCredential);
+			ctx.getCredentials = vi.fn().mockResolvedValue(mockCredential);
 
 			// Act
 			const result = await setupOAuth2Authentication.call(ctx, 'testCredential');
@@ -206,7 +206,7 @@ describe('setupOAuth2Authentication', () => {
 			// Arrange
 			mockCredential.useApim = true;
 			// No basePath, queryParams, or headers set
-			ctx.getCredentials = jest.fn().mockResolvedValue(mockCredential);
+			ctx.getCredentials = vi.fn().mockResolvedValue(mockCredential);
 
 			// Act
 			const result = await setupOAuth2Authentication.call(ctx, 'testCredential');
@@ -225,7 +225,7 @@ describe('setupOAuth2Authentication', () => {
 					{ name: 'no-value', value: '' }, // Should be skipped
 				],
 			};
-			ctx.getCredentials = jest.fn().mockResolvedValue(mockCredential);
+			ctx.getCredentials = vi.fn().mockResolvedValue(mockCredential);
 
 			// Act
 			const result = await setupOAuth2Authentication.call(ctx, 'testCredential');

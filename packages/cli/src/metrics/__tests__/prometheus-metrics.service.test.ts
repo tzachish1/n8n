@@ -15,6 +15,7 @@ import type { PrometheusExecutionDataMetricsService } from '../prometheus/execut
 import type { PrometheusInstanceAiMetricsService } from '../prometheus/instance-ai-metrics.service';
 import type { PrometheusInstanceRoleMetricsService } from '../prometheus/instance-role-metrics.service';
 import { PrometheusMetricsService } from '../prometheus/prometheus.service';
+import type { PrometheusOidcLazySeedMetricsService } from '../prometheus/oidc-lazy-seed-metrics.service';
 import type { PrometheusPssMetricsService } from '../prometheus/pss-metrics.service';
 import type { PrometheusQueueMetricsService } from '../prometheus/queue-metrics.service';
 import type { PrometheusRouteMetricsService } from '../prometheus/route-metrics.service';

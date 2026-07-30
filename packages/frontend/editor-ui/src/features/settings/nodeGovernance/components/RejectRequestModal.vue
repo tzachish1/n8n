@@ -7,6 +7,7 @@ import { useUIStore } from '@/app/stores/ui.store';
 import { N8nButton, N8nInput, N8nText } from '@n8n/design-system';
 import Modal from '@/app/components/Modal.vue';
 import { useNodeGovernanceStore } from '../nodeGovernance.store';
+import type { RejectRequestModalData } from '../nodeGovernance.api';
 import { REJECT_REQUEST_MODAL_KEY } from '../nodeGovernance.constants';
 
 const { showError, showMessage } = useToast();
@@ -18,7 +19,7 @@ const loading = ref(false);
 const comment = ref('');
 
 const modalData = computed(
-	() => (uiStore.modalsById[REJECT_REQUEST_MODAL_KEY]?.data ?? {}) as Record<string, any>,
+	() => (uiStore.modalsById[REJECT_REQUEST_MODAL_KEY]?.data ?? {}) as RejectRequestModalData,
 );
 const request = computed(() => modalData.value.request);
 const modalTitle = computed(() => i18n.baseText('nodeGovernance.requests.reject.title'));

@@ -3,7 +3,7 @@ import { mockInstance } from '@n8n/backend-test-utils';
 import { type CredentialsEntity } from '@n8n/db';
 import { Container } from '@n8n/di';
 import type { Request, Response } from 'express';
-import { mock } from 'jest-mock-extended';
+import { mock } from 'vitest-mock-extended';
 
 import { EnterpriseCredentialsService } from '@/credentials/credentials.service.ee';
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
@@ -15,8 +15,8 @@ import { CredentialStorageError } from '@/modules/dynamic-credentials.ee/errors/
 import { DynamicCredentialCorsService } from '@/modules/dynamic-credentials.ee/services/dynamic-credential-cors.service';
 import { OauthService } from '@/oauth/oauth.service';
 
-jest.mock('../utils', () => ({
-	getDynamicCredentialMiddlewares: jest.fn(() => undefined),
+vi.mock('../utils', () => ({
+	getDynamicCredentialMiddlewares: vi.fn(() => undefined),
 }));
 
 describe('CredentialSeedController', () => {
@@ -29,7 +29,7 @@ describe('CredentialSeedController', () => {
 	const controller = Container.get(CredentialSeedController);
 
 	const fixedTimestamp = 1706750625678;
-	jest.useFakeTimers({ advanceTimers: true });
+	vi.useFakeTimers();
 
 	const mockResolverEntity: DynamicCredentialResolver = {
 		id: 'resolver-123',
@@ -38,8 +38,8 @@ describe('CredentialSeedController', () => {
 		config: 'encrypted-config',
 		createdAt: new Date(),
 		updatedAt: new Date(),
-		generateId: jest.fn(),
-		setUpdateDate: jest.fn(),
+		generateId: vi.fn(),
+		setUpdateDate: vi.fn(),
 	};
 
 	const oauth2Credential = mock<CredentialsEntity>({
@@ -62,8 +62,8 @@ describe('CredentialSeedController', () => {
 	const buildRes = (): Response => mock<Response>();
 
 	beforeEach(() => {
-		jest.setSystemTime(new Date(fixedTimestamp));
-		jest.clearAllMocks();
+		vi.setSystemTime(new Date(fixedTimestamp));
+		vi.clearAllMocks();
 	});
 
 	describe('happy paths', () => {

@@ -19,9 +19,11 @@ export class OidcModule implements ModuleInterface {
 		// be nothing to register against anyway.
 		if (process.env.N8N_ENV_FEAT_DYNAMIC_CREDENTIALS === 'true') {
 			try {
-				const { OidcWebhookSeederService } = await import('./services/oidc-webhook-seeder.service');
+				const { OidcWebhookSeederService } = await import(
+					'./services/oidc-webhook-seeder.service.js'
+				);
 				const { DynamicCredentialService } = await import(
-					'../dynamic-credentials.ee/services/dynamic-credential.service'
+					'../dynamic-credentials.ee/services/dynamic-credential.service.js'
 				);
 				Container.get(DynamicCredentialService).setLazySeedProvider(
 					Container.get(OidcWebhookSeederService),

@@ -1,3 +1,4 @@
+import type { Mock, Mocked } from 'vitest';
 // Fork §11 perf hardening (PE-1 + PE-2 + PE-3) — focused unit tests.
 //
 // Lives in a separate file from `dynamic-credential.service.test.ts` because
@@ -14,15 +15,17 @@ import type {
 	IExecutionContext,
 } from 'n8n-workflow';
 
-import type {
-	CredentialResolveMetadata,
+import type { CredentialResolveMetadata,
 	ICredentialResolutionProvider,
 } from '../../../../credentials/credential-resolution-provider.interface';
+import type { DynamicCredentialsProxy } from '../../../../credentials/dynamic-credentials-proxy';
 import type { LoadNodesAndCredentials } from '../../../../load-nodes-and-credentials';
 import type { CacheService } from '../../../../services/cache/cache.service';
 import type { DynamicCredentialResolverRegistry } from '../credential-resolver-registry.service';
 import type { DynamicCredentialResolverRepository } from '../../database/repositories/credential-resolver.repository';
 import type { DynamicCredentialsConfig } from '../../dynamic-credentials.config';
+import { CredentialResolverNotFoundError } from '../../errors/credential-resolver-not-found.error';
+import { MissingExecutionContextError } from '../../errors/missing-execution-context.error';
 import { DynamicCredentialService } from '../dynamic-credential.service';
 import type { ResolverConfigExpressionService } from '../resolver-config-expression.service';
 
@@ -33,13 +36,13 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 	const credentialName = 'Monday account';
 
 	let service: DynamicCredentialService;
-	let mockResolverRepository: jest.Mocked<DynamicCredentialResolverRepository>;
-	let mockResolverRegistry: jest.Mocked<DynamicCredentialResolverRegistry>;
-	let mockCipher: jest.Mocked<Cipher>;
-	let mockExpressionService: jest.Mocked<ResolverConfigExpressionService>;
-	let mockLoadNodesAndCredentials: jest.Mocked<LoadNodesAndCredentials>;
-	let mockLogger: jest.Mocked<Logger>;
-	let mockCacheService: jest.Mocked<CacheService>;
+	let mockResolverRepository: Mocked<DynamicCredentialResolverRepository>;
+	let mockResolverRegistry: Mocked<DynamicCredentialResolverRegistry>;
+	let mockCipher: Mocked<Cipher>;
+	let mockExpressionService: Mocked<ResolverConfigExpressionService>;
+	let mockLoadNodesAndCredentials: Mocked<LoadNodesAndCredentials>;
+	let mockLogger: Mocked<Logger>;
+	let mockCacheService: Mocked<CacheService>;
 	let cacheStore: Map<string, unknown>;
 
 	const resolverEntityRow = {
@@ -70,59 +73,64 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 		cacheStore = new Map();
 
 		mockCacheService = {
-			get: jest.fn(async (key: string) => cacheStore.get(key)),
-			set: jest.fn(async (key: string, value: unknown) => {
+			get: vi.fn(async (key: string) => cacheStore.get(key)),
+			set: vi.fn(async (key: string, value: unknown) => {
 				cacheStore.set(key, value);
 			}),
-			delete: jest.fn(async (key: string) => {
+			delete: vi.fn(async (key: string) => {
 				cacheStore.delete(key);
 			}),
-		} as unknown as jest.Mocked<CacheService>;
+		} as unknown as Mocked<CacheService>;
 
 		mockResolverRepository = {
-			findOneBy: jest.fn().mockResolvedValue(resolverEntityRow),
-		} as unknown as jest.Mocked<DynamicCredentialResolverRepository>;
+			findOneBy: vi.fn().mockResolvedValue(resolverEntityRow),
+		} as unknown as Mocked<DynamicCredentialResolverRepository>;
 
 		mockCipher = {
-			encryptV2: jest.fn(),
-			decryptV2: jest.fn(async (input: string) => {
+			encryptV2: vi.fn(),
+			decryptV2: vi.fn(async (input: string) => {
 				if (input === 'encrypted-config-blob') return decryptedConfigJson;
 				if (input === 'encrypted-credential-context') {
 					return JSON.stringify({ version: 1, identity: 'user-jwt-token' });
 				}
 				return input;
 			}),
-		} as unknown as jest.Mocked<Cipher>;
+		} as unknown as Mocked<Cipher>;
 
 		mockExpressionService = {
-			resolve: jest.fn(async (config) => config),
-		} as unknown as jest.Mocked<ResolverConfigExpressionService>;
+			resolve: vi.fn(async (config) => config),
+		} as unknown as Mocked<ResolverConfigExpressionService>;
 
 		const mockResolverInstance = {
-			getSecret: jest.fn(async () => ({ accessToken: 'resolved-token' })),
+			getSecret: vi.fn(async () => ({ accessToken: 'resolved-token' })),
 		};
 
 		mockResolverRegistry = {
-			getResolverByTypename: jest.fn().mockReturnValue(mockResolverInstance),
-		} as unknown as jest.Mocked<DynamicCredentialResolverRegistry>;
+			getResolverByTypename: vi.fn().mockReturnValue(mockResolverInstance),
+		} as unknown as Mocked<DynamicCredentialResolverRegistry>;
 
 		mockLoadNodesAndCredentials = {
-			getCredential: jest.fn().mockReturnValue({
+			getCredential: vi.fn().mockReturnValue({
 				type: { name: credentialType, properties: [] },
 			}),
-		} as unknown as jest.Mocked<LoadNodesAndCredentials>;
+		} as unknown as Mocked<LoadNodesAndCredentials>;
 
 		mockLogger = {
-			debug: jest.fn(),
-			info: jest.fn(),
-			warn: jest.fn(),
-			error: jest.fn(),
-			scoped: jest.fn().mockReturnThis(),
-		} as unknown as jest.Mocked<Logger>;
+			debug: vi.fn(),
+			info: vi.fn(),
+			warn: vi.fn(),
+			error: vi.fn(),
+			scoped: vi.fn().mockReturnThis(),
+		} as unknown as Mocked<Logger>;
 
 		const mockDynamicCredentialConfig = {
 			endpointAuthToken: 'unused',
-		} as unknown as jest.Mocked<DynamicCredentialsConfig>;
+		} as unknown as Mocked<DynamicCredentialsConfig>;
+
+		const mockDynamicCredentialsProxy = {
+			getSystemResolverId: vi.fn().mockReturnValue(null),
+			getEffectiveResolverId: vi.fn((settings) => settings?.credentialResolverId ?? null),
+		} as unknown as Mocked<DynamicCredentialsProxy>;
 
 		service = new DynamicCredentialService(
 			mockDynamicCredentialConfig,
@@ -132,9 +140,10 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 			mockCipher,
 			mockLogger,
 			mockExpressionService,
+			mockDynamicCredentialsProxy,
 			mockCacheService,
-			{ findOne: jest.fn().mockResolvedValue(null) } as never,
-			{ getCredentialData: jest.fn().mockResolvedValue(null) } as never,
+			{ findOne: vi.fn().mockResolvedValue(null) } as never,
+			{ getCredentialData: vi.fn().mockResolvedValue(null) } as never,
 		);
 	});
 
@@ -216,9 +225,14 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 		it('returns resolver-not-found error and does NOT populate cache when DB row is absent', async () => {
 			mockResolverRepository.findOneBy.mockResolvedValue(null);
 			const provider: ICredentialResolutionProvider = service;
+			const executionContext = buildExecutionContext();
 
-			await provider.resolveIfNeeded(metadata, staticData, buildExecutionContext());
-			await provider.resolveIfNeeded(metadata, staticData, buildExecutionContext());
+			await expect(
+				provider.resolveIfNeeded(metadata, staticData, executionContext),
+			).rejects.toThrow(CredentialResolverNotFoundError);
+			await expect(
+				provider.resolveIfNeeded(metadata, staticData, executionContext),
+			).rejects.toThrow(CredentialResolverNotFoundError);
 
 			// Each call re-queries (no negative cache entry) — operators expect
 			// add-then-retry to take effect immediately.
@@ -260,13 +274,17 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 		it('does NOT memoize when executionContext is undefined or lacks credentials', async () => {
 			const provider: ICredentialResolutionProvider = service;
 
-			await provider.resolveIfNeeded(metadata, staticData, undefined);
+			await expect(provider.resolveIfNeeded(metadata, staticData, undefined)).rejects.toThrow(
+				MissingExecutionContextError,
+			);
 			const ctxWithoutCreds: IExecutionContext = {
 				version: 1,
 				establishedAt: Date.now(),
 				source: 'webhook',
 			};
-			await provider.resolveIfNeeded(metadata, staticData, ctxWithoutCreds);
+			await expect(
+				provider.resolveIfNeeded(metadata, staticData, ctxWithoutCreds),
+			).rejects.toThrow(MissingExecutionContextError);
 
 			// Both calls fall through to the "missing context" path; no decrypt.
 			const ctxDecryptCalls = mockCipher.decryptV2.mock.calls.filter(
@@ -286,7 +304,12 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 			// clean serializable record (used for queue mode, persistence).
 			const serialized = JSON.stringify(executionContext);
 			expect(serialized).not.toContain('user-jwt-token');
-			expect(Object.keys(executionContext)).toEqual(['credentials']);
+			expect(Object.keys(executionContext)).toEqual([
+				'version',
+				'establishedAt',
+				'source',
+				'credentials',
+			]);
 		});
 	});
 
@@ -301,7 +324,7 @@ describe('DynamicCredentialService — fork §11 perf hardening', () => {
 
 		const resolverInstance = mockResolverRegistry.getResolverByTypename(
 			'oauth2',
-		) as unknown as { getSecret: jest.Mock };
+		) as unknown as { getSecret: Mock };
 
 		const [firstCallArgs, secondCallArgs] = resolverInstance.getSecret.mock.calls;
 		const firstContext = firstCallArgs[1] as ICredentialContext;

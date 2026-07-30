@@ -181,6 +181,7 @@ describe('permissions', () => {
 			instanceAi: {},
 			roleMappingRule: {},
 			otel: {},
+			nodeGovernance: {},
 		};
 
 		expect(getResourcePermissions(scopes)).toEqual(permissionRecord);

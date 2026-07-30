@@ -280,15 +280,19 @@ describe('DynamicCredentialService', () => {
 		describe('should throw error when', () => {
 			it('resolver entity is not found', async () => {
 				const credentialsEntity = createMockCredentialsMetadata();
+				const executionContext = createMockExecutionContext('encrypted-credentials');
 
 				mockResolverRepository.findOneBy.mockResolvedValue(null);
+				mockCipher.decryptV2.mockResolvedValue(
+					JSON.stringify(createMockCredentialContext()),
+				);
 
 				await expect(
-					service.resolveIfNeeded(credentialsEntity, staticData, undefined),
+					service.resolveIfNeeded(credentialsEntity, staticData, executionContext),
 				).rejects.toThrow(CredentialResolverNotFoundError);
 
 				await expect(
-					service.resolveIfNeeded(credentialsEntity, staticData, undefined),
+					service.resolveIfNeeded(credentialsEntity, staticData, executionContext),
 				).rejects.toThrow('Resolver "resolver-456" not found for credential "Test Credential"');
 			});
 
@@ -297,6 +301,9 @@ describe('DynamicCredentialService', () => {
 					resolverId: undefined,
 				});
 				const executionContext = createMockExecutionContext('encrypted-credentials');
+				mockCipher.decryptV2.mockResolvedValue(
+					JSON.stringify(createMockCredentialContext()),
+				);
 				const additionalData = {
 					...createMockAdditionalData('exec-123', {}, executionContext),
 					workflowSettings: {}, // No credentialResolverId
@@ -326,7 +333,9 @@ describe('DynamicCredentialService', () => {
 
 				mockResolverRepository.findOneBy.mockResolvedValue(resolverEntity);
 				mockResolverRegistry.getResolverByTypename.mockReturnValue(mockResolver);
-				arrangeDecryptMocks(credentialContext, { prefix: 'test' });
+				mockCipher.decryptV2
+					.mockResolvedValueOnce(JSON.stringify(credentialContext))
+					.mockResolvedValueOnce(JSON.stringify({ prefix: 'test' }));
 
 				await service.resolveIfNeeded(credentialsEntity, staticData, executionContext, {});
 
@@ -440,21 +449,29 @@ describe('DynamicCredentialService', () => {
 					isResolvable: true,
 					resolverId: undefined,
 				});
+				const executionContext = createMockExecutionContext('encrypted-credentials');
+				mockCipher.decryptV2.mockResolvedValue(
+					JSON.stringify(createMockCredentialContext()),
+				);
 
 				await expect(
-					service.resolveIfNeeded(credentialsEntity, staticData, undefined),
+					service.resolveIfNeeded(credentialsEntity, staticData, executionContext),
 				).rejects.toThrow(CredentialResolverNotConfiguredError);
 			});
 
 			it('resolver instance is not found in registry', async () => {
 				const credentialsEntity = createMockCredentialsMetadata();
 				const resolverEntity = createMockResolverEntity();
+				const executionContext = createMockExecutionContext('encrypted-credentials');
 
 				mockResolverRepository.findOneBy.mockResolvedValue(resolverEntity);
 				mockResolverRegistry.getResolverByTypename.mockReturnValue(undefined);
+				mockCipher.decryptV2.mockResolvedValue(
+					JSON.stringify(createMockCredentialContext()),
+				);
 
 				await expect(
-					service.resolveIfNeeded(credentialsEntity, staticData, undefined),
+					service.resolveIfNeeded(credentialsEntity, staticData, executionContext),
 				).rejects.toThrow(CredentialResolverNotFoundError);
 			});
 
@@ -987,6 +1004,9 @@ describe('DynamicCredentialService', () => {
 				};
 
 				mockResolverRepository.findOneBy.mockResolvedValue(null);
+				mockCipher.decryptV2.mockResolvedValue(
+					JSON.stringify(createMockCredentialContext()),
+				);
 
 				await expect(
 					service.resolveIfNeeded(
@@ -1203,7 +1223,7 @@ describe('DynamicCredentialService', () => {
 			const executionContext = createMockExecutionContext('encrypted-credentials');
 			const decryptedCredentialContext = JSON.stringify(createMockCredentialContext());
 
-			const arrangeResolverMiss = (resolver: jest.Mocked<ICredentialResolver>) => {
+			const arrangeResolverMiss = (resolver: Mocked<ICredentialResolver>) => {
 				mockResolverRepository.findOneBy.mockResolvedValue(resolverEntity);
 				mockResolverRegistry.getResolverByTypename.mockReturnValue(resolver);
 				mockCipher.decryptV2.mockImplementation(async (value: string) => {
@@ -1236,9 +1256,9 @@ describe('DynamicCredentialService', () => {
 				arrangeResolverMiss(resolver);
 
 				const provider = {
-					isEnabled: jest.fn().mockReturnValue(true),
-					isCandidate: jest.fn().mockReturnValue(true),
-					tryLazySeed: jest.fn().mockResolvedValue({ seeded: true }),
+					isEnabled: vi.fn().mockReturnValue(true),
+					isCandidate: vi.fn().mockReturnValue(true),
+					tryLazySeed: vi.fn().mockResolvedValue({ seeded: true }),
 				};
 				service.setLazySeedProvider(provider);
 
@@ -1260,9 +1280,9 @@ describe('DynamicCredentialService', () => {
 				arrangeResolverMiss(resolver);
 
 				const provider = {
-					isEnabled: jest.fn().mockReturnValue(true),
-					isCandidate: jest.fn().mockReturnValue(true),
-					tryLazySeed: jest.fn().mockResolvedValue({ seeded: false, reason: 'lazy_seed_disabled' }),
+					isEnabled: vi.fn().mockReturnValue(true),
+					isCandidate: vi.fn().mockReturnValue(true),
+					tryLazySeed: vi.fn().mockResolvedValue({ seeded: false, reason: 'lazy_seed_disabled' }),
 				};
 				service.setLazySeedProvider(provider);
 
@@ -1279,9 +1299,9 @@ describe('DynamicCredentialService', () => {
 				arrangeResolverMiss(resolver);
 
 				const provider = {
-					isEnabled: jest.fn().mockReturnValue(false),
-					isCandidate: jest.fn().mockReturnValue(true),
-					tryLazySeed: jest.fn(),
+					isEnabled: vi.fn().mockReturnValue(false),
+					isCandidate: vi.fn().mockReturnValue(true),
+					tryLazySeed: vi.fn(),
 				};
 				service.setLazySeedProvider(provider);
 
@@ -1297,9 +1317,9 @@ describe('DynamicCredentialService', () => {
 				arrangeResolverMiss(resolver);
 
 				const provider = {
-					isEnabled: jest.fn().mockReturnValue(true),
-					isCandidate: jest.fn().mockReturnValue(true),
-					tryLazySeed: jest.fn().mockRejectedValue(new Error('provider blew up')),
+					isEnabled: vi.fn().mockReturnValue(true),
+					isCandidate: vi.fn().mockReturnValue(true),
+					tryLazySeed: vi.fn().mockRejectedValue(new Error('provider blew up')),
 				};
 				service.setLazySeedProvider(provider);
 

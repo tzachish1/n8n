@@ -5,6 +5,7 @@ import {
 	NodeGovernancePolicyRepository,
 	PolicyProjectAssignmentRepository,
 	ProjectRepository,
+	QueryFailedError,
 	SettingsRepository,
 	withTransaction,
 	type EntityManager,
@@ -16,7 +17,6 @@ import {
 	type User,
 } from '@n8n/db';
 import { Service } from '@n8n/di';
-import { QueryFailedError } from '@n8n/typeorm';
 
 import { BadRequestError } from '@/errors/response-errors/bad-request.error';
 import { NotFoundError } from '@/errors/response-errors/not-found.error';

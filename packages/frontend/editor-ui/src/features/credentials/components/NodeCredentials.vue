@@ -226,7 +226,12 @@ function canEditPrivateCredential(credentialType: string): boolean {
 
 function canConnectPrivateCredential(credentialType: string): boolean {
 	const credential = getSelectedPrivateCredential(credentialType);
-	return getResourcePermissions(credential?.scopes).credential.connect === true;
+	if (!credential) return false;
+	const permissions = getResourcePermissions(credential.scopes).credential;
+	if (credential.isResolvable) {
+		return canConnectResolvableCredential(permissions, credential.isResolvable);
+	}
+	return permissions.connect === true;
 }
 
 async function onConnectFromRow(credentialType: string): Promise<void> {

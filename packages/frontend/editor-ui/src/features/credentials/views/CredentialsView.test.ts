@@ -429,7 +429,7 @@ describe('CredentialsView', () => {
 				type: 'oAuth2Api',
 				createdAt: '2021-05-05T00:00:00Z',
 				updatedAt: '2021-05-05T00:00:00Z',
-				scopes: ['credential:connect'],
+				scopes: ['credential:read'],
 				isManaged: false,
 				isResolvable: true,
 				connectedByMe: false,

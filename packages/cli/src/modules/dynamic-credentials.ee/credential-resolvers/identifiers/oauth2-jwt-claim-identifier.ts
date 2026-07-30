@@ -1,7 +1,6 @@
 import { Logger } from '@n8n/backend-common';
 import { Time } from '@n8n/constants';
 import { Service } from '@n8n/di';
-import axios from 'axios';
 import {
 	createLocalJWKSet,
 	errors as joseErrors,
@@ -15,6 +14,7 @@ import { z } from 'zod';
 import { CacheService } from '@/services/cache/cache.service';
 
 import { IdentifierValidationError, ITokenIdentifier } from './identifier-interface';
+import { OAuth2MetadataHttpClient } from './oauth2-metadata-http-client';
 import { OAuth2OptionsSchema, sha256 } from './oauth2-utils';
 
 // Use minimum of 30 seconds to avoid cache thrashing
@@ -23,7 +23,6 @@ const MIN_TOKEN_CACHE_TIMEOUT = 30 * Time.seconds.toMilliseconds;
 const MAX_TOKEN_CACHE_TIMEOUT = 5 * Time.minutes.toMilliseconds;
 const DEFAULT_CACHE_TIMEOUT = 60 * Time.seconds.toMilliseconds;
 const METADATA_CACHE_TIMEOUT = 1 * Time.hours.toMilliseconds;
-const JWKS_NETWORK_TIMEOUT_MS = 10 * Time.seconds.toMilliseconds;
 
 /**
  * Fork §10 Phase 2 — third validation strategy for the OAuth credential
@@ -73,6 +72,7 @@ export class OAuth2JwtClaimIdentifier implements ITokenIdentifier {
 	constructor(
 		private readonly logger: Logger,
 		private readonly cache: CacheService,
+		private readonly http: OAuth2MetadataHttpClient,
 	) {}
 
 	async validateOptions(identifierOptions: Record<string, unknown>): Promise<void> {
@@ -144,45 +144,18 @@ export class OAuth2JwtClaimIdentifier implements ITokenIdentifier {
 		options: OAuth2JwtClaimOptions,
 		skipCache: boolean = false,
 	): Promise<OAuth2Metadata> {
-		const cacheKey = `${CACHE_PREFIX}:metadata:${options.metadataUri}`;
-		if (!skipCache) {
-			const cached = await this.cache.get<OAuth2Metadata>(cacheKey);
-			if (cached) {
-				return cached;
-			}
-		}
-
-		const response = await axios.get(options.metadataUri, {
-			validateStatus: () => true,
-			timeout: JWKS_NETWORK_TIMEOUT_MS,
+		return await this.http.fetchMetadata(OAuth2MetadataSchema, {
+			metadataUri: options.metadataUri,
+			cachePrefix: CACHE_PREFIX,
+			skipCache,
 		});
-
-		if (response.status !== 200) {
-			this.logger.error(
-				`Failed to fetch OAuth2 metadata from ${options.metadataUri}, status code: ${response.status}`,
-			);
-			throw new IdentifierValidationError(
-				`Failed to fetch OAuth2 metadata, status code: ${response.status}`,
-			);
-		}
-
-		try {
-			const metadata = OAuth2MetadataSchema.parse(response.data);
-			if (!skipCache) {
-				await this.cache.set(cacheKey, metadata, METADATA_CACHE_TIMEOUT);
-			}
-			return metadata;
-		} catch (error) {
-			this.logger.error('Invalid OAuth2 metadata format', { error });
-			throw new IdentifierValidationError('Invalid OAuth2 metadata format', { cause: error });
-		}
 	}
 
 	/**
-	 * Fetches the JWKS document via axios (so corporate proxy env vars like
-	 * HTTP_PROXY are respected) and caches the raw document. The local key
-	 * set is then rebuilt per call from the cached JSON — cheap, no extra
-	 * I/O, and lets jose pick the right key by `kid` during verification.
+	 * Fetches the JWKS document through the SSRF-guarded metadata client and
+	 * caches the raw document. The local key set is then rebuilt per call from
+	 * the cached JSON — cheap, no extra I/O, and lets jose pick the right key
+	 * by `kid` during verification.
 	 */
 	private async fetchJwks(jwksUri: string): Promise<JSONWebKeySet> {
 		const cacheKey = `${CACHE_PREFIX}:jwks:${jwksUri}`;
@@ -191,17 +164,18 @@ export class OAuth2JwtClaimIdentifier implements ITokenIdentifier {
 			return cached;
 		}
 
-		const response = await axios.get(jwksUri, {
-			validateStatus: () => true,
-			timeout: JWKS_NETWORK_TIMEOUT_MS,
+		const response = await this.http.requestFull({
+			url: jwksUri,
+			method: 'GET',
+			json: true,
 		});
 
-		if (response.status !== 200) {
-			this.logger.error(`Failed to fetch JWKS from ${jwksUri}, status code: ${response.status}`);
-			throw new IdentifierValidationError(`Failed to fetch JWKS, status code: ${response.status}`);
+		if (response.statusCode !== 200) {
+			this.logger.error(`Failed to fetch JWKS from ${jwksUri}, status code: ${response.statusCode}`);
+			throw new IdentifierValidationError(`Failed to fetch JWKS, status code: ${response.statusCode}`);
 		}
 
-		const parsed = JwksDocumentSchema.safeParse(response.data);
+		const parsed = JwksDocumentSchema.safeParse(response.body);
 		if (!parsed.success) {
 			this.logger.error('Invalid JWKS document format', { error: parsed.error });
 			throw new IdentifierValidationError('Invalid JWKS document format');

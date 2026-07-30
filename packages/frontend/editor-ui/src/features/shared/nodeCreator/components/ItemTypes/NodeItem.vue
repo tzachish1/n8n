@@ -57,11 +57,6 @@ const nodeTypesStore = useNodeTypesStore();
 const uiStore = useUIStore();
 const nodeGovernanceStore = useNodeGovernanceStore();
 
-const _emit = defineEmits<{
-	requestAccess: [nodeType: string];
-}>();
-void _emit;
-
 const dragging = ref(false);
 
 // Node Governance - check props first, then fallback to store lookup
@@ -85,15 +80,6 @@ const isPendingRequest = computed(() => {
 	const storeStatus = nodeGovernanceStore.resolveGovernanceForNode(props.nodeType.name);
 	return storeStatus?.status === 'pending_request';
 });
-const _governanceStatus = computed(() => {
-	const governanceStatus = props.nodeType.governance?.status;
-	if (governanceStatus !== undefined) {
-		return governanceStatus;
-	}
-	const storeStatus = nodeGovernanceStore.resolveGovernanceForNode(props.nodeType.name);
-	return storeStatus?.status ?? 'allowed';
-});
-void _governanceStatus;
 const draggablePosition = ref({ x: -100, y: -100 });
 const draggableDataTransfer = ref(null as Element | null);
 

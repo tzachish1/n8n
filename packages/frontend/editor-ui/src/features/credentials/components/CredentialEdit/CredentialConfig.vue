@@ -220,7 +220,6 @@ const oauthConnectReady = computed(
 const showOAuthNotConnectedBanner = computed(() => {
 	return (
 		props.isOAuthType &&
-		props.isResolvable &&
 		oauthConnectReady.value &&
 		!props.isOAuthConnected &&
 		!props.authError
@@ -264,12 +263,12 @@ const canWrite = computed(() => {
 // permission — the change affects every user's own connection, not just the caller's.
 const canSelectEndUserType = computed(() => !!props.credentialPermissions.createEndUser);
 
-// Connecting an existing private credential only needs the `connect` capability
-// (no edit rights); shared/static credentials store the token on the shared
-// credential itself, so connecting them follows the write permission.
+// Connecting an existing private credential follows the §11 resolvable-credential
+// connect gate (read/update sharees); shared/static credentials store the token
+// on the shared credential itself, so connecting them follows the write permission.
 const canConnect = computed(() => {
 	if (!isNewCredential.value && props.isResolvable) {
-		return !!props.credentialPermissions.connect;
+		return canConnectOwnOAuth.value;
 	}
 	return canWrite.value;
 });
@@ -637,16 +636,6 @@ watch(showOAuthSuccessBanner, (newValue, oldValue) => {
 					:documentation-url="documentationUrl"
 					:show-validation-warnings="showValidationWarning"
 					@update="onDataChange"
-				/>
-
-				<QuickConnectButton
-					v-if="isOAuthType && !isOAuthConnected && (canWrite || canConnectOwnOAuth)"
-					:service-name="serviceName"
-					:credential-type-name="credentialType.name"
-					:disabled="!oauthConnectReady"
-					:disabled-tooltip="i18n.baseText('credentialEdit.credentialConfig.oauthDisabledTooltip')"
-					data-test-id="quick-connect-button"
-					@click="$emit('oauth')"
 				/>
 
 				<N8nText v-if="isMissingCredentials" color="text-base" size="medium">

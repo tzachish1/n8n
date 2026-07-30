@@ -1231,11 +1231,11 @@ describe('CredentialEdit', () => {
 			expect(uiStore.closeModal).not.toHaveBeenCalled();
 		});
 
-		test('authorizes a private credential without saving for a connect-only user', async () => {
+		test('authorizes a private credential without saving for a read-only sharee', async () => {
 			const { credentialsStore, getByTestId } = setupExistingOAuthCredential(
 				{},
 				{
-					scopes: ['credential:read', 'credential:connect'],
+					scopes: ['credential:read'],
 					isResolvable: true,
 					connectedByMe: false,
 				},

@@ -7,6 +7,7 @@ import type {
 	ICredentialDataDecryptedObject,
 	ICredentialsExpressionResolveValues,
 	IExecuteData,
+	IExecutionContext,
 	IGetNodeParameterOptions,
 	INode,
 	INodeCredentialDescription,
@@ -78,8 +79,10 @@ export abstract class NodeExecutionContext implements Omit<FunctionsBase, 'getCr
 		});
 	}
 
-	getExecutionContext() {
-		return this.runExecutionData?.executionData?.runtimeData;
+	getExecutionContext(fallback?: IExecutionContext) {
+		// Fallback folded in here (rather than at the `_getCredentials` call site)
+		// to keep `_getCredentials` under the cyclomatic-complexity lint threshold.
+		return this.runExecutionData?.executionData?.runtimeData ?? fallback;
 	}
 
 	getExecutionId() {
@@ -457,7 +460,7 @@ export abstract class NodeExecutionContext implements Omit<FunctionsBase, 'getCr
 		// 	) as string;
 		// }
 
-		additionalData.executionContext = this.getExecutionContext() ?? additionalData.executionContext;
+		additionalData.executionContext = this.getExecutionContext(additionalData.executionContext);
 		const decryptedDataObject = await additionalData.credentialsHelper.getDecrypted(
 			additionalData,
 			nodeCredentials,

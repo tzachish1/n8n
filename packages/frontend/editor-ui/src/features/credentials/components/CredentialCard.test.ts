@@ -377,7 +377,7 @@ describe('CredentialCard', () => {
 				id: 'cred-1',
 				isResolvable: true,
 				connectedByMe: false,
-				scopes: ['credential:connect'],
+				scopes: ['credential:read'],
 				homeProject: { name: 'Test Project' },
 				...overrides,
 			});
@@ -391,17 +391,17 @@ describe('CredentialCard', () => {
 			expect(queryByTestId('credential-card-not-connected')).not.toBeInTheDocument();
 		});
 
-		it('should hide the Connect button when the user lacks connect permission', () => {
+		it('should hide the Connect button when the user lacks read and update permission', () => {
 			const { queryByTestId } = renderComponent({
 				props: {
-					data: privateUnconnectedData({ scopes: ['credential:read', 'credential:update'] }),
+					data: privateUnconnectedData({ scopes: ['credential:connect'] }),
 				},
 			});
 
 			expect(queryByTestId('credential-card-connect')).not.toBeInTheDocument();
 		});
 
-		it('should hide the Connect button when the user lacks read and update permission', () => {
+		it('should hide the Connect button when the user has no credential scopes', () => {
 			const { queryByTestId } = renderComponent({
 				props: { data: privateUnconnectedData({ scopes: [] }) },
 			});
@@ -409,10 +409,10 @@ describe('CredentialCard', () => {
 			expect(queryByTestId('credential-card-connect')).not.toBeInTheDocument();
 		});
 
-		it('should show the Connect button for a user with only the connect permission', () => {
+		it('should show the Connect button for a read-only sharee', () => {
 			const { getByTestId } = renderComponent({
 				props: {
-					data: privateUnconnectedData({ scopes: ['credential:read', 'credential:connect'] }),
+					data: privateUnconnectedData({ scopes: ['credential:read'] }),
 				},
 			});
 

@@ -1,9 +1,9 @@
 import type { AuthenticatedRequest } from '@n8n/db';
 import type { Request } from 'express';
-import { ExecutionContextService } from 'n8n-core';
+import type { ExecutionContextService } from 'n8n-core';
 import type { INodeParameters, IWorkflowExecuteAdditionalData } from 'n8n-workflow';
 
-import { AuthService } from '@/auth/auth.service';
+import type { AuthService } from '@/auth/auth.service';
 import { getBase } from '@/workflow-execute-additional-data';
 
 /**

@@ -1,7 +1,8 @@
+import type { Mock } from 'vitest';
 import type { Logger } from '@n8n/backend-common';
 import { mockLogger } from '@n8n/backend-test-utils';
 import type { GlobalConfig } from '@n8n/config';
-import { mock } from 'jest-mock-extended';
+import { mock } from 'vitest-mock-extended';
 
 import type { EventService } from '@/events/event.service';
 
@@ -18,13 +19,13 @@ describe('GraphTokenExchanger', () => {
 		clientId: 'test-client-id',
 		clientSecret: 'test-client-secret',
 		userAccessToken: 'user-api-access-token',
-		resolveTokenEndpoint: jest
+		resolveTokenEndpoint: vi
 			.fn()
 			.mockResolvedValue('https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token'),
 	});
 
 	const mockOboSuccess = (overrides: Record<string, unknown> = {}) => {
-		global.fetch = jest.fn().mockResolvedValue({
+		global.fetch = vi.fn().mockResolvedValue({
 			ok: true,
 			status: 200,
 			json: async () => ({
@@ -38,7 +39,7 @@ describe('GraphTokenExchanger', () => {
 	};
 
 	beforeEach(() => {
-		jest.resetAllMocks();
+		vi.resetAllMocks();
 
 		globalConfig = mock<GlobalConfig>({
 			sso: {
@@ -67,7 +68,7 @@ describe('GraphTokenExchanger', () => {
 			});
 
 			expect(global.fetch).toHaveBeenCalledTimes(1);
-			const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+			const [url, init] = (global.fetch as Mock).mock.calls[0];
 			expect(url).toBe('https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token');
 			expect(init.method).toBe('POST');
 			expect(init.headers).toEqual({ 'content-type': 'application/x-www-form-urlencoded' });
@@ -89,7 +90,7 @@ describe('GraphTokenExchanger', () => {
 
 			await exchanger.exchange(baseRequest());
 
-			const init = (global.fetch as jest.Mock).mock.calls[0][1];
+			const init = (global.fetch as Mock).mock.calls[0][1];
 			const body = new URLSearchParams(init.body as string);
 			expect(body.get('scope')).toBe('https://graph.microsoft.com/.default offline_access');
 		});
@@ -115,7 +116,7 @@ describe('GraphTokenExchanger', () => {
 	describe('token-endpoint resolution failures', () => {
 		it('skips with obo_exchange_failed and returns null when resolveTokenEndpoint throws (fail-open)', async () => {
 			const request = baseRequest();
-			request.resolveTokenEndpoint = jest.fn().mockRejectedValue(new Error('discovery boom'));
+			request.resolveTokenEndpoint = vi.fn().mockRejectedValue(new Error('discovery boom'));
 
 			const result = await exchanger.exchange(request);
 
@@ -131,7 +132,7 @@ describe('GraphTokenExchanger', () => {
 			globalConfig.sso.oidc.graphSeedFailOpen = false;
 			const request = baseRequest();
 			const discoveryErr = new Error('discovery boom');
-			request.resolveTokenEndpoint = jest.fn().mockRejectedValue(discoveryErr);
+			request.resolveTokenEndpoint = vi.fn().mockRejectedValue(discoveryErr);
 
 			await expect(exchanger.exchange(request)).rejects.toBe(discoveryErr);
 
@@ -143,7 +144,7 @@ describe('GraphTokenExchanger', () => {
 
 		it('skips with obo_exchange_failed when resolveTokenEndpoint returns undefined (fail-open)', async () => {
 			const request = baseRequest();
-			request.resolveTokenEndpoint = jest.fn().mockResolvedValue(undefined);
+			request.resolveTokenEndpoint = vi.fn().mockResolvedValue(undefined);
 
 			const result = await exchanger.exchange(request);
 
@@ -158,7 +159,7 @@ describe('GraphTokenExchanger', () => {
 		it('throws InternalServerError when resolveTokenEndpoint returns undefined and graphSeedFailOpen=false', async () => {
 			globalConfig.sso.oidc.graphSeedFailOpen = false;
 			const request = baseRequest();
-			request.resolveTokenEndpoint = jest.fn().mockResolvedValue(undefined);
+			request.resolveTokenEndpoint = vi.fn().mockResolvedValue(undefined);
 
 			await expect(exchanger.exchange(request)).rejects.toThrow(
 				/IdP discovery is missing token_endpoint/,
@@ -168,7 +169,7 @@ describe('GraphTokenExchanger', () => {
 
 	describe('OBO call failures', () => {
 		it('skips with obo_exchange_failed on network error (fail-open)', async () => {
-			global.fetch = jest
+			global.fetch = vi
 				.fn()
 				.mockRejectedValue(new Error('ECONNRESET')) as unknown as typeof global.fetch;
 
@@ -184,13 +185,13 @@ describe('GraphTokenExchanger', () => {
 		it('re-throws the network error when graphSeedFailOpen=false', async () => {
 			globalConfig.sso.oidc.graphSeedFailOpen = false;
 			const networkErr = new Error('ECONNRESET');
-			global.fetch = jest.fn().mockRejectedValue(networkErr) as unknown as typeof global.fetch;
+			global.fetch = vi.fn().mockRejectedValue(networkErr) as unknown as typeof global.fetch;
 
 			await expect(exchanger.exchange(baseRequest())).rejects.toBe(networkErr);
 		});
 
 		it('skips with obo_exchange_failed on IdP rejection and logs error description (fail-open)', async () => {
-			global.fetch = jest.fn().mockResolvedValue({
+			global.fetch = vi.fn().mockResolvedValue({
 				ok: false,
 				status: 400,
 				json: async () => ({
@@ -219,7 +220,7 @@ describe('GraphTokenExchanger', () => {
 
 		it('throws InternalServerError on IdP rejection when graphSeedFailOpen=false', async () => {
 			globalConfig.sso.oidc.graphSeedFailOpen = false;
-			global.fetch = jest.fn().mockResolvedValue({
+			global.fetch = vi.fn().mockResolvedValue({
 				ok: false,
 				status: 401,
 				json: async () => ({ error: 'invalid_client' }),
@@ -231,7 +232,7 @@ describe('GraphTokenExchanger', () => {
 		});
 
 		it('tolerates an unreadable error body (text fallback) without throwing on the parse', async () => {
-			global.fetch = jest.fn().mockResolvedValue({
+			global.fetch = vi.fn().mockResolvedValue({
 				ok: false,
 				status: 502,
 				json: async () => {
@@ -250,7 +251,7 @@ describe('GraphTokenExchanger', () => {
 		});
 
 		it('skips when the OBO response is 200 but the JSON has no access_token (fail-open)', async () => {
-			global.fetch = jest.fn().mockResolvedValue({
+			global.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				status: 200,
 				json: async () => ({ token_type: 'Bearer' }),
@@ -267,7 +268,7 @@ describe('GraphTokenExchanger', () => {
 
 		it('throws InternalServerError when the OBO response has no access_token and graphSeedFailOpen=false', async () => {
 			globalConfig.sso.oidc.graphSeedFailOpen = false;
-			global.fetch = jest.fn().mockResolvedValue({
+			global.fetch = vi.fn().mockResolvedValue({
 				ok: true,
 				status: 200,
 				json: async () => ({ token_type: 'Bearer' }),

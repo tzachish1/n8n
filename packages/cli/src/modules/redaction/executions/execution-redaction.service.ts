@@ -112,12 +112,13 @@ export class ExecutionRedactionService implements ExecutionRedaction {
 		// Reveal path: validate all permissions atomically before any processing.
 		if (options.redactExecutionData === false) {
 			// Dynamic credential executions are only revealable to the user the
-			// execution ran as — the `execution:reveal` scope deliberately does
-			// not bypass this check.
+			// execution ran as, or to the user who personally triggered a manual
+			// run (e.g. a test webhook). The `execution:reveal` scope deliberately
+			// does not bypass this check.
 			for (const execution of processable) {
 				if (
 					this.hasDynamicCredentials(execution) &&
-					!this.isOwnDynamicCredentialsExecution(execution, options.user.id)
+					!this.canRevealDynamicCredentialsExecution(execution, options.user)
 				) {
 					throw new ForbiddenError();
 				}
@@ -126,9 +127,10 @@ export class ExecutionRedactionService implements ExecutionRedaction {
 			for (const execution of needsCheck) {
 				if (
 					this.hasDynamicCredentials(execution) &&
-					this.isOwnDynamicCredentialsExecution(execution, options.user.id)
+					this.canRevealDynamicCredentialsExecution(execution, options.user)
 				) {
-					// Owner of a dyncred execution skips the scope check.
+					// The executing user, or the user who triggered the manual run,
+					// skips the scope check.
 					continue;
 				}
 				if (!revealableIds.has(execution.workflowId)) {
@@ -160,15 +162,16 @@ export class ExecutionRedactionService implements ExecutionRedaction {
 			// dynamic-credential checks below can rely on a populated payload.
 			if (execution.data === undefined || execution.data === null) continue;
 			const hasDynCreds = this.hasDynamicCredentials(execution);
-			const isOwnDynCreds =
-				hasDynCreds && this.isOwnDynamicCredentialsExecution(execution, options.user.id);
+			const canRevealDynCreds =
+				hasDynCreds && this.canRevealDynamicCredentialsExecution(execution, options.user);
 			const policyAllowsReveal = this.policyAllowsReveal(execution);
-			// On dyncred executions, only the executing user may see unredacted data,
-			// and the `execution:reveal` scope does not grant a bypass.
+			// On dyncred executions, only the executing user or the user who
+			// triggered the manual run may see unredacted data, and the
+			// `execution:reveal` scope does not grant a bypass.
 			const userCanReveal = hasDynCreds
-				? isOwnDynCreds
+				? canRevealDynCreds
 				: policyAllowsReveal || revealableIds.has(execution.workflowId);
-			const enforceDynCredRedaction = hasDynCreds && !isOwnDynCreds;
+			const enforceDynCredRedaction = hasDynCreds && !canRevealDynCreds;
 			const context: RedactionContext = {
 				user: options.user,
 				redactExecutionData: options.redactExecutionData,
@@ -269,7 +272,8 @@ export class ExecutionRedactionService implements ExecutionRedaction {
 	/**
 	 * Returns true when the execution used dynamic credential resolution.
 	 * Such executions are hidden from everyone except the user the execution
-	 * ran as (see `isOwnDynamicCredentialsExecution`).
+	 * ran as or the user who triggered the manual run (see
+	 * `canRevealDynamicCredentialsExecution`).
 	 *
 	 * Checks per-node `usedDynamicCredentials` flag which is only set when
 	 * resolution actually happened at runtime, rather than checking for the
@@ -297,6 +301,46 @@ export class ExecutionRedactionService implements ExecutionRedaction {
 		userId: string,
 	): boolean {
 		return execution.data.executionData?.runtimeData?.executedByUserId === userId;
+	}
+
+	/**
+	 * Whether the requesting user may see unredacted data for a dynamic-credential
+	 * execution. Two independent paths grant access:
+	 *   - they are the n8n user the credentials resolved to (`executedByUserId`), or
+	 *   - they personally triggered the manual run (`isSelfManualReveal`), e.g. a
+	 *     test webhook or an editor "Execute workflow".
+	 * Everyone else stays redacted, preserving the cross-tenant guarantee.
+	 */
+	private canRevealDynamicCredentialsExecution(
+		execution: RedactableExecution,
+		user: { id: string },
+	): boolean {
+		return (
+			this.isOwnDynamicCredentialsExecution(execution, user.id) ||
+			this.isSelfManualReveal(execution, user)
+		);
+	}
+
+	/**
+	 * Returns true when the request comes from the same user that triggered a
+	 * manual execution. Used to exempt that user from the otherwise-strict
+	 * dynamic-credential redaction rule.
+	 *
+	 * Why this is safe: in a manual run the data is produced by an action the
+	 * triggering user performed themselves — showing it back to them is no
+	 * different from running the workflow live in their browser. Other users
+	 * still get redacted output (preserving the cross-tenant guarantee), and
+	 * production / cron / webhook executions have no `manualData.userId` so they
+	 * never match.
+	 */
+	private isSelfManualReveal(
+		execution: RedactableExecution,
+		user: { id: string } | undefined,
+	): boolean {
+		if (!user?.id) return false;
+		if (!MANUAL_MODES.has(execution.mode)) return false;
+		const triggerUserId = execution.data.manualData?.userId;
+		return Boolean(triggerUserId) && triggerUserId === user.id;
 	}
 
 	/**

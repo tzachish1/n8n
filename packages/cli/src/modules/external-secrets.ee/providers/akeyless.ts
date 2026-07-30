@@ -1,7 +1,11 @@
 import { Logger } from '@n8n/backend-common';
+import {
+	type HttpRequestClient,
+	httpStatusFromError,
+	isConnectionRefusedError,
+	OutboundHttp,
+} from '@n8n/backend-network';
 import { Container } from '@n8n/di';
-import type { AxiosInstance } from 'axios';
-import axios from 'axios';
 import type { IDataObject, INodeProperties } from 'n8n-workflow';
 
 import { DOCS_HELP_NOTICE } from '../constants';
@@ -110,7 +114,7 @@ export class AkeylessProvider extends SecretsProvider {
 
 	private settings: AkeylessSettings;
 
-	#http: AxiosInstance;
+	private http: HttpRequestClient;
 
 	#currentToken: string;
 
@@ -118,7 +122,10 @@ export class AkeylessProvider extends SecretsProvider {
 
 	private refreshAbort = new AbortController();
 
-	constructor(readonly logger = Container.get(Logger)) {
+	constructor(
+		readonly logger = Container.get(Logger),
+		private readonly outboundHttp = Container.get(OutboundHttp),
+	) {
 		super();
 		this.logger = this.logger.scoped('external-secrets');
 	}
@@ -128,70 +135,56 @@ export class AkeylessProvider extends SecretsProvider {
 
 		const baseURL = this.settings.url.endsWith('/') ? this.settings.url : `${this.settings.url}/`;
 
-		this.#http = axios.create({
+		this.http = this.outboundHttp.requests({
 			baseURL,
 			headers: {
 				Accept: 'application/json',
 				'Content-Type': 'application/json',
 			},
+			ssrf: 'disabled', // admin-configured infrastructure
 		});
-
-		this.#http.interceptors.request.use((config) => {
-			// Never log request bodies: Akeyless endpoints carry auth credentials,
-			// session tokens, and secret names/values in their payloads.
-			this.logger.debug(
-				`Akeyless request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`,
-			);
-			return config;
-		});
-
-		this.#http.interceptors.response.use(
-			(response) => {
-				// Never log response bodies: /auth returns a session token and
-				// /get-secret-value / /rotated-secret-get-value return secret values.
-				this.logger.debug(`Akeyless response: ${response.status}`);
-				return response;
-			},
-			async (error) => {
-				if (axios.isAxiosError(error)) {
-					// Log status + URL only; request/response payloads may contain
-					// credentials or secret material and must never be logged.
-					this.logger.error(`Akeyless request failed: ${error.response?.status}`, {
-						url: `${error.config?.baseURL}${error.config?.url}`,
-						code: error.code,
-					});
-
-					const config = error.config;
-					if (
-						error.response?.status === 401 &&
-						this.settings.authMethod === 'accessKey' &&
-						config &&
-						!(config as unknown as { __isRetry?: boolean }).__isRetry &&
-						config.url !== 'auth'
-					) {
-						(config as unknown as { __isRetry: boolean }).__isRetry = true;
-						this.logger.debug('Token expired, re-authenticating and retrying request');
-
-						try {
-							this.#currentToken = await this.authenticate();
-							const data =
-								typeof config.data === 'string'
-									? (JSON.parse(config.data) as Record<string, unknown>)
-									: (config.data as Record<string, unknown>);
-							data.token = this.#currentToken;
-							config.data = JSON.stringify(data);
-
-							return await this.#http.request(config);
-						} catch (retryError) {
-							throw retryError;
-						}
-					}
-				}
-				throw error;
-			},
-		);
 
 		this.logger.debug('Akeyless provider initialized', { baseURL });
+	}
+
+	private async post<T>(
+		path: string,
+		body: Record<string, unknown>,
+		{ retryOn401 = true }: { retryOn401?: boolean } = {},
+	): Promise<{ statusCode: number; body: T }> {
+		// Never log request bodies: Akeyless endpoints carry auth credentials,
+		// session tokens, and secret names/values in their payloads.
+		this.logger.debug(`Akeyless request: POST ${path}`);
+
+		const response = await this.http.request({
+			url: path,
+			method: 'POST',
+			body,
+			json: true,
+			returnFullResponse: true,
+			ignoreHttpStatusErrors: true,
+		});
+
+		// Never log response bodies: /auth returns a session token and
+		// /get-secret-value / /rotated-secret-get-value return secret values.
+		this.logger.debug(`Akeyless response: ${response.statusCode}`);
+
+		if (
+			response.statusCode === 401 &&
+			retryOn401 &&
+			this.settings.authMethod === 'accessKey' &&
+			path !== 'auth'
+		) {
+			this.logger.debug('Token expired, re-authenticating and retrying request');
+			this.#currentToken = await this.authenticate();
+			return await this.post(path, { ...body, token: this.#currentToken }, { retryOn401: false });
+		}
+
+		if (response.statusCode >= 400) {
+			this.logger.error(`Akeyless request failed: ${response.statusCode}`, { url: path });
+		}
+
+		return { statusCode: response.statusCode, body: response.body as T };
 	}
 
 	private async authenticate(): Promise<string> {
@@ -199,13 +192,17 @@ export class AkeylessProvider extends SecretsProvider {
 			return this.settings.token;
 		}
 
-		const resp = await this.#http.post<{ token?: string }>('auth', {
-			'access-type': 'access_key',
-			'access-id': this.settings.accessId.trim(),
-			'access-key': this.settings.accessKey.trim(),
-		});
+		const resp = await this.post<{ token?: string }>(
+			'auth',
+			{
+				'access-type': 'access_key',
+				'access-id': this.settings.accessId.trim(),
+				'access-key': this.settings.accessKey.trim(),
+			},
+			{ retryOn401: false },
+		);
 
-		const token = resp.data?.token;
+		const token = resp.body?.token;
 		if (!token) {
 			throw new Error('Failed to obtain token from Akeyless /auth endpoint');
 		}
@@ -267,32 +264,38 @@ export class AkeylessProvider extends SecretsProvider {
 
 	async test(): Promise<[boolean] | [boolean, string]> {
 		try {
-			const resp = await this.#http.post<AkeylessListItemsResponse>('list-items', {
+			const resp = await this.post<AkeylessListItemsResponse>('list-items', {
 				token: this.#currentToken,
 				path: this.settings.path || '/',
 				'minimal-view': true,
 			});
 
-			if (resp.status === 200) {
+			if (resp.statusCode === 200) {
 				return [true];
 			}
 
-			return [false, `Unexpected response status: ${resp.status}`];
+			return [false, `Unexpected response status: ${resp.statusCode}`];
 		} catch (e) {
-			if (axios.isAxiosError(e)) {
-				const status = e.response?.status;
-				if (status === 401 || status === 403) {
-					return [false, 'Invalid token or insufficient permissions'];
-				}
-				if (e.code === 'ECONNREFUSED') {
-					return [false, 'Connection refused. Please check the host and port of the Gateway URL.'];
-				}
-				const detail =
-					(e.response?.data as { error?: string })?.error ??
-					(e.response?.data as { message?: string })?.message;
-				if (detail) {
-					return [false, `Akeyless error: ${detail}`];
-				}
+			const status = httpStatusFromError(e);
+			if (status === 401 || status === 403) {
+				return [false, 'Invalid token or insufficient permissions'];
+			}
+			if (isConnectionRefusedError(e)) {
+				return [false, 'Connection refused. Please check the host and port of the Gateway URL.'];
+			}
+			const detail =
+				typeof e === 'object' &&
+				e !== null &&
+				'response' in e &&
+				typeof (e as { response?: { body?: unknown } }).response?.body === 'object' &&
+				(e as { response?: { body?: { error?: string; message?: string } } }).response?.body
+					? ((e as { response: { body: { error?: string; message?: string } } }).response.body
+							.error ??
+						(e as { response: { body: { error?: string; message?: string } } }).response.body
+							.message)
+					: undefined;
+			if (detail) {
+				return [false, `Akeyless error: ${detail}`];
 			}
 			return [false, e instanceof Error ? e.message : 'Unknown error'];
 		}
@@ -354,10 +357,10 @@ export class AkeylessProvider extends SecretsProvider {
 				}
 
 				try {
-					const resp = await this.#http.post<AkeylessListItemsResponse>('list-items', body);
+					const resp = await this.post<AkeylessListItemsResponse>('list-items', body);
 
-					const items = resp.data.items;
-					const folders = resp.data.folders;
+					const items = resp.body.items;
+					const folders = resp.body.folders;
 					const hasItems = items && items.length > 0;
 					const hasFolders = folders && folders.length > 0;
 
@@ -371,7 +374,7 @@ export class AkeylessProvider extends SecretsProvider {
 						pathQueue.push(...folders);
 					}
 
-					paginationToken = resp.data.next_page || undefined;
+					paginationToken = resp.body.next_page || undefined;
 					if (!paginationToken) break;
 				} catch (e) {
 					this.logger.error('Failed to list items from Akeyless', {
@@ -389,14 +392,14 @@ export class AkeylessProvider extends SecretsProvider {
 
 	private async fetchStaticSecrets(names: string[]): Promise<Record<string, string>> {
 		try {
-			const resp = await this.#http.post<Record<string, unknown>>('get-secret-value', {
+			const resp = await this.post<Record<string, unknown>>('get-secret-value', {
 				token: this.#currentToken,
 				names,
 			});
 
 			const result: Record<string, string> = {};
 
-			for (const [fullPath, value] of Object.entries(resp.data)) {
+			for (const [fullPath, value] of Object.entries(resp.body)) {
 				const key = this.stripBasePath(fullPath);
 				result[key] = typeof value === 'string' ? value : JSON.stringify(value);
 			}
@@ -417,13 +420,17 @@ export class AkeylessProvider extends SecretsProvider {
 		const results = await Promise.allSettled(
 			names.map(async (name): Promise<[string, IDataObject] | null> => {
 				try {
-					const resp = await this.#http.post<{ value?: unknown }>('rotated-secret-get-value', {
+					const resp = await this.post<{ value?: unknown }>('rotated-secret-get-value', {
 						token: this.#currentToken,
 						name,
 					});
 
+					if (resp.statusCode !== 200) {
+						return null;
+					}
+
 					const key = this.stripBasePath(name);
-					const data = resp.data;
+					const data = resp.body;
 
 					if (typeof data === 'object' && data !== null) {
 						if ('value' in data && typeof data.value === 'object' && data.value !== null) {

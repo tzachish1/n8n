@@ -55,6 +55,35 @@ export interface GovernanceStatus {
 	requestId?: string;
 }
 
+export interface ApproveRequestModalData {
+	request?: NodeAccessRequest;
+}
+
+export interface RejectRequestModalData {
+	request?: NodeAccessRequest;
+}
+
+export interface ReviewRequestModalData {
+	request?: NodeAccessRequest;
+}
+
+export interface CategoryFormModalData {
+	category?: NodeCategory;
+}
+
+export interface PolicyFormModalData {
+	policy?: NodeGovernancePolicy;
+}
+
+export interface CategoryNodesModalData {
+	category?: Pick<NodeCategory, 'id'>;
+}
+
+export interface NodeAccessRequestModalData {
+	nodeType?: string;
+	displayName?: string;
+}
+
 export interface NodeGovernanceExportCategory {
 	slug: string;
 	displayName: string;

@@ -8,9 +8,9 @@ import {
 	ProjectRepository,
 	SettingsRepository,
 } from '@n8n/db';
-import type { NodeGovernancePolicy, PolicyProjectAssignment, Settings } from '@n8n/db';
+import type { NodeGovernancePolicy, PolicyProjectAssignment, Project, Settings } from '@n8n/db';
 import { Container } from '@n8n/di';
-import { mock } from 'jest-mock-extended';
+import { mock } from 'vitest-mock-extended';
 
 import { NodeGovernanceService } from '@/services/node-governance.service';
 
@@ -30,7 +30,7 @@ describe('NodeGovernanceService', () => {
 	const nodeType = 'n8n-nodes-base.httpRequest';
 
 	beforeEach(() => {
-		jest.clearAllMocks();
+		vi.clearAllMocks();
 		accessRequestRepository.findByProjectId.mockResolvedValue([]);
 		categoryAssignmentRepository.findByNodeTypes.mockResolvedValue([]);
 		// Default: global default is 'allow', no project override
@@ -38,7 +38,7 @@ describe('NodeGovernanceService', () => {
 			mock<Settings>({ key: 'governance.defaultBehavior', value: '"allow"' }),
 		);
 		projectRepository.findOneBy.mockResolvedValue(
-			mock({ id: projectId, governanceDefaultBehavior: null }),
+			mock<Project>({ id: projectId, governanceDefaultBehavior: null }),
 		);
 	});
 
@@ -221,7 +221,7 @@ describe('NodeGovernanceService', () => {
 				mock<Settings>({ key: 'governance.defaultBehavior', value: '"allow"' }),
 			);
 			projectRepository.findOneBy.mockResolvedValue(
-				mock({ id: projectId, governanceDefaultBehavior: 'block' }),
+				mock<Project>({ id: projectId, governanceDefaultBehavior: 'block' }),
 			);
 			policyRepository.findGlobalPolicies.mockResolvedValue([]);
 			policyRepository.findByProjectIds.mockResolvedValue([]);
@@ -236,7 +236,7 @@ describe('NodeGovernanceService', () => {
 				mock<Settings>({ key: 'governance.defaultBehavior', value: '"block"' }),
 			);
 			projectRepository.findOneBy.mockResolvedValue(
-				mock({ id: projectId, governanceDefaultBehavior: null }),
+				mock<Project>({ id: projectId, governanceDefaultBehavior: null }),
 			);
 			policyRepository.findGlobalPolicies.mockResolvedValue([]);
 			policyRepository.findByProjectIds.mockResolvedValue([]);

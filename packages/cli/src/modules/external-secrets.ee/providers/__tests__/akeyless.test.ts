@@ -1,5 +1,7 @@
 import { mockInstance } from '@n8n/backend-test-utils';
 import { Logger } from '@n8n/backend-common';
+import { OutboundHttp, type SsrfProtectionService } from '@n8n/backend-network';
+import { mock } from 'vitest-mock-extended';
 import nock from 'nock';
 
 import { AkeylessProvider } from '../akeyless';
@@ -62,6 +64,11 @@ describe('AkeylessProvider', () => {
 	const logger = mockInstance(Logger);
 	logger.scoped.mockReturnValue(logger);
 
+	function createProvider() {
+		const outboundHttp = new OutboundHttp(mock<SsrfProtectionService>(), logger);
+		return new AkeylessProvider(logger, outboundHttp);
+	}
+
 	beforeAll(() => {
 		nock.disableNetConnect();
 	});
@@ -77,7 +84,7 @@ describe('AkeylessProvider', () => {
 
 	describe('init', () => {
 		it('should store settings correctly', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 
 			expect(provider.name).toBe('akeyless');
@@ -87,7 +94,7 @@ describe('AkeylessProvider', () => {
 
 	describe('doConnect with access key auth', () => {
 		it('should call /auth and then test with the returned token', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsAccessKey);
 
 			const authScope = mockAuthEndpoint();
@@ -106,7 +113,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should fail if /auth returns no token', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsAccessKey);
 
 			nock(AKEYLESS_BASE_URL).post('/api/v2/auth').reply(200, {});
@@ -119,7 +126,7 @@ describe('AkeylessProvider', () => {
 
 	describe('test', () => {
 		it('should return [true] when list-items succeeds (token auth)', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 
 			const authScope = nock(AKEYLESS_BASE_URL)
@@ -135,7 +142,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should set error state on 401', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 
 			nock(AKEYLESS_BASE_URL).post('/api/v2/list-items').reply(401, { error: 'Unauthorized' });
@@ -146,7 +153,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should set error state on 403', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 
 			nock(AKEYLESS_BASE_URL).post('/api/v2/list-items').reply(403, { error: 'Forbidden' });
@@ -167,7 +174,7 @@ describe('AkeylessProvider', () => {
 		}
 
 		it('should fetch and cache static secrets', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 			await connectWithToken(provider);
 
@@ -200,7 +207,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should re-authenticate before update when using access key', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsAccessKey);
 
 			const connectAuthScope = mockAuthEndpoint();
@@ -234,7 +241,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should fetch and cache rotated secrets', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 			await connectWithToken(provider);
 
@@ -262,7 +269,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should handle mixed static and rotated secrets', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 			await connectWithToken(provider);
 
@@ -290,7 +297,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should handle pagination', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 			await connectWithToken(provider);
 
@@ -328,7 +335,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should discover secrets in subfolders via recursive folder traversal', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsWithPath);
 
 			const connectScope = nock(AKEYLESS_BASE_URL)
@@ -398,7 +405,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should strip base path from secret names', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsWithPath);
 
 			const connectScope = nock(AKEYLESS_BASE_URL)
@@ -431,7 +438,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should handle empty items list', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 			await connectWithToken(provider);
 
@@ -446,7 +453,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should continue when a rotated secret fetch fails', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 			await connectWithToken(provider);
 
@@ -476,7 +483,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should return JSON string secret values as raw strings', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 			await connectWithToken(provider);
 
@@ -500,7 +507,7 @@ describe('AkeylessProvider', () => {
 
 	describe('token refresh', () => {
 		it('should retry on 401 with a fresh token when using access key auth', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsAccessKey);
 
 			const connectAuth = mockAuthEndpoint();
@@ -541,7 +548,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should not retry on 401 when using direct token auth', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 
 			const connectList = nock(AKEYLESS_BASE_URL)
@@ -563,7 +570,7 @@ describe('AkeylessProvider', () => {
 		});
 
 		it('should clean up refresh timer on disconnect', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsAccessKey);
 
 			const connectAuth = mockAuthEndpoint();
@@ -582,7 +589,7 @@ describe('AkeylessProvider', () => {
 
 	describe('getSecret / hasSecret / getSecretNames', () => {
 		it('should return undefined for non-existent secrets', async () => {
-			const provider = new AkeylessProvider(logger);
+			const provider = createProvider();
 			await provider.init(akeylessSettingsToken);
 
 			expect(provider.getSecret('non-existent')).toBeUndefined();

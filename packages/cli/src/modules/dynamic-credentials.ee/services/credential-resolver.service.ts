@@ -325,7 +325,7 @@ export class DynamicCredentialResolverService {
 	 */
 	private async invalidateResolverEntityCache(resolverId: string): Promise<void> {
 		try {
-			const { DynamicCredentialService } = await import('./dynamic-credential.service');
+			const { DynamicCredentialService } = await import('./dynamic-credential.service.js');
 			const svc = Container.get(DynamicCredentialService);
 			await svc.invalidateResolverEntityCache(resolverId);
 		} catch (error) {
