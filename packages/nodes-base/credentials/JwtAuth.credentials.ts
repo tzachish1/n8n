@@ -118,7 +118,10 @@ export class JwtAuth implements ICredentialType {
 			type: 'string',
 			typeOptions: {
 				password: true,
+				rows: 4,
 			},
+			description:
+				'One or more PEM public keys. Paste multiple keys back-to-back to allow verification against any of them (e.g. during key rotation).',
 			displayOptions: {
 				show: {
 					keyType: ['pemKey'],
