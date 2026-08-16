@@ -34,6 +34,15 @@ export type WebhookParameters = {
 	};
 };
 
+/**
+ * Split a PEM bundle into individual key blocks. Falls back to the raw input as a
+ * single block when no delimited blocks are found, keeping single-key behavior intact.
+ */
+export function splitPemBlocks(pem: string): string[] {
+	const blocks = pem.match(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g);
+	return blocks ?? [pem];
+}
+
 export const getResponseCode = (parameters: WebhookParameters) => {
 	if (parameters.responseCode) {
 		return parameters.responseCode;
@@ -337,21 +346,29 @@ export async function validateWebhookAuthentication(
 			throw new WebhookAuthorizationError(401, 'No token provided');
 		}
 
-		let secretOrPublicKey;
+		// Build the list of candidate keys to try. PEM public keys may hold several
+		// blocks (e.g. during key rotation), so we verify against each until one matches.
+		const candidateKeys =
+			expectedAuth.keyType === 'passphrase'
+				? [expectedAuth.secret]
+				: splitPemBlocks(expectedAuth.publicKey).map((key) => formatPemBlock(key, true));
 
-		if (expectedAuth.keyType === 'passphrase') {
-			secretOrPublicKey = expectedAuth.secret;
-		} else {
-			secretOrPublicKey = formatPemBlock(expectedAuth.publicKey, true);
+		if (candidateKeys.length === 0) {
+			throw new WebhookAuthorizationError(403, 'No verification key configured');
 		}
 
-		try {
-			return jwt.verify(token, secretOrPublicKey, {
-				algorithms: [expectedAuth.algorithm],
-			}) as IDataObject;
-		} catch (error) {
-			throw new WebhookAuthorizationError(403, error.message);
+		let lastError: Error | undefined;
+		for (const key of candidateKeys) {
+			try {
+				return jwt.verify(token, key, {
+					algorithms: [expectedAuth.algorithm],
+				}) as IDataObject;
+			} catch (error) {
+				lastError = error as Error;
+			}
 		}
+
+		throw new WebhookAuthorizationError(403, lastError?.message ?? 'Invalid token');
 	}
 }
 

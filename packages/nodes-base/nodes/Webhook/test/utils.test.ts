@@ -20,6 +20,7 @@ import {
 	handleFormData,
 	isIpAllowed,
 	setupOutputConnection,
+	splitPemBlocks,
 	validateWebhookAuthentication,
 } from '../utils';
 import { mock } from 'vitest-mock-extended';
@@ -607,6 +608,85 @@ describe('Webhook Utils', () => {
 				authPropertyName,
 			);
 			expect(result).toEqual(decodedPayload);
+		});
+
+		it('should verify against multiple public keys and return the payload when a later key matches', async () => {
+			const decodedPayload = { sub: '1234567890' };
+			const twoPublicKeys = [
+				'-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----',
+				'-----BEGIN PUBLIC KEY-----\nBBBB\n-----END PUBLIC KEY-----',
+			].join('\n');
+			(jwt.verify as Mock).mockReset();
+			(jwt.verify as Mock)
+				.mockImplementationOnce(() => {
+					throw new UnexpectedError('invalid signature');
+				})
+				.mockReturnValueOnce(decodedPayload);
+			const headers = { authorization: 'Bearer some-token' };
+			const ctx: Partial<IWebhookFunctions> = {
+				getNodeParameter: vi.fn().mockReturnValue('jwtAuth'),
+				getCredentials: vi.fn().mockResolvedValue({
+					keyType: 'pemKey',
+					publicKey: twoPublicKeys,
+					secret: '',
+					algorithm: 'RS256',
+				}),
+				getRequestObject: vi.fn().mockReturnValue({ headers }),
+				getHeaderData: vi.fn().mockReturnValue(headers),
+			};
+
+			const result = await validateWebhookAuthentication(
+				ctx as IWebhookFunctions,
+				'authentication',
+			);
+
+			expect(result).toEqual(decodedPayload);
+			expect(jwt.verify as Mock).toHaveBeenCalledTimes(2);
+		});
+
+		it('should throw a 403 with the last error when no public key matches', async () => {
+			const twoPublicKeys = [
+				'-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----',
+				'-----BEGIN PUBLIC KEY-----\nBBBB\n-----END PUBLIC KEY-----',
+			].join('\n');
+			(jwt.verify as Mock).mockReset();
+			(jwt.verify as Mock).mockImplementation(() => {
+				throw new UnexpectedError('invalid signature');
+			});
+			const headers = { authorization: 'Bearer some-token' };
+			const ctx: Partial<IWebhookFunctions> = {
+				getNodeParameter: vi.fn().mockReturnValue('jwtAuth'),
+				getCredentials: vi.fn().mockResolvedValue({
+					keyType: 'pemKey',
+					publicKey: twoPublicKeys,
+					secret: '',
+					algorithm: 'RS256',
+				}),
+				getRequestObject: vi.fn().mockReturnValue({ headers }),
+				getHeaderData: vi.fn().mockReturnValue(headers),
+			};
+
+			await expect(
+				validateWebhookAuthentication(ctx as IWebhookFunctions, 'authentication'),
+			).rejects.toThrowError('invalid signature');
+			expect(jwt.verify as Mock).toHaveBeenCalledTimes(2);
+		});
+	});
+
+	describe('splitPemBlocks', () => {
+		it('should return the raw input as a single block when no PEM delimiters are present', () => {
+			expect(splitPemBlocks('secret')).toEqual(['secret']);
+		});
+
+		it('should return a single block unchanged', () => {
+			const key = '-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----';
+			expect(splitPemBlocks(key)).toEqual([key]);
+		});
+
+		it('should split multiple concatenated PEM blocks', () => {
+			const first = '-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----';
+			const second = '-----BEGIN PUBLIC KEY-----\nBBBB\n-----END PUBLIC KEY-----';
+			expect(splitPemBlocks(`${first}\n${second}`)).toEqual([first, second]);
 		});
 	});
 
