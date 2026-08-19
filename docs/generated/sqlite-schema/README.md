@@ -50,7 +50,7 @@ Auto-generated from the SQLite migrations in @n8n/db. Do not edit by hand.
 | [data_table_column](data_table_column.md) | 7 |  | table |
 | [deployment_key](deployment_key.md) | 7 |  | table |
 | [dynamic_credential_entry](dynamic_credential_entry.md) | 6 |  | table |
-| [dynamic_credential_resolver](dynamic_credential_resolver.md) | 6 |  | table |
+| [dynamic_credential_resolver](dynamic_credential_resolver.md) | 7 |  | table |
 | [dynamic_credential_user_entry](dynamic_credential_user_entry.md) | 6 |  | table |
 | [evaluation_collection](evaluation_collection.md) | 9 |  | table |
 | [evaluation_config](evaluation_config.md) | 12 |  | table |
@@ -86,13 +86,18 @@ Auto-generated from the SQLite migrations in @n8n/db. Do not edit by hand.
 | [instance_version_history](instance_version_history.md) | 5 |  | table |
 | [invalid_auth_token](invalid_auth_token.md) | 2 |  | table |
 | [mcp_registry_server](mcp_registry_server.md) | 7 |  | table |
+| [node_access_request](node_access_request.md) | 12 |  | table |
+| [node_category](node_category.md) | 8 |  | table |
+| [node_category_assignment](node_category_assignment.md) | 6 |  | table |
+| [node_governance_policy](node_governance_policy.md) | 8 |  | table |
 | [oauth_access_tokens](oauth_access_tokens.md) | 3 |  | table |
 | [oauth_authorization_codes](oauth_authorization_codes.md) | 13 |  | table |
 | [oauth_clients](oauth_clients.md) | 10 |  | table |
 | [oauth_refresh_tokens](oauth_refresh_tokens.md) | 7 |  | table |
 | [oauth_user_consents](oauth_user_consents.md) | 5 |  | table |
+| [policy_project_assignment](policy_project_assignment.md) | 5 |  | table |
 | [processed_data](processed_data.md) | 5 |  | table |
-| [project](project.md) | 9 |  | table |
+| [project](project.md) | 10 |  | table |
 | [project_relation](project_relation.md) | 5 |  | table |
 | [project_secrets_provider_access](project_secrets_provider_access.md) | 5 |  | table |
 | [role](role.md) | 7 |  | table |
@@ -250,6 +255,13 @@ erDiagram
 "instance_ai_thread_grants" |o--|| "instance_ai_threads" : "FOREIGN KEY (threadId) REFERENCES instance_ai_threads (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "instance_ai_threads" }o--|| "project" : "FOREIGN KEY (projectId) REFERENCES project (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "instance_credential_assignment" }o--|| "credentials_entity" : "FOREIGN KEY (credentialId) REFERENCES credentials_entity (id) ON UPDATE NO ACTION ON DELETE RESTRICT MATCH NONE"
+"node_access_request" }o--o| "user" : "FOREIGN KEY (reviewedById) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE SET NULL MATCH NONE"
+"node_access_request" }o--|| "user" : "FOREIGN KEY (requestedById) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+"node_access_request" }o--|| "project" : "FOREIGN KEY (projectId) REFERENCES project (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+"node_category" }o--o| "user" : "FOREIGN KEY (createdById) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE SET NULL MATCH NONE"
+"node_category_assignment" }o--o| "user" : "FOREIGN KEY (assignedById) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE SET NULL MATCH NONE"
+"node_category_assignment" }o--|| "node_category" : "FOREIGN KEY (categoryId) REFERENCES node_category (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+"node_governance_policy" }o--o| "user" : "FOREIGN KEY (createdById) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE SET NULL MATCH NONE"
 "oauth_access_tokens" }o--|| "user" : "FOREIGN KEY (userId) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "oauth_access_tokens" }o--|| "oauth_clients" : "FOREIGN KEY (clientId) REFERENCES oauth_clients (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "oauth_authorization_codes" }o--|| "oauth_clients" : "FOREIGN KEY (clientId) REFERENCES oauth_clients (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
@@ -258,6 +270,8 @@ erDiagram
 "oauth_refresh_tokens" }o--|| "user" : "FOREIGN KEY (userId) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "oauth_user_consents" }o--|| "user" : "FOREIGN KEY (userId) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "oauth_user_consents" }o--|| "oauth_clients" : "FOREIGN KEY (clientId) REFERENCES oauth_clients (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+"policy_project_assignment" }o--|| "project" : "FOREIGN KEY (projectId) REFERENCES project (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+"policy_project_assignment" }o--|| "node_governance_policy" : "FOREIGN KEY (policyId) REFERENCES node_governance_policy (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "processed_data" |o--|| "workflow_entity" : "FOREIGN KEY (workflowId) REFERENCES workflow_entity (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "project" }o--o| "user" : "FOREIGN KEY (creatorId) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE SET NULL MATCH NONE"
 "project_relation" }o--|| "role" : "FOREIGN KEY (role) REFERENCES role (slug) ON UPDATE NO ACTION ON DELETE NO ACTION MATCH NONE"
@@ -775,6 +789,7 @@ erDiagram
   datetime_3_ createdAt
   varchar_16_ id PK
   varchar_128_ name
+  varchar_64_ oidcSeedSource
   varchar_128_ type
   datetime_3_ updatedAt
 }
@@ -1103,6 +1118,48 @@ erDiagram
   datetime_3_ updatedAt
   varchar_50_ version
 }
+"node_access_request" {
+  datetime_3_ createdAt
+  varchar_36_ id PK
+  TEXT justification
+  varchar_255_ nodeType
+  varchar_36_ projectId FK
+  varchar requestedById FK
+  TEXT reviewComment
+  datetime_3_ reviewedAt
+  varchar reviewedById FK
+  varchar_10_ status
+  datetime_3_ updatedAt
+  varchar_255_ workflowName
+}
+"node_category" {
+  varchar_7_ color
+  datetime_3_ createdAt
+  varchar createdById FK
+  TEXT description
+  varchar_255_ displayName
+  varchar_36_ id PK
+  varchar_100_ slug
+  datetime_3_ updatedAt
+}
+"node_category_assignment" {
+  varchar assignedById FK
+  varchar_36_ categoryId FK
+  datetime_3_ createdAt
+  varchar_36_ id PK
+  varchar_255_ nodeType
+  datetime_3_ updatedAt
+}
+"node_governance_policy" {
+  datetime_3_ createdAt
+  varchar createdById FK
+  varchar_36_ id PK
+  varchar_10_ policyType
+  varchar_10_ scope
+  varchar_20_ targetType
+  varchar_255_ targetValue
+  datetime_3_ updatedAt
+}
 "oauth_access_tokens" {
   varchar clientId FK
   varchar token PK
@@ -1151,6 +1208,13 @@ erDiagram
   TEXT scope
   varchar userId FK
 }
+"policy_project_assignment" {
+  datetime_3_ createdAt
+  varchar_36_ id PK
+  varchar_36_ policyId FK
+  varchar_36_ projectId FK
+  datetime_3_ updatedAt
+}
 "processed_data" {
   varchar_255_ context PK
   datetime_3_ createdAt
@@ -1163,6 +1227,7 @@ erDiagram
   varchar creatorId FK
   TEXT customTelemetryTags
   varchar_512_ description
+  varchar_10_ governanceDefaultBehavior
   TEXT icon
   varchar_36_ id PK
   varchar_255_ name

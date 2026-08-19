@@ -70,6 +70,7 @@ erDiagram
   timestamp_3__with_time_zone createdAt
   varchar_16_ id
   varchar_128_ name
+  varchar_64_ oidcSeedSource
   varchar_128_ type
   timestamp_3__with_time_zone updatedAt
 }

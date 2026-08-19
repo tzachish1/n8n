@@ -21,7 +21,7 @@ import type { useExternalHooks } from '@/app/composables/useExternalHooks';
 import { assert } from '@n8n/utils/assert';
 import { doesNodeHaveCredentialsToFill } from '@/app/utils/nodes/nodeTransforms';
 import { tryToParseNumber } from '@/app/utils/typesUtils';
-import { useToast } from '@/app/composables/useToast';
+import { useToast } from '@n8n/composables/useToast';
 import { useProjectsStore } from '@/features/collaboration/projects/projects.store';
 import { useNodeGovernanceStore } from '@/features/settings/nodeGovernance/nodeGovernance.store';
 

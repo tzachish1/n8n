@@ -55,6 +55,7 @@ erDiagram
   uuid creatorId FK
   json customTelemetryTags
   varchar_512_ description
+  varchar_10_ governanceDefaultBehavior
   json icon
   varchar_36_ id
   varchar_255_ name

@@ -19,7 +19,7 @@ CREATE TABLE "user" ("id" varchar PRIMARY KEY, "email" varchar(255), "firstName"
 | disabled | boolean | FALSE | false |  |  |  |
 | email | varchar(255) |  | true |  |  |  |
 | firstName | varchar(32) |  | true |  |  |  |
-| id | varchar |  | true | [agent_eval_dataset](agent_eval_dataset.md) [agent_eval_rating](agent_eval_rating.md) [agent_eval_run](agent_eval_run.md) [agent_history](agent_history.md) [auth_identity](auth_identity.md) [chat_hub_agents](chat_hub_agents.md) [chat_hub_sessions](chat_hub_sessions.md) [chat_hub_tools](chat_hub_tools.md) [dynamic_credential_user_entry](dynamic_credential_user_entry.md) [evaluation_collection](evaluation_collection.md) [instance_ai_mcp_registry_connections](instance_ai_mcp_registry_connections.md) [instance_ai_pending_confirmations](instance_ai_pending_confirmations.md) [instance_ai_thread_grants](instance_ai_thread_grants.md) [oauth_access_tokens](oauth_access_tokens.md) [oauth_authorization_codes](oauth_authorization_codes.md) [oauth_refresh_tokens](oauth_refresh_tokens.md) [oauth_user_consents](oauth_user_consents.md) [project](project.md) [project_relation](project_relation.md) [user_api_keys](user_api_keys.md) [user_favorites](user_favorites.md) [workflow_builder_session](workflow_builder_session.md) [workflow_publish_history](workflow_publish_history.md) [workflow_review_request](workflow_review_request.md) [workflow_review_request_authors](workflow_review_request_authors.md) [workflow_review_request_reviewers](workflow_review_request_reviewers.md) |  |  |
+| id | varchar |  | true | [agent_eval_dataset](agent_eval_dataset.md) [agent_eval_rating](agent_eval_rating.md) [agent_eval_run](agent_eval_run.md) [agent_history](agent_history.md) [auth_identity](auth_identity.md) [chat_hub_agents](chat_hub_agents.md) [chat_hub_sessions](chat_hub_sessions.md) [chat_hub_tools](chat_hub_tools.md) [dynamic_credential_user_entry](dynamic_credential_user_entry.md) [evaluation_collection](evaluation_collection.md) [instance_ai_mcp_registry_connections](instance_ai_mcp_registry_connections.md) [instance_ai_pending_confirmations](instance_ai_pending_confirmations.md) [instance_ai_thread_grants](instance_ai_thread_grants.md) [node_access_request](node_access_request.md) [node_category](node_category.md) [node_category_assignment](node_category_assignment.md) [node_governance_policy](node_governance_policy.md) [oauth_access_tokens](oauth_access_tokens.md) [oauth_authorization_codes](oauth_authorization_codes.md) [oauth_refresh_tokens](oauth_refresh_tokens.md) [oauth_user_consents](oauth_user_consents.md) [project](project.md) [project_relation](project_relation.md) [user_api_keys](user_api_keys.md) [user_favorites](user_favorites.md) [workflow_builder_session](workflow_builder_session.md) [workflow_publish_history](workflow_publish_history.md) [workflow_review_request](workflow_review_request.md) [workflow_review_request_authors](workflow_review_request_authors.md) [workflow_review_request_reviewers](workflow_review_request_reviewers.md) |  |  |
 | lastActiveAt | date |  | true |  |  |  |
 | lastName | varchar(32) |  | true |  |  |  |
 | mfaEnabled | boolean | FALSE | false |  |  |  |
@@ -66,6 +66,11 @@ erDiagram
 "instance_ai_mcp_registry_connections" }o--|| "user" : "FOREIGN KEY (userId) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "instance_ai_pending_confirmations" }o--|| "user" : "FOREIGN KEY (userId) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "instance_ai_thread_grants" |o--|| "user" : "FOREIGN KEY (userId) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+"node_access_request" }o--o| "user" : "FOREIGN KEY (reviewedById) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE SET NULL MATCH NONE"
+"node_access_request" }o--|| "user" : "FOREIGN KEY (requestedById) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
+"node_category" }o--o| "user" : "FOREIGN KEY (createdById) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE SET NULL MATCH NONE"
+"node_category_assignment" }o--o| "user" : "FOREIGN KEY (assignedById) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE SET NULL MATCH NONE"
+"node_governance_policy" }o--o| "user" : "FOREIGN KEY (createdById) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE SET NULL MATCH NONE"
 "oauth_access_tokens" }o--|| "user" : "FOREIGN KEY (userId) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "oauth_authorization_codes" }o--|| "user" : "FOREIGN KEY (userId) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
 "oauth_refresh_tokens" }o--|| "user" : "FOREIGN KEY (userId) REFERENCES user (id) ON UPDATE NO ACTION ON DELETE CASCADE MATCH NONE"
@@ -246,6 +251,48 @@ erDiagram
   datetime_3_ updatedAt
   varchar userId PK
 }
+"node_access_request" {
+  datetime_3_ createdAt
+  varchar_36_ id PK
+  TEXT justification
+  varchar_255_ nodeType
+  varchar_36_ projectId FK
+  varchar requestedById FK
+  TEXT reviewComment
+  datetime_3_ reviewedAt
+  varchar reviewedById FK
+  varchar_10_ status
+  datetime_3_ updatedAt
+  varchar_255_ workflowName
+}
+"node_category" {
+  varchar_7_ color
+  datetime_3_ createdAt
+  varchar createdById FK
+  TEXT description
+  varchar_255_ displayName
+  varchar_36_ id PK
+  varchar_100_ slug
+  datetime_3_ updatedAt
+}
+"node_category_assignment" {
+  varchar assignedById FK
+  varchar_36_ categoryId FK
+  datetime_3_ createdAt
+  varchar_36_ id PK
+  varchar_255_ nodeType
+  datetime_3_ updatedAt
+}
+"node_governance_policy" {
+  datetime_3_ createdAt
+  varchar createdById FK
+  varchar_36_ id PK
+  varchar_10_ policyType
+  varchar_10_ scope
+  varchar_20_ targetType
+  varchar_255_ targetValue
+  datetime_3_ updatedAt
+}
 "oauth_access_tokens" {
   varchar clientId FK
   varchar token PK
@@ -287,6 +334,7 @@ erDiagram
   varchar creatorId FK
   TEXT customTelemetryTags
   varchar_512_ description
+  varchar_10_ governanceDefaultBehavior
   TEXT icon
   varchar_36_ id PK
   varchar_255_ name

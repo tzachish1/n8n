@@ -50,7 +50,7 @@ Auto-generated from the PostgreSQL migrations in @n8n/db. Do not edit by hand.
 | [public.data_table_column](public.data_table_column.md) | 7 |  | BASE TABLE |
 | [public.deployment_key](public.deployment_key.md) | 7 |  | BASE TABLE |
 | [public.dynamic_credential_entry](public.dynamic_credential_entry.md) | 6 |  | BASE TABLE |
-| [public.dynamic_credential_resolver](public.dynamic_credential_resolver.md) | 6 |  | BASE TABLE |
+| [public.dynamic_credential_resolver](public.dynamic_credential_resolver.md) | 7 |  | BASE TABLE |
 | [public.dynamic_credential_user_entry](public.dynamic_credential_user_entry.md) | 6 |  | BASE TABLE |
 | [public.evaluation_collection](public.evaluation_collection.md) | 9 |  | BASE TABLE |
 | [public.evaluation_config](public.evaluation_config.md) | 12 |  | BASE TABLE |
@@ -86,13 +86,18 @@ Auto-generated from the PostgreSQL migrations in @n8n/db. Do not edit by hand.
 | [public.instance_version_history](public.instance_version_history.md) | 5 |  | BASE TABLE |
 | [public.invalid_auth_token](public.invalid_auth_token.md) | 2 |  | BASE TABLE |
 | [public.mcp_registry_server](public.mcp_registry_server.md) | 7 |  | BASE TABLE |
+| [public.node_access_request](public.node_access_request.md) | 12 |  | BASE TABLE |
+| [public.node_category](public.node_category.md) | 8 |  | BASE TABLE |
+| [public.node_category_assignment](public.node_category_assignment.md) | 6 |  | BASE TABLE |
+| [public.node_governance_policy](public.node_governance_policy.md) | 8 |  | BASE TABLE |
 | [public.oauth_access_tokens](public.oauth_access_tokens.md) | 3 |  | BASE TABLE |
 | [public.oauth_authorization_codes](public.oauth_authorization_codes.md) | 13 |  | BASE TABLE |
 | [public.oauth_clients](public.oauth_clients.md) | 10 |  | BASE TABLE |
 | [public.oauth_refresh_tokens](public.oauth_refresh_tokens.md) | 7 |  | BASE TABLE |
 | [public.oauth_user_consents](public.oauth_user_consents.md) | 5 |  | BASE TABLE |
+| [public.policy_project_assignment](public.policy_project_assignment.md) | 5 |  | BASE TABLE |
 | [public.processed_data](public.processed_data.md) | 5 |  | BASE TABLE |
-| [public.project](public.project.md) | 9 |  | BASE TABLE |
+| [public.project](public.project.md) | 10 |  | BASE TABLE |
 | [public.project_relation](public.project_relation.md) | 5 |  | BASE TABLE |
 | [public.project_secrets_provider_access](public.project_secrets_provider_access.md) | 5 |  | BASE TABLE |
 | [public.role](public.role.md) | 7 |  | BASE TABLE |
@@ -267,6 +272,13 @@ erDiagram
 "public.instance_ai_thread_grants" }o--|| "public.instance_ai_threads" : "FOREIGN KEY (#quot;threadId#quot;) REFERENCES instance_ai_threads(id) ON DELETE CASCADE"
 "public.instance_ai_threads" }o--|| "public.project" : "FOREIGN KEY (#quot;projectId#quot;) REFERENCES project(id) ON DELETE CASCADE"
 "public.instance_credential_assignment" }o--|| "public.credentials_entity" : "FOREIGN KEY (#quot;credentialId#quot;) REFERENCES credentials_entity(id) ON DELETE RESTRICT"
+"public.node_access_request" }o--|| "public.user" : "FOREIGN KEY (#quot;requestedById#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
+"public.node_access_request" }o--o| "public.user" : "FOREIGN KEY (#quot;reviewedById#quot;) REFERENCES #quot;user#quot;(id) ON DELETE SET NULL"
+"public.node_access_request" }o--|| "public.project" : "FOREIGN KEY (#quot;projectId#quot;) REFERENCES project(id) ON DELETE CASCADE"
+"public.node_category" }o--o| "public.user" : "FOREIGN KEY (#quot;createdById#quot;) REFERENCES #quot;user#quot;(id) ON DELETE SET NULL"
+"public.node_category_assignment" }o--o| "public.user" : "FOREIGN KEY (#quot;assignedById#quot;) REFERENCES #quot;user#quot;(id) ON DELETE SET NULL"
+"public.node_category_assignment" }o--|| "public.node_category" : "FOREIGN KEY (#quot;categoryId#quot;) REFERENCES node_category(id) ON DELETE CASCADE"
+"public.node_governance_policy" }o--o| "public.user" : "FOREIGN KEY (#quot;createdById#quot;) REFERENCES #quot;user#quot;(id) ON DELETE SET NULL"
 "public.oauth_access_tokens" }o--|| "public.user" : "FOREIGN KEY (#quot;userId#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
 "public.oauth_access_tokens" }o--|| "public.oauth_clients" : "FOREIGN KEY (#quot;clientId#quot;) REFERENCES oauth_clients(id) ON DELETE CASCADE"
 "public.oauth_authorization_codes" }o--|| "public.user" : "FOREIGN KEY (#quot;userId#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
@@ -275,6 +287,8 @@ erDiagram
 "public.oauth_refresh_tokens" }o--|| "public.oauth_clients" : "FOREIGN KEY (#quot;clientId#quot;) REFERENCES oauth_clients(id) ON DELETE CASCADE"
 "public.oauth_user_consents" }o--|| "public.user" : "FOREIGN KEY (#quot;userId#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
 "public.oauth_user_consents" }o--|| "public.oauth_clients" : "FOREIGN KEY (#quot;clientId#quot;) REFERENCES oauth_clients(id) ON DELETE CASCADE"
+"public.policy_project_assignment" }o--|| "public.project" : "FOREIGN KEY (#quot;projectId#quot;) REFERENCES project(id) ON DELETE CASCADE"
+"public.policy_project_assignment" }o--|| "public.node_governance_policy" : "FOREIGN KEY (#quot;policyId#quot;) REFERENCES node_governance_policy(id) ON DELETE CASCADE"
 "public.processed_data" }o--|| "public.workflow_entity" : "FOREIGN KEY (#quot;workflowId#quot;) REFERENCES workflow_entity(id) ON DELETE CASCADE"
 "public.project" }o--o| "public.user" : "FOREIGN KEY (#quot;creatorId#quot;) REFERENCES #quot;user#quot;(id) ON DELETE SET NULL"
 "public.project_relation" }o--|| "public.user" : "FOREIGN KEY (#quot;userId#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
@@ -788,6 +802,7 @@ erDiagram
   timestamp_3__with_time_zone createdAt
   varchar_16_ id
   varchar_128_ name
+  varchar_64_ oidcSeedSource
   varchar_128_ type
   timestamp_3__with_time_zone updatedAt
 }
@@ -1116,6 +1131,48 @@ erDiagram
   timestamp_3__with_time_zone updatedAt
   varchar_50_ version
 }
+"public.node_access_request" {
+  timestamp_3__with_time_zone createdAt
+  varchar_36_ id
+  text justification
+  varchar_255_ nodeType
+  varchar_36_ projectId FK
+  uuid requestedById FK
+  text reviewComment
+  timestamp_3__with_time_zone reviewedAt
+  uuid reviewedById FK
+  varchar_10_ status
+  timestamp_3__with_time_zone updatedAt
+  varchar_255_ workflowName
+}
+"public.node_category" {
+  varchar_7_ color
+  timestamp_3__with_time_zone createdAt
+  uuid createdById FK
+  text description
+  varchar_255_ displayName
+  varchar_36_ id
+  varchar_100_ slug
+  timestamp_3__with_time_zone updatedAt
+}
+"public.node_category_assignment" {
+  uuid assignedById FK
+  varchar_36_ categoryId FK
+  timestamp_3__with_time_zone createdAt
+  varchar_36_ id
+  varchar_255_ nodeType
+  timestamp_3__with_time_zone updatedAt
+}
+"public.node_governance_policy" {
+  timestamp_3__with_time_zone createdAt
+  uuid createdById FK
+  varchar_36_ id
+  varchar_10_ policyType
+  varchar_10_ scope
+  varchar_20_ targetType
+  varchar_255_ targetValue
+  timestamp_3__with_time_zone updatedAt
+}
 "public.oauth_access_tokens" {
   varchar clientId FK
   varchar token
@@ -1164,6 +1221,13 @@ erDiagram
   json scope
   uuid userId FK
 }
+"public.policy_project_assignment" {
+  timestamp_3__with_time_zone createdAt
+  varchar_36_ id
+  varchar_36_ policyId FK
+  varchar_36_ projectId FK
+  timestamp_3__with_time_zone updatedAt
+}
 "public.processed_data" {
   varchar_255_ context
   timestamp_3__with_time_zone createdAt
@@ -1176,6 +1240,7 @@ erDiagram
   uuid creatorId FK
   json customTelemetryTags
   varchar_512_ description
+  varchar_10_ governanceDefaultBehavior
   json icon
   varchar_36_ id
   varchar_255_ name

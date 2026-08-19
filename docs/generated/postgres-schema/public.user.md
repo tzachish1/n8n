@@ -8,7 +8,7 @@
 | disabled | boolean | false | false |  |  |  |
 | email | varchar(255) |  | true |  |  |  |
 | firstName | varchar(32) |  | true |  |  |  |
-| id | uuid | gen_random_uuid() | false | [public.agent_eval_dataset](public.agent_eval_dataset.md) [public.agent_eval_rating](public.agent_eval_rating.md) [public.agent_eval_run](public.agent_eval_run.md) [public.agent_history](public.agent_history.md) [public.auth_identity](public.auth_identity.md) [public.chat_hub_agents](public.chat_hub_agents.md) [public.chat_hub_sessions](public.chat_hub_sessions.md) [public.chat_hub_tools](public.chat_hub_tools.md) [public.dynamic_credential_user_entry](public.dynamic_credential_user_entry.md) [public.evaluation_collection](public.evaluation_collection.md) [public.instance_ai_mcp_registry_connections](public.instance_ai_mcp_registry_connections.md) [public.instance_ai_pending_confirmations](public.instance_ai_pending_confirmations.md) [public.instance_ai_thread_grants](public.instance_ai_thread_grants.md) [public.oauth_access_tokens](public.oauth_access_tokens.md) [public.oauth_authorization_codes](public.oauth_authorization_codes.md) [public.oauth_refresh_tokens](public.oauth_refresh_tokens.md) [public.oauth_user_consents](public.oauth_user_consents.md) [public.project](public.project.md) [public.project_relation](public.project_relation.md) [public.user_api_keys](public.user_api_keys.md) [public.user_favorites](public.user_favorites.md) [public.workflow_builder_session](public.workflow_builder_session.md) [public.workflow_publish_history](public.workflow_publish_history.md) [public.workflow_review_request](public.workflow_review_request.md) [public.workflow_review_request_authors](public.workflow_review_request_authors.md) [public.workflow_review_request_reviewers](public.workflow_review_request_reviewers.md) |  |  |
+| id | uuid | gen_random_uuid() | false | [public.agent_eval_dataset](public.agent_eval_dataset.md) [public.agent_eval_rating](public.agent_eval_rating.md) [public.agent_eval_run](public.agent_eval_run.md) [public.agent_history](public.agent_history.md) [public.auth_identity](public.auth_identity.md) [public.chat_hub_agents](public.chat_hub_agents.md) [public.chat_hub_sessions](public.chat_hub_sessions.md) [public.chat_hub_tools](public.chat_hub_tools.md) [public.dynamic_credential_user_entry](public.dynamic_credential_user_entry.md) [public.evaluation_collection](public.evaluation_collection.md) [public.instance_ai_mcp_registry_connections](public.instance_ai_mcp_registry_connections.md) [public.instance_ai_pending_confirmations](public.instance_ai_pending_confirmations.md) [public.instance_ai_thread_grants](public.instance_ai_thread_grants.md) [public.node_access_request](public.node_access_request.md) [public.node_category](public.node_category.md) [public.node_category_assignment](public.node_category_assignment.md) [public.node_governance_policy](public.node_governance_policy.md) [public.oauth_access_tokens](public.oauth_access_tokens.md) [public.oauth_authorization_codes](public.oauth_authorization_codes.md) [public.oauth_refresh_tokens](public.oauth_refresh_tokens.md) [public.oauth_user_consents](public.oauth_user_consents.md) [public.project](public.project.md) [public.project_relation](public.project_relation.md) [public.user_api_keys](public.user_api_keys.md) [public.user_favorites](public.user_favorites.md) [public.workflow_builder_session](public.workflow_builder_session.md) [public.workflow_publish_history](public.workflow_publish_history.md) [public.workflow_review_request](public.workflow_review_request.md) [public.workflow_review_request_authors](public.workflow_review_request_authors.md) [public.workflow_review_request_reviewers](public.workflow_review_request_reviewers.md) |  |  |
 | lastActiveAt | date |  | true |  |  |  |
 | lastName | varchar(32) |  | true |  |  |  |
 | mfaEnabled | boolean | false | false |  |  |  |
@@ -60,6 +60,11 @@ erDiagram
 "public.instance_ai_mcp_registry_connections" }o--|| "public.user" : "FOREIGN KEY (#quot;userId#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
 "public.instance_ai_pending_confirmations" }o--|| "public.user" : "FOREIGN KEY (#quot;userId#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
 "public.instance_ai_thread_grants" }o--|| "public.user" : "FOREIGN KEY (#quot;userId#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
+"public.node_access_request" }o--|| "public.user" : "FOREIGN KEY (#quot;requestedById#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
+"public.node_access_request" }o--o| "public.user" : "FOREIGN KEY (#quot;reviewedById#quot;) REFERENCES #quot;user#quot;(id) ON DELETE SET NULL"
+"public.node_category" }o--o| "public.user" : "FOREIGN KEY (#quot;createdById#quot;) REFERENCES #quot;user#quot;(id) ON DELETE SET NULL"
+"public.node_category_assignment" }o--o| "public.user" : "FOREIGN KEY (#quot;assignedById#quot;) REFERENCES #quot;user#quot;(id) ON DELETE SET NULL"
+"public.node_governance_policy" }o--o| "public.user" : "FOREIGN KEY (#quot;createdById#quot;) REFERENCES #quot;user#quot;(id) ON DELETE SET NULL"
 "public.oauth_access_tokens" }o--|| "public.user" : "FOREIGN KEY (#quot;userId#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
 "public.oauth_authorization_codes" }o--|| "public.user" : "FOREIGN KEY (#quot;userId#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
 "public.oauth_refresh_tokens" }o--|| "public.user" : "FOREIGN KEY (#quot;userId#quot;) REFERENCES #quot;user#quot;(id) ON DELETE CASCADE"
@@ -240,6 +245,48 @@ erDiagram
   timestamp_3__with_time_zone updatedAt
   uuid userId FK
 }
+"public.node_access_request" {
+  timestamp_3__with_time_zone createdAt
+  varchar_36_ id
+  text justification
+  varchar_255_ nodeType
+  varchar_36_ projectId FK
+  uuid requestedById FK
+  text reviewComment
+  timestamp_3__with_time_zone reviewedAt
+  uuid reviewedById FK
+  varchar_10_ status
+  timestamp_3__with_time_zone updatedAt
+  varchar_255_ workflowName
+}
+"public.node_category" {
+  varchar_7_ color
+  timestamp_3__with_time_zone createdAt
+  uuid createdById FK
+  text description
+  varchar_255_ displayName
+  varchar_36_ id
+  varchar_100_ slug
+  timestamp_3__with_time_zone updatedAt
+}
+"public.node_category_assignment" {
+  uuid assignedById FK
+  varchar_36_ categoryId FK
+  timestamp_3__with_time_zone createdAt
+  varchar_36_ id
+  varchar_255_ nodeType
+  timestamp_3__with_time_zone updatedAt
+}
+"public.node_governance_policy" {
+  timestamp_3__with_time_zone createdAt
+  uuid createdById FK
+  varchar_36_ id
+  varchar_10_ policyType
+  varchar_10_ scope
+  varchar_20_ targetType
+  varchar_255_ targetValue
+  timestamp_3__with_time_zone updatedAt
+}
 "public.oauth_access_tokens" {
   varchar clientId FK
   varchar token
@@ -281,6 +328,7 @@ erDiagram
   uuid creatorId FK
   json customTelemetryTags
   varchar_512_ description
+  varchar_10_ governanceDefaultBehavior
   json icon
   varchar_36_ id
   varchar_255_ name

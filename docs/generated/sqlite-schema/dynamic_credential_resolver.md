@@ -6,7 +6,7 @@
 <summary><strong>Table Definition</strong></summary>
 
 ```sql
-CREATE TABLE "dynamic_credential_resolver" ("id" varchar(16) PRIMARY KEY NOT NULL, "name" varchar(128) NOT NULL, "type" varchar(128) NOT NULL, "config" text NOT NULL, "createdAt" datetime(3) NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')), "updatedAt" datetime(3) NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')))
+CREATE TABLE "dynamic_credential_resolver" ("id" varchar(16) PRIMARY KEY NOT NULL, "name" varchar(128) NOT NULL, "type" varchar(128) NOT NULL, "config" text NOT NULL, "createdAt" datetime(3) NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')), "updatedAt" datetime(3) NOT NULL DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')), "oidcSeedSource" varchar(64))
 ```
 
 </details>
@@ -19,6 +19,7 @@ CREATE TABLE "dynamic_credential_resolver" ("id" varchar(16) PRIMARY KEY NOT NUL
 | createdAt | datetime(3) | STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW') | false |  |  |  |
 | id | varchar(16) |  | false | [credentials_entity](credentials_entity.md) [dynamic_credential_entry](dynamic_credential_entry.md) [dynamic_credential_user_entry](dynamic_credential_user_entry.md) |  |  |
 | name | varchar(128) |  | false |  |  |  |
+| oidcSeedSource | varchar(64) |  | true |  |  |  |
 | type | varchar(128) |  | false |  |  |  |
 | updatedAt | datetime(3) | STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW') | false |  |  |  |
 
@@ -50,6 +51,7 @@ erDiagram
   datetime_3_ createdAt
   varchar_16_ id PK
   varchar_128_ name
+  varchar_64_ oidcSeedSource
   varchar_128_ type
   datetime_3_ updatedAt
 }

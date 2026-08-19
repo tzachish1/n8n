@@ -76,6 +76,7 @@ erDiagram
   datetime_3_ createdAt
   varchar_16_ id PK
   varchar_128_ name
+  varchar_64_ oidcSeedSource
   varchar_128_ type
   datetime_3_ updatedAt
 }

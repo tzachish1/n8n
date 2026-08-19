@@ -263,6 +263,7 @@ erDiagram
   varchar creatorId FK
   TEXT customTelemetryTags
   varchar_512_ description
+  varchar_10_ governanceDefaultBehavior
   TEXT icon
   varchar_36_ id PK
   varchar_255_ name

@@ -8,6 +8,7 @@
 | createdAt | timestamp(3) with time zone | CURRENT_TIMESTAMP(3) | false |  |  |  |
 | id | varchar(16) |  | false | [public.credentials_entity](public.credentials_entity.md) [public.dynamic_credential_entry](public.dynamic_credential_entry.md) [public.dynamic_credential_user_entry](public.dynamic_credential_user_entry.md) |  |  |
 | name | varchar(128) |  | false |  |  |  |
+| oidcSeedSource | varchar(64) |  | true |  |  |  |
 | type | varchar(128) |  | false |  |  |  |
 | updatedAt | timestamp(3) with time zone | CURRENT_TIMESTAMP(3) | false |  |  |  |
 
@@ -44,6 +45,7 @@ erDiagram
   timestamp_3__with_time_zone createdAt
   varchar_16_ id
   varchar_128_ name
+  varchar_64_ oidcSeedSource
   varchar_128_ type
   timestamp_3__with_time_zone updatedAt
 }
