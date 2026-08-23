@@ -32,7 +32,7 @@ We always branch from the upstream release tag, never from upstream `master`.
 | `feat/upgrade-to-n8n-2.30.6`             | `n8n@2.30.6` | 11 | added review gates to the procedure (code-reviewer-pro at W4R/W6R, security-auditor at W8R, ci-investigator at W9R) and a pack + dockerize + smoke phase. W8 re-applied the fork's `isSelfManualReveal` + `manualData.userId` stamp on top of upstream's redaction, and the `getCredentialScopes` global-read grant. |
 | `feat/upgrade-to-n8n-2.32.6`             | `n8n@2.32.6` | 12 | §12 (dynamic credentials on manual/test runs + self-manual-reveal redaction) promoted from loose reconciliation into its own catalogue section and commit. W9R initially FAILED on ~22 editor-ui §11 connect-gating assertions misclassified as upstream drift; W9-fix reconciled the credential components and their tests. |
 | `feat/upgrade-to-n8n-2.34.6`             | `n8n@2.34.6` | 13 | §13 (Webhook multi-key JWT auth) added as a new section. **§3 Azure AD `roles`-array normalization intentionally DROPPED** — superseded by upstream expression-based role mapping (`scopesUseExpressionMapping`); see the §3 note. §10 migration renumbered `1784000000052` → `1785500832627` after upstream took the old slot. **§11/§12 frontend connect-gating + publish-check DEFERRED to upstream** — upstream shipped native per-user credential connect ("Quick Connect") plus the resolver-aware shared `classifyTriggerIdentity` util, so `canConnectResolvableCredential` / `workflowHasIdentityProvidingTrigger` were reverted to upstream and must stay gone. Blocker caught at the W7 review gate: the cherry-pick had silently dropped §12's self-manual-reveal while the suite stayed green. Reconciliation was re-squashed into the feature commit that already touched each file. |
-| `feat/upgrade-to-n8n-2.35.7` (current)   | `n8n@2.35.7` | 13 | All 13 customizations landed; no new section. **Migration index files are now generated** — upstream deleted `packages/@n8n/db/src/migrations/{postgresdb,sqlite}/index.ts` and gitignores them, so drop the fork's index hunks on conflict and let `scripts/generate-migration-index.mjs` regenerate; §10's `1785500832627` needed **no** renumber and verified in-container as ordered between upstream's `…832626` and `…155091`. §11's `editor-execution-context.ts` **deleted** — upstream's request-bound `buildExecutionContext` in `dynamic-node-parameters.controller.ts` supersedes it and is stricter; take HEAD there. Two latent fork defects surfaced and were fixed: literal conflict markers committed inside §9's `dynamic-credentials.module.ts`, and §12's `hookFunctionsStampManualUser` living in the *previous* chore commit rather than §12 — porting it was required or self-manual-reveal would have silently broken again. **Lint, not typecheck, caught the fork's `axios` imports** (§2 Akeyless, §11 JWT identifier) violating `no-uncentralized-http`; both migrated to `OutboundHttp` (no `eslint-disable`) — SSRF stays **enabled** on the §11 JWKS hop because `jwks_uri` comes from the remote discovery document. W7 review gate fixed the pre-existing **governance runtime bypass**: enforcement was gated on `data.userId`, exempting every schedule/webhook/trigger run. |
+| `feat/upgrade-to-n8n-2.35.7` (current)   | `n8n@2.35.7` | 12 | All 13 customizations landed, then **§8 (CI workflow trim) was retired** — Actions are disabled repo-wide on the fork (`actions/permissions` → `"enabled": false`), so the trim only bought conflicts: 74 files and the only fork commit touching `.github/`. Dropping it makes `.github/` byte-identical to the tag and takes the branch to 12 commits. **Migration index files are now generated** — upstream deleted `packages/@n8n/db/src/migrations/{postgresdb,sqlite}/index.ts` and gitignores them, so drop the fork's index hunks on conflict and let `scripts/generate-migration-index.mjs` regenerate; §10's `1785500832627` needed **no** renumber and verified in-container as ordered between upstream's `…832626` and `…155091`. §11's `editor-execution-context.ts` **deleted** — upstream's request-bound `buildExecutionContext` in `dynamic-node-parameters.controller.ts` supersedes it and is stricter; take HEAD there. Two latent fork defects surfaced and were fixed: literal conflict markers committed inside §9's `dynamic-credentials.module.ts`, and §12's `hookFunctionsStampManualUser` living in the *previous* chore commit rather than §12 — porting it was required or self-manual-reveal would have silently broken again. **Lint, not typecheck, caught the fork's `axios` imports** (§2 Akeyless, §11 JWT identifier) violating `no-uncentralized-http`; both migrated to `OutboundHttp` (no `eslint-disable`) — SSRF stays **enabled** on the §11 JWKS hop because `jwks_uri` comes from the remote discovery document. W7 review gate fixed the pre-existing **governance runtime bypass**: enforcement was gated on `data.userId`, exempting every schedule/webhook/trigger run. |
 
 ## Commit-structure convention
 
@@ -588,7 +588,10 @@ The custom labels are layered onto a *mix* of upstream-named and audit-named met
 ### 6. Repo hygiene / upgrade scaffolding
 
 **Commit on current branch (single, squashed)**
-- `f96a6099b13 chore(upgrade-2.35.7): regenerate lockfile for fork dependencies`
+- `chore(upgrade-2.35.7): regenerate lockfile for fork dependencies` — deliberately
+  recorded without a SHA. It is always the branch tip and the SHA-refresh above is
+  amended into it, so it is the one commit that cannot cite its own hash. Resolve it
+  with `git log -1 --format=%h feat/upgrade-to-n8n-<VERSION>`.
   *(this commit is renamed to `chore(upgrade-X.Y.Z)` and regenerated fresh every upgrade — never cherry-pick the previous one verbatim)*
 
 **Original component commits (pre-squash, archived in `backup/pre-squash-2.17.7`)**
@@ -619,12 +622,30 @@ When you amend/extend `CUSTOMS.md`, either fixup into the existing docs
 commit or let it be a trailing docs commit — either way, it stays at the
 last position on the branch (currently position 8 as of 2.17.7).
 
-### 8. CI workflow trim (fork-only)
+### 8. CI workflow trim (RETIRED — dropped at 2.35.7)
 
-**Commit on current branch (single, squashed)**
-- `60f7faaa2cd chore(ci): trim fork-irrelevant GitHub Actions workflows`
+**No commit on current branch.** `.github/` is now byte-identical to the
+upstream tag. The section number is kept so §9–§13 references stay stable.
 
-**What & why.** Upstream ships ~76 GitHub Actions workflows under
+**Why it was dropped.** GitHub Actions are disabled repo-wide on the fork —
+verify with `gh api repos/<owner>/n8n/actions/permissions`, which returns
+`"enabled": false`. With Actions off, the noise this trim suppressed cannot
+occur, so the trim was pure cost: at 74 files (71 delete/modify + 3 content
+conflicts) it was the single largest mechanical conflict surface of every
+upgrade, and it was the only fork commit touching `.github/` at all. Dropping
+it makes `.github/` track upstream exactly, removing that surface from all
+future cycles. Nothing outside `.github/` referenced these files, so build,
+typecheck, lint and tests are unaffected.
+
+**Before re-enabling Actions, re-apply a trim first.** Otherwise upstream's
+release / publish / nightly-cron workflows go live. Most are guarded by
+`github.repository == 'n8n-io/n8n'` or need secrets the fork doesn't own and
+would simply fail, but that failure noise is exactly what this section existed
+to prevent. The last full trim is recoverable from tag
+`backup/pre-ci-trim-drop-2.35.7` (commit `60f7faaa2cd`); its diff carries the
+complete keep/delete split, summarised below for reference.
+
+**Historical rationale (as it stood through 2.34.6).** Upstream ships ~76 GitHub Actions workflows under
 `.github/workflows/` that are wired for `n8n-io/n8n` (and `n8n-io/n8n-private`).
 On this fork they fail with `action_required` or error noise on every push,
 PR, and cron tick because they depend on secrets we don't own
@@ -713,20 +734,12 @@ Reusable workflows referenced by the keepers:
   workflow (Slack notify, e2e, chromatic, security-checks, claude, etc.).
 
 **Upgrade checklist**
-- This trim must be **re-applied** after every upstream-tag rebase. The
-  `feat/upgrade-to-n8n-X.Y.Z` branch is created from a fresh upstream tag
-  which carries the full ~76-file workflow set; the cherry-pick of this
-  trim restores the deletions and edits.
-- `.github/WORKFLOWS.md` is left intact upstream-as-is (we don't maintain
-  it). It will reference deleted workflows; that's documentation drift
-  we accept on the fork.
-- If upstream renames a *kept* workflow or a reusable referenced from a
-  kept workflow (e.g. they swap `sec-ci-reusable.yml` for a different
-  scanner), reconcile inside `ci-pull-requests.yml`'s `required-checks`
-  `needs:` list and the corresponding `uses:` line.
-- If upstream adds a new noisy workflow that depends on n8n-io secrets,
-  delete it as part of the next chore-upgrade commit and append it to the
-  list above.
+- **Nothing to do.** As of 2.35.7 this trim is no longer re-applied: leave
+  `.github/` exactly as the upstream tag ships it and cherry-pick nothing for
+  this section. The steps that used to live here (re-applying the keep/delete
+  split, reconciling renamed reusables into `ci-pull-requests.yml`'s
+  `required-checks` list, deleting newly-added noisy workflows) only become
+  relevant again if Actions are re-enabled on the fork.
 
 ### 9. Dynamic Credential Seeding Endpoint
 
@@ -742,7 +755,7 @@ token capture happens inside `OidcService.loginUser` instead of an HTTP POST
 from outside.
 
 **Commit on current branch (single, squashed)**
-- `e16063135b5 feat(dynamic-credentials): add programmatic credential seeding endpoint`
+- `ad1546e24f6 feat(dynamic-credentials): add programmatic credential seeding endpoint`
 
 **What & why.** The upstream Dynamic Credentials EE module supports per-user
 OAuth2 credentials by routing every caller through an interactive consent
@@ -912,7 +925,7 @@ See also: [Credential-Seeding-Guide.md](./Credential-Seeding-Guide.md)
 This section is the upstream-rebase reference.
 
 **Commit on current branch (single, squashed)**
-- `a004e18d8cf feat(sso-oidc)!: implement OIDC-driven Microsoft Graph credential seeding (Phase 1-2d)`
+- `61b468742dd feat(sso-oidc)!: implement OIDC-driven Microsoft Graph credential seeding (Phase 1-2d)`
 
 **What & why.** §9 requires an **external auth backend** to POST pre-acquired
 Microsoft Graph tokens into n8n's encrypted store via
@@ -1847,7 +1860,7 @@ the existing `eventService` infrastructure. The §10 env-var inventory
 plus the OIDC self-seeding knobs) is sufficient.
 
 **Commits on current branch (newest last)**
-- `66fc16830a8 feat(dynamic-credentials): generic SaaS OAuth2 resolver with hybrid fallback (§11 v1)`
+- `1abd3596c46 feat(dynamic-credentials): generic SaaS OAuth2 resolver with hybrid fallback (§11 v1)`
 
 **Entry points / key files**
 
@@ -1981,7 +1994,7 @@ tools invoked via `supplyData`) inherit the resolution context via a
 redaction "self-manual-reveal"** rule that pairs with dynamic credentials.
 
 **Commit on current branch**
-- `d1a77cf69fe feat(dynamic-credentials): resolve private OAuth2 credentials on manual test-webhook/chat runs + supply-data execution-context fallback`
+- `d32d1589c0a feat(dynamic-credentials): resolve private OAuth2 credentials on manual test-webhook/chat runs + supply-data execution-context fallback`
 
 **Entry points / key files**
 - `packages/cli/src/modules/redaction/executions/execution-redaction.service.ts`
@@ -2044,7 +2057,7 @@ rotation works without swapping the credential. Single-key and passphrase
 behavior are unchanged. Fork-only.
 
 **Commit on current branch**
-- `a1c04914cd2 feat(Webhook Node): support multiple public keys for JWT auth`
+- `0cee91a19a6 feat(Webhook Node): support multiple public keys for JWT auth`
 
 **Entry points / key files**
 - `packages/nodes-base/credentials/JwtAuth.credentials.ts` — public-key field
@@ -2093,9 +2106,10 @@ flowchart TD
    ```
 3. **Cherry-pick customizations in order.** From the current baseline branch
    (`feat/upgrade-to-n8n-2.34.6` at time of writing), cherry-pick these
-   **twelve** customization commits one at a time in this exact order. The
-   thirteenth commit on the branch — `chore(upgrade-X.Y.Z)` — is **not**
-   cherry-picked; it is regenerated fresh each upgrade.
+   **eleven** customization commits one at a time in this exact order (§8 was
+   retired at 2.35.7 and is no longer picked). The twelfth commit on the
+   branch — `chore(upgrade-X.Y.Z)` — is **not** cherry-picked; it is
+   regenerated fresh each upgrade.
 
    Split into two phases. Phase 1 is the non-dynamic-credentials set; Phase 2
    is the dynamic-credentials stack, which must land **last** because §11 and
@@ -2106,17 +2120,17 @@ flowchart TD
    git cherry-pick 34bf631218c   # §1  node governance                    (HIGH conflict)
    git cherry-pick 899a0d319b8   # §2  external secrets (Akeyless)        (LOW)
    git cherry-pick 97b8eaf6a73   # §3  SSO OIDC provisioning hardening    (MEDIUM — keep roles-array DROPPED)
-   git cherry-pick 60f7faaa2cd   # §8  CI workflow trim                   (HIGH mechanical)
-   git cherry-pick e544d3e8367   # §4  Azure OpenAI APIM (nodes-langchain) (LOW)
-   git cherry-pick 948b1c5d412   # §5  Prometheus labels + Docker splits   (manual port, not a straight pick)
-   git cherry-pick e59fb7a1c79   # §7  this docs file
+   #                             # §8  CI workflow trim — RETIRED at 2.35.7, do NOT pick (see Section 8)
+   git cherry-pick e9e193d951d   # §4  Azure OpenAI APIM (nodes-langchain) (LOW)
+   git cherry-pick 51985cd0e9c   # §5  Prometheus labels + Docker splits   (manual port, not a straight pick)
+   git cherry-pick 9a8d210ca91   # §7  this docs file
 
    # ---- Phase 2: dynamic credentials, LAST ----
-   git cherry-pick e16063135b5   # §9  dyncred programmatic seeding endpoint  (MEDIUM)
-   git cherry-pick a004e18d8cf   # §10 OIDC self-seed Microsoft Graph         (MEDIUM + migration slot check)
-   git cherry-pick 66fc16830a8   # §11 generic SaaS OAuth2 resolver           (VERY HIGH)
-   git cherry-pick d1a77cf69fe   # §12 dyncred on manual/test runs            (MEDIUM, after §11)
-   git cherry-pick a1c04914cd2   # §13 Webhook multi-key JWT auth             (LOW)
+   git cherry-pick 0f7c789d86f   # §9  dyncred programmatic seeding endpoint  (MEDIUM)
+   git cherry-pick 3b72bbe4ea0   # §10 OIDC self-seed Microsoft Graph         (MEDIUM + migration slot check)
+   git cherry-pick 6ce009630e4   # §11 generic SaaS OAuth2 resolver           (VERY HIGH)
+   git cherry-pick 5bd114664ac   # §12 dyncred on manual/test runs            (MEDIUM, after §11)
+   git cherry-pick d11ab36eb8e   # §13 Webhook multi-key JWT auth             (LOW)
    ```
 
    Every SHA above drifts on each upgrade (the branch is re-created from the
@@ -2127,9 +2141,9 @@ flowchart TD
    git log --oneline --reverse n8n@<PREV_TAG>..feat/upgrade-to-n8n-<PREV_VERSION>
    ```
 
-   §8 in particular will conflict whenever the freshly-rebased upstream tag
-   restores deleted workflows and/or adds new ones — re-apply the keep/delete
-   list from **Section 8** by hand.
+   §8 used to be the worst offender here — it conflicted on every tag that
+   restored deleted workflows or added new ones. It was retired at 2.35.7, so
+   `.github/` no longer conflicts at all.
 
    Prefer cherry-pick over merge to keep the branch readable. If a
    cherry-pick conflicts:
@@ -2561,10 +2575,12 @@ changed standing policy:
   `…626-AddSetupCompletedAtToAgents` then jumps to `1785828155091`. **No
   renumber needed**, but the fork migration's position in both index files
   moves from *last* to *before* `1785828155091`.
-- **§8 CI trim is clean.** Upstream is at 92 workflows (down one:
-  `test-e2e-vm-expressions-nightly.yml` was deleted). All **21 fork-kept
-  workflows still exist upstream**, so there are no modify/delete conflicts on
-  kept files — keep 21, delete 71.
+- **§8 CI trim landed, then was RETIRED post-upgrade.** The pick itself was
+  clean (upstream at 92 workflows, all 21 fork-kept ones still present, so keep
+  21 / delete 71 applied without modify/delete conflicts). It was then dropped
+  from the branch entirely once Actions were confirmed disabled repo-wide —
+  see Section 8. `.github/` is now identical to the tag and the branch carries
+  12 commits, not 13.
 - **§5 Docker is a version bump.** `NODE_VERSION` 24.18.0 → 24.18.1 with
   re-pinned digests on both the builder and `n8nio/base`; the runners
   Dockerfile moves 24.16.0 → 24.18.1 and `alpine3.22` → `alpine3.24`. The fork's
