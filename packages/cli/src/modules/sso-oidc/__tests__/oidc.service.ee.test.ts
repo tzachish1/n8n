@@ -523,7 +523,7 @@ describe('OidcService', () => {
 			await expect(promise).rejects.toThrow('No claims found in the OIDC token');
 		});
 
-		it('throws an error if fetchUserInfo throws an error', async () => {
+		it('throws an error if fetchUserInfo fails and the ID token has no email claim', async () => {
 			oidcService.verifyState = vi.fn().mockReturnValue('valid-state');
 			oidcService.verifyNonce = vi.fn().mockReturnValue('valid-nonce');
 			// @ts-expect-error - getOidcConfiguration is private and only accessible within class 'OidcService'
@@ -543,6 +543,55 @@ describe('OidcService', () => {
 			const promise = oidcService.loginUser(callbackUrl, storedState, storedNonce);
 			await expect(promise).rejects.toThrow(BadRequestError);
 			await expect(promise).rejects.toThrow('Invalid token');
+		});
+
+		it('falls back to ID token claims when the userinfo request fails', async () => {
+			oidcService.verifyState = vi.fn().mockReturnValue('valid-state');
+			oidcService.verifyNonce = vi.fn().mockReturnValue('valid-nonce');
+			// @ts-expect-error - getOidcConfiguration is private and only accessible within class 'OidcService'
+			oidcService.getOidcConfiguration = vi.fn().mockResolvedValue({} as client.Configuration);
+			// @ts-expect-error - applySsoProvisioning is private and only accessible within class 'OidcService'
+			oidcService.applySsoProvisioning = vi.fn().mockResolvedValue(undefined);
+			authIdentityRepository.findOne = vi
+				.fn()
+				.mockResolvedValue({ user: { email: 'john.doe@test.com' } as any });
+
+			vi.mocked(client.authorizationCodeGrant).mockResolvedValue({
+				access_token: 'valid-access-token',
+				token_type: 'bearer',
+				claims: () => ({
+					sub: 'valid-subject',
+					email: 'john.doe@test.com',
+					name: 'John Doe',
+					given_name: 'John',
+					family_name: 'Doe',
+					preferred_username: 'john.doe@test.com',
+				}),
+			} as unknown as client.TokenEndpointResponse & client.TokenEndpointResponseHelpers);
+			// Entra rejects the userinfo call when the access token is audienced for
+			// the n8n API rather than Microsoft Graph.
+			vi.mocked(client.fetchUserInfo).mockRejectedValue(new Error('Invalid token'));
+
+			const callbackUrl = new URL('https://example.com/callback');
+			const storedState = oidcService.generateState().signed;
+			const storedNonce = oidcService.generateNonce().signed;
+
+			const { user } = await oidcService.loginUser(callbackUrl, storedState, storedNonce);
+
+			expect(user.email).toEqual('john.doe@test.com');
+			// @ts-expect-error - applySsoProvisioning is private and only accessible within class 'OidcService'
+			expect(oidcService.applySsoProvisioning).toHaveBeenCalledWith(
+				user,
+				expect.objectContaining({ sub: 'valid-subject' }),
+				expect.objectContaining({
+					sub: 'valid-subject',
+					email: 'john.doe@test.com',
+					name: 'John Doe',
+					given_name: 'John',
+					family_name: 'Doe',
+				}),
+				'valid-access-token',
+			);
 		});
 
 		it('throws an error if there is no email', async () => {
@@ -1293,9 +1342,10 @@ describe('OidcService', () => {
 				claims: () => ({ sub: 'valid-subject' }),
 				...tokenOverrides,
 			} as unknown as client.TokenEndpointResponse & client.TokenEndpointResponseHelpers);
-			vi
-				.spyOn(client, 'fetchUserInfo')
-				.mockResolvedValue({ email_verified: true, email: 'john.doe@test.com' } as any);
+			vi.spyOn(client, 'fetchUserInfo').mockResolvedValue({
+				email_verified: true,
+				email: 'john.doe@test.com',
+			} as any);
 
 			// Default OBO response — Graph-audience access token + refresh token.
 			// Individual tests can override to simulate failure modes.
@@ -1343,8 +1393,9 @@ describe('OidcService', () => {
 				select: ['id', 'name', 'type', 'data', 'isResolvable', 'resolverId'],
 			});
 			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(1);
-			const [seededCredential, seededData, accessToken, resolverId, metadata] =
-				(oauthService.saveDynamicCredential as Mock).mock.calls[0];
+			const [seededCredential, seededData, accessToken, resolverId, metadata] = (
+				oauthService.saveDynamicCredential as Mock
+			).mock.calls[0];
 			expect(seededCredential).toBe(credential);
 			expect(seededData).toEqual({
 				oauthTokenData: {
@@ -1441,13 +1492,9 @@ describe('OidcService', () => {
 			// scope includes the configured Graph scopes + offline_access.
 			expect(global.fetch).toHaveBeenCalledTimes(1);
 			const fetchCall = (global.fetch as Mock).mock.calls[0];
-			expect(fetchCall[0]).toBe(
-				'https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token',
-			);
+			expect(fetchCall[0]).toBe('https://login.microsoftonline.com/tenant-id/oauth2/v2.0/token');
 			const requestBody = new URLSearchParams(fetchCall[1].body as string);
-			expect(requestBody.get('grant_type')).toBe(
-				'urn:ietf:params:oauth:grant-type:jwt-bearer',
-			);
+			expect(requestBody.get('grant_type')).toBe('urn:ietf:params:oauth:grant-type:jwt-bearer');
 			expect(requestBody.get('requested_token_use')).toBe('on_behalf_of');
 			expect(requestBody.get('assertion')).toBe('user-api-access-token');
 			expect(requestBody.get('scope')).toBe(
@@ -1456,8 +1503,8 @@ describe('OidcService', () => {
 
 			// The token persisted to the credential is the Graph token from the OBO
 			// response — NOT the user-api-access-token captured at OIDC login.
-			const [, seededData, accessToken] = (oauthService.saveDynamicCredential as Mock)
-				.mock.calls[0];
+			const [, seededData, accessToken] = (oauthService.saveDynamicCredential as Mock).mock
+				.calls[0];
 			expect(accessToken).toBe('graph-access-token');
 			expect(seededData).toEqual({
 				oauthTokenData: {
@@ -1495,8 +1542,7 @@ describe('OidcService', () => {
 			const storedNonce = oidcService.generateNonce().signed;
 			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
 
-			const [, seededData, authHeader] = (oauthService.saveDynamicCredential as Mock).mock
-				.calls[0];
+			const [, seededData, authHeader] = (oauthService.saveDynamicCredential as Mock).mock.calls[0];
 			expect(authHeader).toBe('user-api-access-token');
 			// Body still stores the Graph token — the picker only changes the
 			// resolver-side identity argument, not the credential payload.
@@ -1595,9 +1641,7 @@ describe('OidcService', () => {
 		it('defaults the OBO scope to https://graph.microsoft.com/.default when graphScopes is empty', async () => {
 			enableAutoSeed({ graphScopes: '' });
 			setupLoginMocks();
-			credentialsRepository.find = vi
-				.fn()
-				.mockResolvedValue([mockResolvableCredential()]);
+			credentialsRepository.find = vi.fn().mockResolvedValue([mockResolvableCredential()]);
 			oauthService.saveDynamicCredential = vi.fn().mockResolvedValue(undefined);
 
 			const storedState = oidcService.generateState().signed;
@@ -1606,9 +1650,7 @@ describe('OidcService', () => {
 
 			const fetchCall = (global.fetch as Mock).mock.calls[0];
 			const requestBody = new URLSearchParams(fetchCall[1].body as string);
-			expect(requestBody.get('scope')).toBe(
-				'https://graph.microsoft.com/.default offline_access',
-			);
+			expect(requestBody.get('scope')).toBe('https://graph.microsoft.com/.default offline_access');
 		});
 
 		it('emits obo_exchange_failed when the IdP returns a non-2xx OBO response (fail-open)', async () => {
@@ -1668,9 +1710,9 @@ describe('OidcService', () => {
 
 			const storedState = oidcService.generateState().signed;
 			const storedNonce = oidcService.generateNonce().signed;
-			await expect(
-				oidcService.loginUser(callbackUrl, storedState, storedNonce),
-			).rejects.toThrow(/OBO exchange failed/);
+			await expect(oidcService.loginUser(callbackUrl, storedState, storedNonce)).rejects.toThrow(
+				/OBO exchange failed/,
+			);
 
 			expect(eventService.emit).toHaveBeenCalledWith('oidc-graph-token-skipped', {
 				userId: 'user-id',
@@ -1770,9 +1812,9 @@ describe('OidcService', () => {
 
 			const storedState = oidcService.generateState().signed;
 			const storedNonce = oidcService.generateNonce().signed;
-			await expect(
-				oidcService.loginUser(callbackUrl, storedState, storedNonce),
-			).rejects.toThrow('storage unavailable');
+			await expect(oidcService.loginUser(callbackUrl, storedState, storedNonce)).rejects.toThrow(
+				'storage unavailable',
+			);
 
 			expect(eventService.emit).toHaveBeenCalledWith(
 				'oidc-graph-token-seed-failed',
@@ -1802,9 +1844,10 @@ describe('OidcService', () => {
 				token_type: 'bearer',
 				claims: () => ({ sub: 'valid-subject' }),
 			} as unknown as client.TokenEndpointResponse & client.TokenEndpointResponseHelpers);
-			vi
-				.spyOn(client, 'fetchUserInfo')
-				.mockResolvedValue({ email_verified: true, email: 'john.doe@test.com' } as any);
+			vi.spyOn(client, 'fetchUserInfo').mockResolvedValue({
+				email_verified: true,
+				email: 'john.doe@test.com',
+			} as any);
 			oauthService.saveDynamicCredential = vi.fn();
 			credentialsRepository.find = vi.fn();
 
@@ -1818,6 +1861,41 @@ describe('OidcService', () => {
 				expect.stringMatching(/^oidc-graph-token-/),
 				expect.anything(),
 			);
+		});
+
+		it('falls back to ID token claims in the test callback when userinfo fails', async () => {
+			// Keeps "Test Connection" consistent with the real sign-in path, which
+			// succeeds via the same fallback.
+			oidcService.verifyState = vi.fn().mockReturnValue('valid-state');
+			oidcService.verifyNonce = vi.fn().mockReturnValue('valid-nonce');
+			oidcService.loadConfig = vi.fn().mockResolvedValue({
+				clientId: 'cid',
+				clientSecret: 'sec',
+				discoveryEndpoint: new URL('https://idp.example.com/.well-known/openid_configuration'),
+				prompt: 'select_account',
+				authenticationContextClassReference: [],
+				loginEnabled: true,
+			});
+			// @ts-expect-error - createProxyAwareConfiguration is private
+			oidcService.createProxyAwareConfiguration = vi
+				.fn()
+				.mockResolvedValue({} as client.Configuration);
+			vi.spyOn(client, 'authorizationCodeGrant').mockResolvedValue({
+				access_token: 'api-audience-access-token',
+				token_type: 'bearer',
+				claims: () => ({ sub: 'valid-subject', email: 'john.doe@test.com', name: 'John Doe' }),
+			} as unknown as client.TokenEndpointResponse & client.TokenEndpointResponseHelpers);
+			vi.spyOn(client, 'fetchUserInfo').mockRejectedValue(new Error('Invalid token'));
+
+			const storedState = oidcService.generateState(true).signed;
+			const storedNonce = oidcService.generateNonce().signed;
+
+			const result = await oidcService.processTestCallback(callbackUrl, storedState, storedNonce);
+
+			expect(result.userInfo).toEqual(
+				expect.objectContaining({ sub: 'valid-subject', email: 'john.doe@test.com' }),
+			);
+			expect(result.claims).toEqual(expect.objectContaining({ sub: 'valid-subject' }));
 		});
 
 		it('does NOT append Graph scopes to the authorization URL — upstream parity (OBO is server-side)', async () => {
@@ -1866,8 +1944,7 @@ describe('OidcService', () => {
 			expect(buildAuthorizationUrlSpy).toHaveBeenCalledWith(
 				expect.anything(),
 				expect.objectContaining({
-					scope:
-						'openid email profile api://390f995b-ed37-46e6-ae8c-7b11248dd67c/.default',
+					scope: 'openid email profile api://390f995b-ed37-46e6-ae8c-7b11248dd67c/.default',
 				}),
 			);
 		});
@@ -1878,9 +1955,7 @@ describe('OidcService', () => {
 			enableAutoSeed();
 			setupLoginMocks();
 
-			resolverRepository.find = vi
-				.fn()
-				.mockResolvedValue([{ id: 'resolver-from-db' }]);
+			resolverRepository.find = vi.fn().mockResolvedValue([{ id: 'resolver-from-db' }]);
 			const credential = mockResolvableCredential({ resolverId: 'resolver-from-db' });
 			credentialsRepository.find = vi.fn().mockResolvedValue([credential]);
 			oauthService.saveDynamicCredential = vi.fn().mockResolvedValue(undefined);
@@ -1906,9 +1981,7 @@ describe('OidcService', () => {
 			enableAutoSeed();
 			setupLoginMocks();
 
-			resolverRepository.find = vi
-				.fn()
-				.mockRejectedValue(new Error('resolver table unavailable'));
+			resolverRepository.find = vi.fn().mockRejectedValue(new Error('resolver table unavailable'));
 			credentialsRepository.find = vi.fn();
 			oauthService.saveDynamicCredential = vi.fn();
 
@@ -1950,8 +2023,11 @@ describe('OidcService', () => {
 			id: string,
 			credentialResolverId: string | undefined,
 			credentialIds: Array<{ type: string; id: string }>,
-		): WorkflowEntity =>
-			({
+		): WorkflowEntity => {
+			// Explicit `return` rather than a parenthesized concise body: Biome
+			// 1.9 misparses `=> ({ ... }) as unknown as T` as a destructuring
+			// parameter list, which fails the pre-commit check.
+			return {
 				id,
 				settings: credentialResolverId ? { credentialResolverId } : undefined,
 				nodes: [
@@ -1971,16 +2047,15 @@ describe('OidcService', () => {
 						),
 					},
 				],
-			}) as unknown as WorkflowEntity;
+			} as unknown as WorkflowEntity;
+		};
 
 		it('discovers credentials via workflow-level binding (settings.credentialResolverId)', async () => {
 			// Credential has resolverId=NULL (the common case via the standard UI),
 			// but a workflow that references it has settings.credentialResolverId
 			// pointing at an opted-in resolver. The seed should still fire.
 			enableAutoSeed();
-			resolverRepository.find = vi
-				.fn()
-				.mockResolvedValue([{ id: 'resolver-from-workflow' }]);
+			resolverRepository.find = vi.fn().mockResolvedValue([{ id: 'resolver-from-workflow' }]);
 			setupLoginMocks();
 
 			// First find call → credential-level (resolverId=NULL → empty).
@@ -2011,8 +2086,7 @@ describe('OidcService', () => {
 			// The workflow's resolverId is the one passed to saveDynamicCredential,
 			// not the credential's (null) resolverId.
 			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(1);
-			const [, , , resolverIdArg] = (oauthService.saveDynamicCredential as Mock)
-				.mock.calls[0];
+			const [, , , resolverIdArg] = (oauthService.saveDynamicCredential as Mock).mock.calls[0];
 			expect(resolverIdArg).toBe('resolver-from-workflow');
 			expect(eventService.emit).toHaveBeenCalledWith(
 				'oidc-graph-token-captured',
@@ -2025,19 +2099,15 @@ describe('OidcService', () => {
 
 		it('ignores workflows whose credentialResolverId is not in the opted-in set', async () => {
 			enableAutoSeed();
-			resolverRepository.find = vi
-				.fn()
-				.mockResolvedValue([{ id: 'opted-in-resolver' }]);
+			resolverRepository.find = vi.fn().mockResolvedValue([{ id: 'opted-in-resolver' }]);
 			setupLoginMocks();
 			credentialsRepository.find = vi.fn().mockResolvedValue([]);
-			workflowRepository.find = vi
-				.fn()
-				.mockResolvedValue([
-					// Workflow references a credential, but its resolverId is not opted-in.
-					mockWorkflow('wf-other', 'unrelated-resolver', [
-						{ type: 'slackOAuth2Api', id: 'cred-slack' },
-					]),
-				]);
+			workflowRepository.find = vi.fn().mockResolvedValue([
+				// Workflow references a credential, but its resolverId is not opted-in.
+				mockWorkflow('wf-other', 'unrelated-resolver', [
+					{ type: 'slackOAuth2Api', id: 'cred-slack' },
+				]),
+			]);
 			oauthService.saveDynamicCredential = vi.fn();
 
 			const storedState = oidcService.generateState().signed;
@@ -2089,8 +2159,7 @@ describe('OidcService', () => {
 			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
 
 			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(1);
-			const [, , , resolverIdArg] = (oauthService.saveDynamicCredential as Mock)
-				.mock.calls[0];
+			const [, , , resolverIdArg] = (oauthService.saveDynamicCredential as Mock).mock.calls[0];
 			expect(resolverIdArg).toBe('resolver-cred');
 			// Second credentialsRepository.find (for workflow-discovered ids) must
 			// not be invoked because all workflow-discovered ids were already
@@ -2100,9 +2169,7 @@ describe('OidcService', () => {
 
 		it('skips workflows with no settings or no credentials block (defensive)', async () => {
 			enableAutoSeed();
-			resolverRepository.find = vi
-				.fn()
-				.mockResolvedValue([{ id: 'opted-in-resolver' }]);
+			resolverRepository.find = vi.fn().mockResolvedValue([{ id: 'opted-in-resolver' }]);
 			setupLoginMocks();
 			credentialsRepository.find = vi.fn().mockResolvedValue([]);
 
@@ -2141,13 +2208,9 @@ describe('OidcService', () => {
 			// A transient outage on the workflow table must not block the
 			// credential-level seed path.
 			enableAutoSeed();
-			resolverRepository.find = vi
-				.fn()
-				.mockResolvedValue([{ id: 'resolver-a' }]);
+			resolverRepository.find = vi.fn().mockResolvedValue([{ id: 'resolver-a' }]);
 			setupLoginMocks();
-			workflowRepository.find = vi
-				.fn()
-				.mockRejectedValue(new Error('workflow table down'));
+			workflowRepository.find = vi.fn().mockRejectedValue(new Error('workflow table down'));
 
 			const credential = mockResolvableCredential({ resolverId: 'resolver-a' });
 			credentialsRepository.find = vi.fn().mockResolvedValueOnce([credential]);
@@ -2158,9 +2221,7 @@ describe('OidcService', () => {
 			await oidcService.loginUser(callbackUrl, storedState, storedNonce);
 
 			expect(logger.warn).toHaveBeenCalledWith(
-				expect.stringContaining(
-					'failed to scan workflows for resolver bindings',
-				),
+				expect.stringContaining('failed to scan workflows for resolver bindings'),
 				expect.objectContaining({ error: 'workflow table down' }),
 			);
 			expect(oauthService.saveDynamicCredential).toHaveBeenCalledTimes(1);

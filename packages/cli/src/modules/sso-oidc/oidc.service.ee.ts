@@ -344,7 +344,7 @@ export class OidcService {
 				typeof tokens.access_token === 'string' && tokens.access_token.split('.').length === 3,
 		});
 
-		let userInfo;
+		let userInfo: openidClientTypes.UserInfoResponse;
 		try {
 			userInfo = await this.openidClient.fetchUserInfo(
 				configuration,
@@ -352,8 +352,18 @@ export class OidcService {
 				claims.sub,
 			);
 		} catch (error) {
-			this.logger.error('Failed to fetch user info', { cause: safeStringify(error) });
-			throw new BadRequestError('Invalid token');
+			const fallback = this.userInfoFromIdTokenClaims(claims);
+			if (!fallback) {
+				this.logger.error('Failed to fetch user info and no email claim to fall back on', {
+					cause: safeStringify(error),
+				});
+				throw new BadRequestError('Invalid token');
+			}
+
+			this.logger.warn('Userinfo request failed, falling back to ID token claims', {
+				cause: safeStringify(error),
+			});
+			userInfo = fallback;
 		}
 
 		if (!userInfo.email) {
@@ -609,7 +619,7 @@ export class OidcService {
 			throw new ForbiddenError('No claims found in the OIDC token');
 		}
 
-		let userInfo;
+		let userInfo: openidClientTypes.UserInfoResponse;
 		try {
 			userInfo = await this.openidClient.fetchUserInfo(
 				configuration,
@@ -617,13 +627,59 @@ export class OidcService {
 				claims.sub,
 			);
 		} catch (error) {
-			this.logger.error('Failed to fetch user info', { cause: safeStringify(error) });
-			throw new BadRequestError('Invalid token');
+			// Mirrors `loginUser` so the Test Connection button reports the same
+			// result the real sign-in path would produce.
+			const fallback = this.userInfoFromIdTokenClaims(claims);
+			if (!fallback) {
+				this.logger.error('Failed to fetch user info and no email claim to fall back on', {
+					cause: safeStringify(error),
+				});
+				throw new BadRequestError('Invalid token');
+			}
+
+			this.logger.warn('Userinfo request failed, falling back to ID token claims', {
+				cause: safeStringify(error),
+			});
+			userInfo = fallback;
 		}
 
 		return {
 			claims: { ...claims },
 			userInfo: { ...userInfo },
+		};
+	}
+
+	/**
+	 * Fork §10 — derive `userInfo` from the ID token when the userinfo request
+	 * fails.
+	 *
+	 * Entra's userinfo endpoint is Microsoft Graph
+	 * (`https://graph.microsoft.com/oidc/userinfo`) and only accepts
+	 * Graph-audienced tokens. With direct-claim provisioning enabled the
+	 * authorization request carries an `api://<n8n-app>/…` scope, so Entra issues
+	 * an access token whose `aud` is the n8n API and Graph rejects it with
+	 * `401 WWW-Authenticate`. The ID token still carries the identity claims, so
+	 * prefer those over failing an otherwise valid login.
+	 *
+	 * Returns `undefined` when there is no email claim to fall back on, leaving
+	 * the caller to surface the original userinfo error.
+	 */
+	private userInfoFromIdTokenClaims(
+		claims: openidClientTypes.IDToken,
+	): openidClientTypes.UserInfoResponse | undefined {
+		const optionalString = (value: unknown): string | undefined =>
+			typeof value === 'string' && value.trim() !== '' ? value : undefined;
+
+		const email = optionalString(claims.email);
+		if (!email) return undefined;
+
+		return {
+			sub: claims.sub,
+			email,
+			name: optionalString(claims.name),
+			given_name: optionalString(claims.given_name),
+			family_name: optionalString(claims.family_name),
+			preferred_username: optionalString(claims.preferred_username),
 		};
 	}
 
@@ -1012,9 +1068,7 @@ export class OidcService {
 		// degrade silently to the OBO Graph token, which preserves the prior
 		// behavior for non-jwt-claim resolvers.
 		const resolverValidationCache = new Map<string, string | undefined>();
-		const getResolverValidation = async (
-			resolverId: string,
-		): Promise<string | undefined> => {
+		const getResolverValidation = async (resolverId: string): Promise<string | undefined> => {
 			if (resolverValidationCache.has(resolverId)) {
 				return resolverValidationCache.get(resolverId);
 			}
@@ -1055,8 +1109,7 @@ export class OidcService {
 				// (the Graph token) as `oauthTokenData.access_token` so workflow
 				// nodes hit Graph-protected APIs successfully.
 				const validation = await getResolverValidation(resolverId);
-				const authHeader =
-					validation === 'oauth2-jwt-claim' ? inboundAccessToken : accessToken;
+				const authHeader = validation === 'oauth2-jwt-claim' ? inboundAccessToken : accessToken;
 
 				await this.oauthService.saveDynamicCredential(
 					credential,
